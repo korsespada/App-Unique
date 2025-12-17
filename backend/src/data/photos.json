@@ -1,0 +1,14 @@
+[
+  {
+    "product_id": "1",
+    "filename": "main.jpg",
+    "is_main": true,
+    "order": 1
+  },
+  {
+    "product_id": "1",
+    "filename": "additional.jpg",
+    "is_main": false,
+    "order": 2
+  }
+]

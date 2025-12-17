@@ -1,0 +1,55 @@
+kind: pipeline
+name: telegram-front
+
+trigger:
+  branch:
+    - main
+  event:
+    - push
+steps:
+  - name: install
+    image: node:14
+    commands:
+      - npm install
+  - name: create-env-file
+    image: alpine:3
+    environment:
+      VITE_API_URL:
+        from_secret: VITE_API_URL
+      VITE_API_VERSION:
+        from_secret: VITE_API_VERSION
+      VITE_SHOP_NAME:
+        from_secret: VITE_SHOP_NAME
+      VITE_DEV_MODE:
+        from_secret: VITE_DEV_MODE
+    commands:
+      - echo "VITE_API_URL=$VITE_API_URL" > .env
+      - echo "VITE_API_VERSION=$VITE_API_VERSION" >> .env
+      - echo "VITE_SHOP_NAME=$VITE_SHOP_NAME" >> .env
+      - echo "VITE_DEV_MODE=$VITE_DEV_MODE" >> .env
+  - name: build
+    image: node:14
+    commands:
+      - npm run build
+
+  - name: deploy
+    image: ubuntu:20.04
+    environment:
+      SSH_KEY:
+        from_secret: SSH_KEY
+      SSH_USER:
+        from_secret: SSH_USER
+      SSH_HOST:
+        from_secret: SSH_HOST
+      SSH_PATH:
+        from_secret: SSH_PATH
+      SSH_PASS:
+        from_secret: SSH_PASS
+    commands:
+      - apt-get update && apt-get install -y openssh-client sshpass
+      - mkdir -p ~/.ssh
+      - echo "$SSH_KEY" > ~/.ssh/id_rsa
+      - chmod 600 ~/.ssh/id_rsa
+      - ssh-keyscan $SSH_HOST >> ~/.ssh/known_hosts
+      - ls
+      - sshpass -p $SSH_PASS scp -r dist/* $SSH_USER@$SSH_HOST:$SSH_PATH

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "1",
+    "title": "Sample Product",
+    "brand": "Sample Brand",
+    "category": "sample",
+    "price": 9.99,
+    "description": "This is a sample product description.",
+    "inStock": true,
+    "createdAt": "2023-01-01T00:00:00.000Z"
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": false,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    // define your module paths here:
+    "paths": {
+      "@components/*": ["./src/components/*"],
+      "@image/*": ["./src/assets/images/*"],
+      "@style/*": ["./src/assets/styles/*"],
+      "@pages/*": ["./src/pages/*"],
+      "@router/*": ["./src/router/"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@helpers/*": ["./src/helpers/*"],
+      "@containers/*": ["./src/containers/*"],
+      "@framework/*": ["./src/framework/*"],
+      "@layout/*": ["./src/layout/*"]
+    },
+    "baseUrl": "."
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
