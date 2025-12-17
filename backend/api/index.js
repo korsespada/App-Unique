@@ -84,13 +84,17 @@ async function loadProductsFromSheets() {
     console.log(`loadProductsFromSheets: Loaded ${productsRows.length} products and ${photosRows.length} photos`);
     
     // Create a map of product_id -> photos
+    // Columns: A=product_id, B=folder_path, C=filename, D=is_main, E=order
     const photosMap = {};
     photosRows.forEach((row, index) => {
-      const productId = row[0];
-      const filename = row[1];
+      const productId = row[0];      // A: product_id
+      const folderPath = row[1];     // B: folder_path
+      const filename = row[2];       // C: filename
+      const isMain = row[3];         // D: is_main
+      const order = row[4];          // E: order
       
       if (index < 3) {
-        console.log(`Photo row ${index}:`, { productId, filename, is_main: row[2], order: row[3] });
+        console.log(`Photo row ${index}:`, { productId, folderPath, filename, isMain, order });
       }
       
       if (!productId || !filename) {
@@ -102,8 +106,8 @@ async function loadProductsFromSheets() {
       }
       photosMap[productId].push({
         filename: filename,
-        is_main: row[2] === 'TRUE' || row[2] === true,
-        order: parseInt(row[3]) || 0
+        is_main: isMain === 'TRUE' || isMain === true || isMain === '1',
+        order: parseInt(order) || 0
       });
     });
     
