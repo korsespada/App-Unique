@@ -92,15 +92,16 @@ async function loadProductsFromSheets() {
     photosRows.forEach((row, index) => {
       const productId = row[1];      // B: product_id
       const filename = row[2];       // C: photo_filename
+      const photoUrl = row[3];       // D: photo_url
       const order = row[4];          // E: photo_order
       const isMain = row[5];         // F: is_main
       
       if (index < 3) {
-        console.log(`Photo row ${index}:`, { productId, filename, order, isMain });
+        console.log(`Photo row ${index}:`, { productId, filename, photoUrl, order, isMain });
       }
       
-      if (!productId || !filename) {
-        return; // Skip rows without product_id or filename
+      if (!productId) {
+        return; // Skip rows without product_id
       }
       
       if (!photosMap[productId]) {
@@ -108,6 +109,7 @@ async function loadProductsFromSheets() {
       }
       photosMap[productId].push({
         filename: filename,
+        photoUrl: photoUrl,
         is_main: isMain === 'true' || isMain === true || isMain === 'TRUE',
         order: parseInt(order) || 0
       });
@@ -130,11 +132,15 @@ async function loadProductsFromSheets() {
           return a.order - b.order;
         });
 
-        // Construct image URLs using productId as folder path
-        const baseUrl = 'https://app-unique.vercel.app';
-        const images = photos.map(photo => 
-          `${baseUrl}/images/${productId}/${photo.filename}`
-        );
+        // Use photo URLs from Google Sheets if available, otherwise construct URLs
+        const images = photos.map(photo => {
+          // If photo_url is provided in the sheet, use it
+          if (photo.photoUrl && photo.photoUrl.trim()) {
+            return photo.photoUrl;
+          }
+          // Otherwise, construct URL using back-unique.vercel.app (where images are hosted)
+          return `https://back-unique.vercel.app/images/${productId}/${photo.filename}`;
+        });
 
         // Fallback image if no photos
         if (images.length === 0) {
