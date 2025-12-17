@@ -85,17 +85,29 @@ async function loadProductsFromSheets() {
     
     // Create a map of product_id -> photos
     const photosMap = {};
-    photosRows.forEach(row => {
+    photosRows.forEach((row, index) => {
       const productId = row[0];
+      const filename = row[1];
+      
+      if (index < 3) {
+        console.log(`Photo row ${index}:`, { productId, filename, is_main: row[2], order: row[3] });
+      }
+      
+      if (!productId || !filename) {
+        return; // Skip rows without product_id or filename
+      }
+      
       if (!photosMap[productId]) {
         photosMap[productId] = [];
       }
       photosMap[productId].push({
-        filename: row[1],
+        filename: filename,
         is_main: row[2] === 'TRUE' || row[2] === true,
         order: parseInt(row[3]) || 0
       });
     });
+    
+    console.log(`PhotosMap keys sample:`, Object.keys(photosMap).slice(0, 5));
 
     // Map products with their photos
     const products = productsRows
