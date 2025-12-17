@@ -16,6 +16,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve static files from public directory
+app.use('/images', express.static(path.join(__dirname, '..', 'public', 'images')));
+
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
 
 // Google Sheets auth
