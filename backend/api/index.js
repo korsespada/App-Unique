@@ -113,8 +113,9 @@ async function loadProductsFromSheets() {
         });
 
         // Construct image URLs
+        const baseUrl = 'https://back-unique.vercel.app';
         const images = photos.map(photo => 
-          `https://storage.googleapis.com/yeezyunique/${folderPath}/${photo.filename}`
+          `${baseUrl}/images/${folderPath}/${photo.filename}`
         );
 
         // Fallback image if no photos
