@@ -75,7 +75,7 @@ async function loadProductsFromSheets() {
     // Load photos from product_photos sheet
     const photosResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
-      range: 'product_photos!A2:E',
+      range: 'product_photos!A2:F',
     });
 
     const productsRows = productsResponse.data.values || [];
@@ -84,17 +84,16 @@ async function loadProductsFromSheets() {
     console.log(`loadProductsFromSheets: Loaded ${productsRows.length} products and ${photosRows.length} photos`);
     
     // Create a map of product_id -> photos
-    // Columns: A=product_id, B=folder_path, C=filename, D=is_main, E=order
+    // Columns: A=id, B=product_id, C=photo_filename, D=photo_url, E=photo_order, F=is_main
     const photosMap = {};
     photosRows.forEach((row, index) => {
-      const productId = row[0];      // A: product_id
-      const folderPath = row[1];     // B: folder_path
-      const filename = row[2];       // C: filename
-      const isMain = row[3];         // D: is_main
-      const order = row[4];          // E: order
+      const productId = row[1];      // B: product_id
+      const filename = row[2];       // C: photo_filename
+      const order = row[4];          // E: photo_order
+      const isMain = row[5];         // F: is_main
       
       if (index < 3) {
-        console.log(`Photo row ${index}:`, { productId, folderPath, filename, isMain, order });
+        console.log(`Photo row ${index}:`, { productId, filename, order, isMain });
       }
       
       if (!productId || !filename) {
@@ -106,7 +105,7 @@ async function loadProductsFromSheets() {
       }
       photosMap[productId].push({
         filename: filename,
-        is_main: isMain === 'TRUE' || isMain === true || isMain === '1',
+        is_main: isMain === 'true' || isMain === true || isMain === 'TRUE',
         order: parseInt(order) || 0
       });
     });
@@ -117,7 +116,7 @@ async function loadProductsFromSheets() {
     const products = productsRows
       .filter(row => row[8] === 'processed') // Filter by status column (I)
       .map((row) => {
-        const productId = row[0]; // product_id (A)
+        const productId = row[0]; // product_id (A) - это же folder_path
         const folderPath = row[1]; // folder_path (B)
         const photos = photosMap[productId] || [];
         
@@ -128,10 +127,10 @@ async function loadProductsFromSheets() {
           return a.order - b.order;
         });
 
-        // Construct image URLs
+        // Construct image URLs using productId as folder path
         const baseUrl = 'https://app-unique.vercel.app';
         const images = photos.map(photo => 
-          `${baseUrl}/images/${folderPath}/${photo.filename}`
+          `${baseUrl}/images/${productId}/${photo.filename}`
         );
 
         // Fallback image if no photos
