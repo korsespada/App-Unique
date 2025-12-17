@@ -1,5 +1,4 @@
 // Serverless function wrapper for Vercel
-// Import the Express app from src/index.js
 const path = require('path');
 
 // Set the correct path for .env file
@@ -8,7 +7,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 // Import the app after env is loaded
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
+const { google } = require('googleapis');
 const NodeCache = require('node-cache');
 
 const app = express();
@@ -18,6 +17,63 @@ app.use(cors());
 app.use(express.json());
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
+
+// Google Sheets auth
+function getAuthClient() {
+  const { GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY } = process.env;
+  
+  if (!GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
+    console.warn('Google Sheets credentials not configured');
+    return null;
+  }
+
+  try {
+    return new google.auth.JWT({
+      email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+  } catch (error) {
+    console.error('Error creating Google Sheets auth client:', error.message);
+    return null;
+  }
+}
+
+async function loadProductsFromSheets() {
+  const auth = getAuthClient();
+  
+  if (!auth) {
+    return null;
+  }
+
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
+      range: 'Sheet1!A2:I', // Adjust range based on your sheet
+    });
+
+    const rows = response.data.values || [];
+    
+    const products = rows
+      .filter(row => row[8] === 'processed') // Filter by status column
+      .map((row, index) => ({
+        id: row[0] || `product-${index}`,
+        title: row[3] || 'Unnamed Product',
+        brand: row[7] || 'Golden Goose',
+        price: 200 + Math.floor(Math.random() * 300), // Random price 200-500
+        description: row[4] || '',
+        images: row[1] ? [`https://your-cdn.com/${row[1]}/main.jpg`] : ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500'],
+        category: row[5] || 'Shoes',
+        inStock: true
+      }));
+
+    return products;
+  } catch (error) {
+    console.error('Error loading products from Google Sheets:', error.message);
+    return null;
+  }
+}
 
 // Health check
 app.get('/health', (req, res) => {
@@ -33,7 +89,16 @@ app.get('/api/external-products', async (req, res) => {
     return res.json(cached);
   }
 
-  // Mock products data
+  // Try to load from Google Sheets
+  const sheetsProducts = await loadProductsFromSheets();
+  
+  if (sheetsProducts && sheetsProducts.length > 0) {
+    const payload = { products: sheetsProducts };
+    externalProductsCache.set(cacheKey, payload);
+    return res.json(payload);
+  }
+
+  // Fallback to mock data if Google Sheets fails
   const mockProducts = [
     {
       id: '1',
@@ -63,26 +128,6 @@ app.get('/api/external-products', async (req, res) => {
       description: 'Innovative Yeezy Foam Runner',
       images: ['https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?w=500'],
       category: 'Footwear',
-      inStock: true
-    },
-    {
-      id: '4',
-      title: 'Yeezy 700 V3',
-      brand: 'Yeezy',
-      price: 200,
-      description: 'Futuristic Yeezy 700 V3 design',
-      images: ['https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=500'],
-      category: 'Sneakers',
-      inStock: true
-    },
-    {
-      id: '5',
-      title: 'Yeezy 500',
-      brand: 'Yeezy',
-      price: 200,
-      description: 'Retro-inspired Yeezy 500',
-      images: ['https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=500'],
-      category: 'Sneakers',
       inStock: true
     }
   ];
