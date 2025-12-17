@@ -20,41 +20,58 @@ const externalProductsCache = new NodeCache({ stdTTL: 60 });
 
 // Google Sheets auth
 function getAuthClient() {
-  const { GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY } = process.env;
+  const { GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_SHEETS_SPREADSHEET_ID } = process.env;
   
-  if (!GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
-    console.warn('Google Sheets credentials not configured');
+  console.log('Checking Google Sheets credentials...');
+  console.log('GOOGLE_SERVICE_ACCOUNT_EMAIL:', GOOGLE_SERVICE_ACCOUNT_EMAIL ? 'SET' : 'NOT SET');
+  console.log('GOOGLE_PRIVATE_KEY:', GOOGLE_PRIVATE_KEY ? 'SET (length: ' + GOOGLE_PRIVATE_KEY.length + ')' : 'NOT SET');
+  console.log('GOOGLE_SHEETS_SPREADSHEET_ID:', GOOGLE_SHEETS_SPREADSHEET_ID ? 'SET' : 'NOT SET');
+  
+  if (!GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY || !GOOGLE_SHEETS_SPREADSHEET_ID) {
+    console.warn('Google Sheets credentials not configured properly');
     return null;
   }
 
   try {
-    return new google.auth.JWT({
+    const key = GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    console.log('Creating JWT auth client...');
+    
+    const auth = new google.auth.JWT({
       email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      key: GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      key: key,
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     });
+    
+    console.log('JWT auth client created successfully');
+    return auth;
   } catch (error) {
     console.error('Error creating Google Sheets auth client:', error.message);
+    console.error('Error stack:', error.stack);
     return null;
   }
 }
 
 async function loadProductsFromSheets() {
+  console.log('loadProductsFromSheets: Starting...');
   const auth = getAuthClient();
   
   if (!auth) {
+    console.log('loadProductsFromSheets: No auth client, returning null');
     return null;
   }
 
   try {
+    console.log('loadProductsFromSheets: Creating sheets client...');
     const sheets = google.sheets({ version: 'v4', auth });
     
+    console.log('loadProductsFromSheets: Fetching products from sheet...');
     // Load products from products_processed sheet
     const productsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
       range: 'products_processed!A2:I',
     });
 
+    console.log('loadProductsFromSheets: Fetching photos from sheet...');
     // Load photos from product_photos sheet
     const photosResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
@@ -63,6 +80,8 @@ async function loadProductsFromSheets() {
 
     const productsRows = productsResponse.data.values || [];
     const photosRows = photosResponse.data.values || [];
+    
+    console.log(`loadProductsFromSheets: Loaded ${productsRows.length} products and ${photosRows.length} photos`);
     
     // Create a map of product_id -> photos
     const photosMap = {};
