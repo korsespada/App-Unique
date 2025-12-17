@@ -1,8 +1,8 @@
 import axios from "axios";
 
-const { VITE_API_URL = 'https://app-unique.vercel.app', VITE_API_VERSION, VITE_SHOP_NAME } = import.meta.env;
+const { VITE_API_URL, VITE_API_VERSION, VITE_SHOP_NAME } = import.meta.env;
 
-const apiRoot = `${VITE_API_URL}/api`;
+const apiRoot = `${VITE_API_URL || ''}/api`;
 let apiBasePath = apiRoot;
 if (VITE_API_VERSION && VITE_SHOP_NAME) {
   apiBasePath = `${apiRoot}/${VITE_API_VERSION}/${VITE_SHOP_NAME}`;
