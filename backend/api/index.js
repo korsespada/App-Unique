@@ -113,7 +113,7 @@ async function loadProductsFromSheets() {
         });
 
         // Construct image URLs
-        const baseUrl = 'https://back-unique.vercel.app';
+        const baseUrl = 'https://app-unique.vercel.app';
         const images = photos.map(photo => 
           `${baseUrl}/images/${folderPath}/${photo.filename}`
         );
