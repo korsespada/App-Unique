@@ -152,7 +152,7 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
     return res.json(cached);
   }
 
-  const upstreamUrl = 'https://back-unique.vercel.app/api/products';
+  const upstreamUrl = 'https://app-unique.vercel.app/api/products';
 
   try {
     const response = await axios.get(upstreamUrl, {
@@ -202,7 +202,7 @@ app.get('/api/external-products', async (req, res) => {
     return res.json(cached);
   }
 
-  const upstreamUrl = 'https://back-unique.vercel.app/api/products';
+  const upstreamUrl = 'https://app-unique.vercel.app/api/products';
 
   try {
     const response = await axios.get(upstreamUrl, {
