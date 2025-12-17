@@ -147,6 +147,18 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint to check environment variables
+app.get('/debug/env', (req, res) => {
+  const { GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_SHEETS_SPREADSHEET_ID } = process.env;
+  
+  res.json({
+    GOOGLE_SERVICE_ACCOUNT_EMAIL: GOOGLE_SERVICE_ACCOUNT_EMAIL ? 'SET' : 'NOT SET',
+    GOOGLE_PRIVATE_KEY: GOOGLE_PRIVATE_KEY ? `SET (length: ${GOOGLE_PRIVATE_KEY.length})` : 'NOT SET',
+    GOOGLE_SHEETS_SPREADSHEET_ID: GOOGLE_SHEETS_SPREADSHEET_ID ? 'SET' : 'NOT SET',
+    NODE_ENV: process.env.NODE_ENV || 'not set'
+  });
+});
+
 // External products endpoint
 app.get('/api/external-products', async (req, res) => {
   const cacheKey = 'external-products:default';
