@@ -33,46 +33,63 @@ app.get('/api/external-products', async (req, res) => {
     return res.json(cached);
   }
 
-  const upstreamUrl = 'https://back-unique.vercel.app/api/products';
-
-  try {
-    const response = await axios.get(upstreamUrl, {
-      timeout: 28000,
-      validateStatus: () => true,
-    });
-
-    if (response.status < 200 || response.status >= 300) {
-      return res.status(502).json({
-        error: 'Upstream service returned non-2xx status',
-        upstream_status: response.status,
-      });
+  // Mock products data
+  const mockProducts = [
+    {
+      id: '1',
+      title: 'Yeezy Boost 350 V2',
+      brand: 'Yeezy',
+      price: 220,
+      description: 'Classic Yeezy Boost 350 V2 sneakers',
+      images: ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500'],
+      category: 'Sneakers',
+      inStock: true
+    },
+    {
+      id: '2',
+      title: 'Yeezy Slide',
+      brand: 'Yeezy',
+      price: 90,
+      description: 'Comfortable Yeezy Slide sandals',
+      images: ['https://images.unsplash.com/photo-1603808033192-082d6919d3e1?w=500'],
+      category: 'Slides',
+      inStock: true
+    },
+    {
+      id: '3',
+      title: 'Yeezy Foam Runner',
+      brand: 'Yeezy',
+      price: 80,
+      description: 'Innovative Yeezy Foam Runner',
+      images: ['https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?w=500'],
+      category: 'Footwear',
+      inStock: true
+    },
+    {
+      id: '4',
+      title: 'Yeezy 700 V3',
+      brand: 'Yeezy',
+      price: 200,
+      description: 'Futuristic Yeezy 700 V3 design',
+      images: ['https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=500'],
+      category: 'Sneakers',
+      inStock: true
+    },
+    {
+      id: '5',
+      title: 'Yeezy 500',
+      brand: 'Yeezy',
+      price: 200,
+      description: 'Retro-inspired Yeezy 500',
+      images: ['https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=500'],
+      category: 'Sneakers',
+      inStock: true
     }
+  ];
 
-    const upstreamProducts = Array.isArray(response.data?.products) ? response.data.products : [];
-    const products = upstreamProducts.map((p) => ({
-      ...p,
-      brand: p.brand || p.season_title || '',
-    }));
-
-    const payload = { products };
-    externalProductsCache.set(cacheKey, payload);
-    return res.json(payload);
-  } catch (error) {
-    if (error?.code === 'ECONNABORTED') {
-      return res.status(504).json({
-        error: 'Upstream request timeout',
-        upstream_url: upstreamUrl,
-      });
-    }
-
-    const upstreamStatus = error?.response?.status;
-    return res.status(502).json({
-      error: 'Failed to fetch upstream products',
-      upstream_url: upstreamUrl,
-      upstream_status: upstreamStatus,
-      message: error?.message,
-    });
-  }
+  const payload = { products: mockProducts };
+  externalProductsCache.set(cacheKey, payload);
+  return res.json(payload);
 });
 
 // Export for Vercel serverless
