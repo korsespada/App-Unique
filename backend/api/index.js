@@ -48,25 +48,73 @@ async function loadProductsFromSheets() {
 
   try {
     const sheets = google.sheets({ version: 'v4', auth });
-    const response = await sheets.spreadsheets.values.get({
+    
+    // Load products from products_processed sheet
+    const productsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
-      range: 'Sheet1!A2:I', // Adjust range based on your sheet
+      range: 'products_processed!A2:I',
     });
 
-    const rows = response.data.values || [];
+    // Load photos from product_photos sheet
+    const photosResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
+      range: 'product_photos!A2:E',
+    });
+
+    const productsRows = productsResponse.data.values || [];
+    const photosRows = photosResponse.data.values || [];
     
-    const products = rows
-      .filter(row => row[8] === 'processed') // Filter by status column
-      .map((row, index) => ({
-        id: row[0] || `product-${index}`,
-        title: row[3] || 'Unnamed Product',
-        brand: row[7] || 'Golden Goose',
-        price: 200 + Math.floor(Math.random() * 300), // Random price 200-500
-        description: row[4] || '',
-        images: row[1] ? [`https://your-cdn.com/${row[1]}/main.jpg`] : ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500'],
-        category: row[5] || 'Shoes',
-        inStock: true
-      }));
+    // Create a map of product_id -> photos
+    const photosMap = {};
+    photosRows.forEach(row => {
+      const productId = row[0];
+      if (!photosMap[productId]) {
+        photosMap[productId] = [];
+      }
+      photosMap[productId].push({
+        filename: row[1],
+        is_main: row[2] === 'TRUE' || row[2] === true,
+        order: parseInt(row[3]) || 0
+      });
+    });
+
+    // Map products with their photos
+    const products = productsRows
+      .filter(row => row[8] === 'processed') // Filter by status column (I)
+      .map((row) => {
+        const productId = row[0]; // product_id (A)
+        const folderPath = row[1]; // folder_path (B)
+        const photos = photosMap[productId] || [];
+        
+        // Sort photos by order and get main photo first
+        photos.sort((a, b) => {
+          if (a.is_main && !b.is_main) return -1;
+          if (!a.is_main && b.is_main) return 1;
+          return a.order - b.order;
+        });
+
+        // Construct image URLs
+        const images = photos.map(photo => 
+          `https://storage.googleapis.com/yeezyunique/${folderPath}/${photo.filename}`
+        );
+
+        // Fallback image if no photos
+        if (images.length === 0) {
+          images.push('https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500');
+        }
+
+        return {
+          id: productId,
+          title: row[3] || 'Unnamed Product', // name (D)
+          brand: row[7] || 'Golden Goose', // brand (H)
+          price: 200 + Math.floor(Math.random() * 300), // Random price 200-500
+          description: row[4] || '', // description (E)
+          images: images,
+          category: row[5] || 'Shoes', // category (F)
+          seo_title: row[6] || '', // seo_title (G)
+          inStock: true
+        };
+      });
 
     return products;
   } catch (error) {
