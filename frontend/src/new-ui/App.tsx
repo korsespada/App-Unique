@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
-import { ShoppingBag, Search, ArrowLeft, Plus, Minus, Trash2, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { ShoppingBag, Search, ArrowLeft, Plus, Minus, Trash2, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { Product, AppView, CartItem } from './types';
 import { PRODUCTS } from './constants';
 
@@ -105,6 +105,12 @@ const App: React.FC = () => {
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  const resetFilters = () => {
+    setActiveBrand('Все');
+    setActiveCategory('Все');
+    setSearchQuery('');
+  };
+
   const sendOrderToManager = async () => {
     if (isSendingOrder) return;
     if (!cart.length) return;
@@ -168,7 +174,18 @@ const App: React.FC = () => {
             enterKeyHint="search"
             className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-6 pr-12 text-[13px] font-medium tracking-tight text-white placeholder:text-white/40 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
           />
-          <Search size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/35" />
+          {searchQuery.trim() ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-4 top-1/2 -translate-y-1/2 rounded-xl p-2 text-white/40 transition-colors hover:text-white/70"
+              aria-label="Очистить поиск"
+            >
+              <X size={18} />
+            </button>
+          ) : (
+            <Search size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/35" />
+          )}
         </div>
       </div>
 
@@ -225,6 +242,13 @@ const App: React.FC = () => {
         ) : (
           <div className="col-span-2 py-40 text-center">
             <p className="text-[13px] font-medium tracking-wide text-white/55">Ничего не найдено</p>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="mt-6 inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.22em] text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              Сбросить фильтры
+            </button>
           </div>
         )}
       </div>
@@ -310,7 +334,7 @@ const App: React.FC = () => {
 
               <button
                 onClick={() => { addToCart(selectedProduct); setCurrentView('cart'); }}
-                className="mt-6 w-full rounded-3xl bg-white py-5 text-[11px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-2xl shadow-black/40 transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
+                className="mt-6 w-full rounded-3xl bg-white py-5 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-2xl shadow-black/40 transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
               >
                 В корзину
               </button>

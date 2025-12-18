@@ -235,12 +235,26 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       return sum + price * qty;
     }, 0);
 
+    const escapeHtml = (value) => {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    };
+
+    const safeFirst = escapeHtml((firstname || '').trim());
+    const safeLast = escapeHtml((lastname || '').trim());
+    const safeUsername = escapeHtml((username || '').trim());
+    const safeTelegramId = escapeHtml(String(telegramUserId));
+
     const orderText = [
       '🆕 Новый заказ из Telegram Mini App',
       '',
-      `👤 Клиент: ${(firstname || '').trim()} ${(lastname || '').trim()}`.trim(),
-      username ? `@${username}` : 'username: отсутствует',
-      `Telegram ID: ${telegramUserId}`,
+      `👤 Клиент: ${`${safeFirst} ${safeLast}`.trim()}`.trim(),
+      safeUsername ? `@${safeUsername}` : 'username: отсутствует',
+      `Telegram ID: <code>${safeTelegramId}</code>`,
       '',
       '🛒 Товары:'
     ]
@@ -249,14 +263,14 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
           const qty = Number(it?.quantity) || 1;
           const price = Number(it?.price) || 0;
           const lineTotal = price * qty;
-          const title = String(it?.title || '').trim() || 'Без названия';
-          const id = String(it?.id || '').trim() || '-';
-          return `${idx + 1}. ${title} (id: ${id}) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
+          const title = escapeHtml(String(it?.title || '').trim() || 'Без названия');
+          const id = escapeHtml(String(it?.id || '').trim() || '-');
+          return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
         })
       )
       .concat([
         '',
-        `💰 Итого: ${total} ₽`,
+        `💰 Итого: ${escapeHtml(String(total))} ₽`,
         '',
         'Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.'
       ])
@@ -266,7 +280,8 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
 
     await axios.post(url, {
       chat_id: managerChatId,
-      text: orderText
+      text: orderText,
+      parse_mode: 'HTML'
     });
 
     console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: items.length });
