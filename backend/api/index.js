@@ -16,20 +16,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from public directory
-app.use('/images', express.static(path.join(__dirname, '..', 'public', 'images')));
-
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
 
 // Google Sheets auth
 function getAuthClient() {
   const { GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_SHEETS_SPREADSHEET_ID } = process.env;
-  
-  console.log('Checking Google Sheets credentials...');
-  console.log('GOOGLE_SERVICE_ACCOUNT_EMAIL:', GOOGLE_SERVICE_ACCOUNT_EMAIL ? 'SET' : 'NOT SET');
-  console.log('GOOGLE_PRIVATE_KEY:', GOOGLE_PRIVATE_KEY ? 'SET (length: ' + GOOGLE_PRIVATE_KEY.length + ')' : 'NOT SET');
-  console.log('GOOGLE_SHEETS_SPREADSHEET_ID:', GOOGLE_SHEETS_SPREADSHEET_ID ? 'SET' : 'NOT SET');
-  
+
   if (!GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY || !GOOGLE_SHEETS_SPREADSHEET_ID) {
     console.warn('Google Sheets credentials not configured properly');
     return null;
@@ -37,44 +29,34 @@ function getAuthClient() {
 
   try {
     const key = GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
-    console.log('Creating JWT auth client...');
-    
     const auth = new google.auth.JWT({
       email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
       key: key,
       scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     });
-    
-    console.log('JWT auth client created successfully');
     return auth;
   } catch (error) {
     console.error('Error creating Google Sheets auth client:', error.message);
-    console.error('Error stack:', error.stack);
     return null;
   }
 }
 
 async function loadProductsFromSheets() {
-  console.log('loadProductsFromSheets: Starting...');
   const auth = getAuthClient();
   
   if (!auth) {
-    console.log('loadProductsFromSheets: No auth client, returning null');
     return null;
   }
 
   try {
-    console.log('loadProductsFromSheets: Creating sheets client...');
     const sheets = google.sheets({ version: 'v4', auth });
-    
-    console.log('loadProductsFromSheets: Fetching products from sheet...');
+
     // Load products from products_processed sheet
     const productsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
       range: 'products_processed!A2:I',
     });
 
-    console.log('loadProductsFromSheets: Fetching photos from sheet...');
     // Load photos from product_photos sheet
     const photosResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
@@ -83,8 +65,6 @@ async function loadProductsFromSheets() {
 
     const productsRows = productsResponse.data.values || [];
     const photosRows = photosResponse.data.values || [];
-    
-    console.log(`loadProductsFromSheets: Loaded ${productsRows.length} products and ${photosRows.length} photos`);
     
     // Create a map of product_id -> photos
     // Columns: A=id, B=product_id, C=photo_filename, D=photo_url, E=photo_order, F=is_main
@@ -95,10 +75,6 @@ async function loadProductsFromSheets() {
       const photoUrl = row[3];       // D: photo_url
       const order = row[4];          // E: photo_order
       const isMain = row[5];         // F: is_main
-      
-      if (index < 3) {
-        console.log(`Photo row ${index}:`, { productId, filename, photoUrl, order, isMain });
-      }
       
       if (!productId) {
         return; // Skip rows without product_id
@@ -114,15 +90,12 @@ async function loadProductsFromSheets() {
         order: parseInt(order) || 0
       });
     });
-    
-    console.log(`PhotosMap keys sample:`, Object.keys(photosMap).slice(0, 5));
 
     // Map products with their photos
     const products = productsRows
       .filter(row => row[8] === 'processed') // Filter by status column (I)
       .map((row) => {
         const productId = row[0]; // product_id (A) - это же folder_path
-        const folderPath = row[1]; // folder_path (B)
         const photos = photosMap[productId] || [];
         
         // Sort photos by order and get main photo first
@@ -173,133 +146,71 @@ async function loadProductsFromSheets() {
   }
 }
 
+const mockProducts = [
+  {
+    id: '1',
+    title: 'Yeezy Boost 350 V2',
+    brand: 'Yeezy',
+    price: 220,
+    description: 'Classic Yeezy Boost 350 V2 sneakers',
+    images: ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500'],
+    category: 'Sneakers',
+    inStock: true
+  },
+  {
+    id: '2',
+    title: 'Yeezy Slide',
+    brand: 'Yeezy',
+    price: 90,
+    description: 'Comfortable Yeezy Slide sandals',
+    images: ['https://images.unsplash.com/photo-1603808033192-082d6919d3e1?w=500'],
+    category: 'Slides',
+    inStock: true
+  },
+  {
+    id: '3',
+    title: 'Yeezy Foam Runner',
+    brand: 'Yeezy',
+    price: 80,
+    description: 'Innovative Yeezy Foam Runner',
+    images: ['https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?w=500'],
+    category: 'Footwear',
+    inStock: true
+  }
+];
+
+async function handleExternalProducts(req, res, cacheKey) {
+  const cached = externalProductsCache.get(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
+
+  const sheetsProducts = await loadProductsFromSheets();
+  if (sheetsProducts && sheetsProducts.length > 0) {
+    const payload = { products: sheetsProducts };
+    externalProductsCache.set(cacheKey, payload);
+    return res.json(payload);
+  }
+
+  const payload = { products: mockProducts };
+  externalProductsCache.set(cacheKey, payload);
+  return res.json(payload);
+}
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Debug endpoint to check environment variables
-app.get('/debug/env', (req, res) => {
-  const { GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_SHEETS_SPREADSHEET_ID } = process.env;
-  
-  res.json({
-    GOOGLE_SERVICE_ACCOUNT_EMAIL: GOOGLE_SERVICE_ACCOUNT_EMAIL ? 'SET' : 'NOT SET',
-    GOOGLE_PRIVATE_KEY: GOOGLE_PRIVATE_KEY ? `SET (length: ${GOOGLE_PRIVATE_KEY.length})` : 'NOT SET',
-    GOOGLE_SHEETS_SPREADSHEET_ID: GOOGLE_SHEETS_SPREADSHEET_ID ? 'SET' : 'NOT SET',
-    NODE_ENV: process.env.NODE_ENV || 'not set'
-  });
-});
-
 // External products endpoint
 app.get('/api/external-products', async (req, res) => {
-  const cacheKey = 'external-products:default';
-
-  const cached = externalProductsCache.get(cacheKey);
-  if (cached) {
-    return res.json(cached);
-  }
-
-  // Try to load from Google Sheets
-  const sheetsProducts = await loadProductsFromSheets();
-  
-  if (sheetsProducts && sheetsProducts.length > 0) {
-    const payload = { products: sheetsProducts };
-    externalProductsCache.set(cacheKey, payload);
-    return res.json(payload);
-  }
-
-  // Fallback to mock data if Google Sheets fails
-  const mockProducts = [
-    {
-      id: '1',
-      title: 'Yeezy Boost 350 V2',
-      brand: 'Yeezy',
-      price: 220,
-      description: 'Classic Yeezy Boost 350 V2 sneakers',
-      images: ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500'],
-      category: 'Sneakers',
-      inStock: true
-    },
-    {
-      id: '2',
-      title: 'Yeezy Slide',
-      brand: 'Yeezy',
-      price: 90,
-      description: 'Comfortable Yeezy Slide sandals',
-      images: ['https://images.unsplash.com/photo-1603808033192-082d6919d3e1?w=500'],
-      category: 'Slides',
-      inStock: true
-    },
-    {
-      id: '3',
-      title: 'Yeezy Foam Runner',
-      brand: 'Yeezy',
-      price: 80,
-      description: 'Innovative Yeezy Foam Runner',
-      images: ['https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?w=500'],
-      category: 'Footwear',
-      inStock: true
-    }
-  ];
-
-  const payload = { products: mockProducts };
-  externalProductsCache.set(cacheKey, payload);
-  return res.json(payload);
+  return handleExternalProducts(req, res, 'external-products:default');
 });
 
 // Versioned external products endpoint (alias for Telegram frontend)
 app.get('/api/:version/:shop/external-products', async (req, res) => {
   const { version, shop } = req.params;
-  const cacheKey = `external-products:${version}:${shop}`;
-
-  const cached = externalProductsCache.get(cacheKey);
-  if (cached) {
-    return res.json(cached);
-  }
-
-  const sheetsProducts = await loadProductsFromSheets();
-  if (sheetsProducts && sheetsProducts.length > 0) {
-    const payload = { products: sheetsProducts };
-    externalProductsCache.set(cacheKey, payload);
-    return res.json(payload);
-  }
-
-  const mockProducts = [
-    {
-      id: '1',
-      title: 'Yeezy Boost 350 V2',
-      brand: 'Yeezy',
-      price: 220,
-      description: 'Classic Yeezy Boost 350 V2 sneakers',
-      images: ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500'],
-      category: 'Sneakers',
-      inStock: true
-    },
-    {
-      id: '2',
-      title: 'Yeezy Slide',
-      brand: 'Yeezy',
-      price: 90,
-      description: 'Comfortable Yeezy Slide sandals',
-      images: ['https://images.unsplash.com/photo-1603808033192-082d6919d3e1?w=500'],
-      category: 'Slides',
-      inStock: true
-    },
-    {
-      id: '3',
-      title: 'Yeezy Foam Runner',
-      brand: 'Yeezy',
-      price: 80,
-      description: 'Innovative Yeezy Foam Runner',
-      images: ['https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?w=500'],
-      category: 'Footwear',
-      inStock: true
-    }
-  ];
-
-  const payload = { products: mockProducts };
-  externalProductsCache.set(cacheKey, payload);
-  return res.json(payload);
+  return handleExternalProducts(req, res, `external-products:${version}:${shop}`);
 });
 
 // Export for Vercel serverless
