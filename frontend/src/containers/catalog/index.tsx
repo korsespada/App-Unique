@@ -2,7 +2,7 @@ import ProductsSkeleton from "@components/skeleton/products";
 import { useGetExternalProducts } from "@framework/api/product/external-get";
 import { useDebounce } from "@uidotdev/usehooks";
 import { Button } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import GaShop from "@ui-ga/GaShop";
@@ -40,8 +40,14 @@ export default function Catalog() {
 
   const handleSearch = (value: string) => {
     setSearchQuery(value);
-    updateUrlParams({ q: value || undefined });
   };
+
+  useEffect(() => {
+    const q = (debouncedSearchQuery || "").trim();
+    const current = (searchParams.get("q") || "").trim();
+    if (q === current) return;
+    updateUrlParams({ q: q || undefined });
+  }, [debouncedSearchQuery, searchParams]);
 
   const handleCategoryChange = (value: string | undefined) => {
     setSelectedCategory(value);
@@ -85,9 +91,9 @@ export default function Catalog() {
       return categoryOk && brandOk;
     }
 
-    const haystack = `${p.description} ${p.category || ""} ${p.brand || ""} ${
-      p.season_title || ""
-    } ${p.product_id}`
+    const haystack = `${p.title || ""} ${p.name || ""} ${p.description || ""} ${p.category || ""} ${
+      p.brand || ""
+    } ${p.season_title || ""} ${p.product_id}`
       .toLowerCase()
       .trim();
     return categoryOk && brandOk && haystack.includes(q);

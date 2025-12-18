@@ -9,11 +9,11 @@ import {
 import { Button, Select } from "antd";
 import React, { useMemo, useState } from "react";
 
+import logoUrl from "@image/logo.svg";
+
 import type { ExternalProduct } from "@framework/types";
 
 type AppView = "home" | "product-detail" | "cart";
-
-type SortOption = "brand-az" | "price-asc" | "price-desc";
 
 type CartItem = {
   id: string;
@@ -27,7 +27,11 @@ type CartItem = {
 };
 
 function getProductName(p: ExternalProduct) {
-  return p.description || "";
+  return p.title || p.name || p.description || "";
+}
+
+function getProductId(p: ExternalProduct) {
+  return p.product_id || p.id || "";
 }
 
 function getProductBrand(p: ExternalProduct) {
@@ -71,7 +75,7 @@ export default function GaShop({
   const [currentView, setCurrentView] = useState<AppView>("home");
   const [selectedProduct, setSelectedProduct] = useState<ExternalProduct | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [sortOption, setSortOption] = useState<SortOption>("brand-az");
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const filteredAndSortedProducts = useMemo(() => {
     const q = (searchQuery || "").trim().toLowerCase();
@@ -85,23 +89,17 @@ export default function GaShop({
         return categoryOk && brandOk;
       }
 
-      const haystack = `${p.description || ""} ${p.category || ""} ${brandValue} ${p.product_id}`
+      const haystack = `${p.title || ""} ${p.name || ""} ${p.description || ""} ${
+        p.category || ""
+      } ${brandValue} ${getProductId(p)}`
         .toLowerCase()
         .trim();
 
       return categoryOk && brandOk && haystack.includes(q);
     });
 
-    if (sortOption === "brand-az") {
-      result.sort((a, b) => getProductBrand(a).localeCompare(getProductBrand(b)));
-    } else if (sortOption === "price-asc") {
-      result.sort((a, b) => (getProductPrice(a) || 0) - (getProductPrice(b) || 0));
-    } else if (sortOption === "price-desc") {
-      result.sort((a, b) => (getProductPrice(b) || 0) - (getProductPrice(a) || 0));
-    }
-
     return result;
-  }, [products, searchQuery, selectedCategory, selectedBrandLine, sortOption]);
+  }, [products, searchQuery, selectedCategory, selectedBrandLine]);
 
   const cartTotal = useMemo(
     () => cart.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0),
@@ -111,6 +109,7 @@ export default function GaShop({
 
   const navigateToProduct = (product: ExternalProduct) => {
     setSelectedProduct(product);
+    setCurrentImageIndex(0);
     setCurrentView("product-detail");
     try {
       window.scrollTo(0, 0);
@@ -120,7 +119,7 @@ export default function GaShop({
   };
 
   const addToCart = (product: ExternalProduct) => {
-    const id = product.product_id;
+    const id = getProductId(product);
     const name = getProductName(product);
     const brand = getProductBrand(product) || undefined;
     const price = getProductPrice(product);
@@ -169,7 +168,7 @@ export default function GaShop({
             placeholder="Поиск по коллекции..."
             value={searchQuery}
             onChange={(e) => onSearch(e.target.value)}
-            className="w-full bg-gray-50 border-none py-3 pl-10 pr-3 text-sm rounded-2xl focus:ring-1 focus:ring-black outline-none"
+            className="w-full bg-gray-50 border-none py-3 pl-10 pr-3 text-sm rounded-2xl focus:ring-1 focus:ring-black outline-none text-black placeholder:text-gray-400"
           />
         </div>
       </div>
@@ -209,17 +208,6 @@ export default function GaShop({
             options={brandLines.map((b) => ({ value: b, label: b }))}
           />
         </div>
-
-        <Select
-          className="w-[140px]"
-          value={sortOption}
-          onChange={(v) => setSortOption(v)}
-          options={[
-            { value: "brand-az", label: "Бренд А-Я" },
-            { value: "price-asc", label: "Цена ↑" },
-            { value: "price-desc", label: "Цена ↓" }
-          ]}
-        />
       </div>
 
       {(selectedCategory || selectedBrandLine || searchQuery) && (
@@ -233,13 +221,14 @@ export default function GaShop({
       <div className="px-4 grid grid-cols-2 gap-x-4 gap-y-6">
         {filteredAndSortedProducts.length > 0 ? (
           filteredAndSortedProducts.map((p) => {
+            const pid = getProductId(p);
             const name = getProductName(p);
             const brand = getProductBrand(p);
             const img = p.images?.[0];
 
             return (
               <div
-                key={p.product_id}
+                key={pid}
                 className="cursor-pointer"
                 onClick={() => navigateToProduct(p)}
               >
@@ -282,7 +271,7 @@ export default function GaShop({
     const images = selectedProduct.images || [];
 
     return (
-      <div className="pt-16 pb-28">
+      <div className="pt-16 pb-32">
         <div className="px-4 mb-4 flex items-center justify-between">
           <button
             type="button"
@@ -295,8 +284,12 @@ export default function GaShop({
         </div>
 
         <div className="relative w-full aspect-[4/5] bg-gray-50">
-          {images[0] ? (
-            <img src={images[0]} alt={name} className="w-full h-full object-cover" />
+          {images[currentImageIndex] ? (
+            <img
+              src={images[currentImageIndex]}
+              alt={name}
+              className="w-full h-full object-cover"
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-300 text-sm">
               Нет фото
@@ -306,15 +299,22 @@ export default function GaShop({
 
         {images.length > 1 && (
           <div className="px-4 flex gap-3 mt-4 overflow-x-auto">
-            {images.slice(0, 10).map((img) => (
-              <div key={img} className="w-16 h-20 flex-shrink-0 rounded-lg overflow-hidden">
+            {images.slice(0, 12).map((img, i) => (
+              <button
+                type="button"
+                key={`${img}-${i}`}
+                onClick={() => setCurrentImageIndex(i)}
+                className={`w-16 h-20 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
+                  i === currentImageIndex ? "border-black" : "border-transparent opacity-70"
+                }`}
+              >
                 <img src={img} className="w-full h-full object-cover" />
-              </div>
+              </button>
             ))}
           </div>
         )}
 
-        <div className="px-4 py-6">
+        <div className="px-4 py-4">
           {brand && (
             <p className="text-[10px] uppercase tracking-[0.3em] text-gray-400 font-extrabold mb-2">
               {brand}
@@ -322,15 +322,15 @@ export default function GaShop({
           )}
           <h2 className="text-2xl font-extrabold tracking-tight">{name || "—"}</h2>
 
-          <div className="h-px bg-gray-50 my-6" />
+          <div className="h-px bg-gray-50 my-3" />
 
           {selectedProduct.description && (
-            <p className="text-sm text-gray-600 leading-[1.8] mb-8 font-normal text-justify">
+            <p className="text-sm text-gray-600 leading-[1.7] mb-4 font-normal text-justify">
               {selectedProduct.description}
             </p>
           )}
 
-          <div className="fixed bottom-[56px] left-0 right-0 px-4 pb-4 pt-3 bg-white/90 backdrop-blur-xl z-[85]">
+          <div className="fixed bottom-16 left-0 right-0 px-4 pb-3 pt-3 bg-white/90 backdrop-blur-xl z-[85]">
             <button
               type="button"
               onClick={() => {
@@ -348,7 +348,7 @@ export default function GaShop({
   };
 
   const CartView = () => (
-    <div className="pt-16 pb-24 px-4 min-h-screen">
+    <div className="pt-16 pb-24 px-4 min-h-screen text-black">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-extrabold">Корзина</h2>
         <button
@@ -442,17 +442,18 @@ export default function GaShop({
   );
 
   return (
-    <div className="w-full bg-white min-h-screen relative overflow-x-hidden">
+    <div className="w-full bg-white min-h-screen relative overflow-x-hidden text-black">
       <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-xl z-[60] flex items-center justify-center px-4 py-4 border-b border-gray-50/50">
-        <div
+        <button
+          type="button"
           onClick={() => {
             setCurrentView("home");
             onClearFilters();
           }}
-          className="text-xl tracking-[0.3em] cursor-pointer hover:opacity-70 transition-all font-black"
+          className="cursor-pointer hover:opacity-70 transition-all"
         >
-          YEEZYUNIQUE
-        </div>
+          <img src={logoUrl} alt="YEEZYUNIQUE" className="h-6" />
+        </button>
       </nav>
 
       <main className="min-h-screen">
@@ -461,7 +462,7 @@ export default function GaShop({
         {currentView === "cart" && <CartView />}
       </main>
 
-      <div className="fixed bottom-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-100 px-10 py-2 flex justify-around items-center z-[90] rounded-t-[20px] shadow-2xl">
+      <div className="fixed bottom-0 w-full h-16 bg-white/95 backdrop-blur-md border-t border-gray-100 px-10 flex justify-around items-center z-[90] rounded-t-[20px] shadow-2xl">
         <button
           type="button"
           onClick={() => {

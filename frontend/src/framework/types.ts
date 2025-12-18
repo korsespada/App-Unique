@@ -133,7 +133,10 @@ export interface TypeListProducts {
 }
 
 export interface ExternalProduct {
+  id?: string;
   product_id: string;
+  title?: string;
+  name?: string;
   description: string;
   category?: string;
   brand?: string;
