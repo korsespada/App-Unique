@@ -13,5 +13,4 @@ declare global {
 
 const container = document.getElementById("root") as HTMLElement;
 
-console.log("APP MAIN MOUNT");
 createRoot(container).render(<App />);

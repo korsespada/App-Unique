@@ -4,12 +4,26 @@ import "antd/dist/reset.css";
 
 import useTelegramUser from "@hooks/useTelegramUser";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import Main from "./layouts/main";
 import Router from "./router";
 
 function App() {
   const isTG = useTelegramUser();
+
+  useEffect(() => {
+    try {
+      const webApp = window?.Telegram?.WebApp;
+      if (webApp) {
+        webApp.ready();
+        webApp.expand();
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {

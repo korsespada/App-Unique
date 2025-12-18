@@ -14,6 +14,12 @@
     "Segoe UI", sans-serif;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 /* button,
 [type="button"],
 [type="reset"],
@@ -68,12 +74,16 @@ label {
 .contentWrapper {
   box-sizing: border-box;
   margin: 0;
-  padding: 12px;
+  padding: 0;
 
   color: var(--tg-theme-text-color) !important;
 
   background: var(--tg-theme-bg-color);
   border-radius: 0;
+}
+
+.app {
+  height: var(--tg-viewport-height, 100vh);
 }
 
 .ant-input,
