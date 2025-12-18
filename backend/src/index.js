@@ -72,7 +72,9 @@ const { loadProductsAndPhotos, loadPublicProducts } = require('./googleSheets');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Caches
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
+const productsCache = new NodeCache({ stdTTL: 60 });
 
 // In-memory storage for profiles (in production, use a database)
 const profiles = new Map();
@@ -87,12 +89,23 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Middleware to load products and photos for each request
+// Middleware to load products and photos (with in-memory cache)
 async function loadData() {
   try {
+    const cacheKey = 'products-and-photos';
+    const cached = productsCache.get(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     console.log('Loading data from Google Sheets...');
     const data = await loadProductsAndPhotos();
     console.log('Successfully loaded data from Google Sheets');
+
+    // Cache full dataset; pagination will always slice this cached array
+    productsCache.set(cacheKey, data);
+
     return data;
   } catch (error) {
     console.error('Error loading data from Google Sheets:', error.message);
@@ -267,30 +280,55 @@ app.get('/api/products', async (req, res) => {
 app.get('/products', async (req, res) => {
   try {
     const { products, photos } = await loadData();
+
+    // Base array from cache
     let filteredProducts = [...products];
-    
-    // Apply filters
+
+    // Text search
     if (req.query.search) {
-      const searchTerm = req.query.search.toLowerCase();
+      const searchTerm = String(req.query.search).toLowerCase();
       filteredProducts = filteredProducts.filter(
-        p => p.title.toLowerCase().includes(searchTerm) ||
-             p.description?.toLowerCase().includes(searchTerm)
+        (p) =>
+          (p.title && p.title.toLowerCase().includes(searchTerm)) ||
+          (p.description && p.description.toLowerCase().includes(searchTerm))
       );
     }
-    
+
+    // Category filter
     if (req.query.category) {
       filteredProducts = filteredProducts.filter(
-        p => p.category === req.query.category
+        (p) => p.category === req.query.category
       );
     }
-    
+
+    // Brand filter
     if (req.query.brand) {
       filteredProducts = filteredProducts.filter(
-        p => p.brand === req.query.brand
+        (p) => p.brand === req.query.brand
       );
     }
-    
-    res.json(filteredProducts.map(p => getProductWithPhotos(p, photos)));
+
+    // Pagination
+    const total = filteredProducts.length;
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit =
+      Math.max(parseInt(req.query.limit, 10) || 40, 1);
+
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+
+    const pageItems = filteredProducts
+      .slice(startIndex, endIndex)
+      .map((p) => getProductWithPhotos(p, photos));
+
+    const hasMore = endIndex < total;
+
+    res.json({
+      products: pageItems,
+      total,
+      page,
+      hasMore,
+    });
   } catch (error) {
     console.error('Error in /products:', error);
     res.status(500).json({ error: 'Failed to load products' });

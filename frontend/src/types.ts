@@ -1059,3 +1059,30 @@ export type WebAppUser = {
    */
   photo_url?: string;
 };
+
+// === Catalog products (backend /products) ===
+
+export type Photo = {
+  id?: string;
+  url: string;
+  filename?: string;
+  order?: number;
+  product_id?: string;
+};
+
+export type Product = {
+  id: string;
+  title: string;
+  description: string;
+  brand: string;
+  category: string;
+  price: number;
+  photos: Photo[];
+};
+
+export type GetProductsResponse = {
+  products: Product[];
+  total: number;
+  page: number;
+  hasMore: boolean;
+};
