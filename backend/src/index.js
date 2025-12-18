@@ -5,9 +5,17 @@ require('dotenv').config({ path: '.env' });
 const checkEnvVars = () => {
   const envVars = {
     // Required for Telegram bot functionality
+    BOTTOKEN: {
+      required: false,
+      message: 'Bot token is missing - Telegram bot features will be disabled'
+    },
     BOT_TOKEN: {
       required: false,
       message: 'Bot token is missing - Telegram bot features will be disabled'
+    },
+    MANAGERCHATID: {
+      required: false,
+      message: 'Manager chat ID is missing - Order notifications will not be sent'
     },
     MANAGER_CHAT_ID: {
       required: false,
@@ -31,7 +39,13 @@ const checkEnvVars = () => {
   let hasCriticalError = false;
   
   Object.entries(envVars).forEach(([key, { required, message }]) => {
-    if (!process.env[key]) {
+    const isAliasSatisfied =
+      (key === 'BOT_TOKEN' && !!process.env.BOTTOKEN) ||
+      (key === 'BOTTOKEN' && !!process.env.BOT_TOKEN) ||
+      (key === 'MANAGER_CHAT_ID' && !!process.env.MANAGERCHATID) ||
+      (key === 'MANAGERCHATID' && !!process.env.MANAGER_CHAT_ID);
+
+    if (!process.env[key] && !isAliasSatisfied) {
       if (required) {
         console.error(`❌ Missing required environment variable: ${key}`);
         hasCriticalError = true;
@@ -41,8 +55,11 @@ const checkEnvVars = () => {
     }
   });
 
+  const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
+  const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
+
   return {
-    isBotEnabled: !!process.env.BOT_TOKEN && !!process.env.MANAGER_CHAT_ID,
+    isBotEnabled: !!botToken && !!managerChatId,
     isGoogleSheetsEnabled: !!(
       process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
       process.env.GOOGLE_PRIVATE_KEY &&
@@ -331,56 +348,70 @@ app.post('/profile', (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/orders', async (req, res) => {
-  const { items, address, telegramUser } = req.body;
-  
-  if (!items || !address || !telegramUser || !telegramUser.id) {
-    return res.status(400).json({ error: 'Invalid order data' });
-  }
-  
+app.post(['/orders', '/api/orders'], async (req, res) => {
   try {
-    // Load current products to calculate total
-    const { products } = await loadData();
-    
-    // Calculate total
-    const total = items.reduce((sum, item) => {
-      const product = products.find(p => p.id === item.productId);
-      return sum + (product ? product.price * item.quantity : 0);
+    const { telegramUserId, username, firstname, lastname, items } = req.body;
+
+    if (!telegramUserId || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Некорректные данные заказа' });
+    }
+
+    const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
+    const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
+
+    if (!botToken || !managerChatId) {
+      return res.status(500).json({ error: 'Бот не сконфигурирован' });
+    }
+
+    const total = items.reduce((sum, it) => {
+      const qty = Number(it?.quantity) || 1;
+      const price = Number(it?.price) || 0;
+      return sum + price * qty;
     }, 0);
-    
-    // Format message for Telegram
-    const message = `
-🛒 *New Order* 🛒
 
-👤 *Customer*: ${telegramUser.first_name} ${telegramUser.last_name || ''} (@${telegramUser.username || 'no_username'})
-📱 *User ID*: ${telegramUser.id}
+    const orderText = [
+      '🆕 Новый заказ из Telegram Mini App',
+      '',
+      `👤 Клиент: ${(firstname || '').trim()} ${(lastname || '').trim()}`.trim(),
+      username ? `@${username}` : 'username: отсутствует',
+      `Telegram ID: ${telegramUserId}`,
+      '',
+      '🛒 Товары:'
+    ]
+      .concat(
+        items.map((it, idx) => {
+          const qty = Number(it?.quantity) || 1;
+          const price = Number(it?.price) || 0;
+          const lineTotal = price * qty;
+          const title = String(it?.title || '').trim() || 'Без названия';
+          const id = String(it?.id || '').trim() || '-';
+          return `${idx + 1}. ${title} (id: ${id}) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
+        })
+      )
+      .concat([
+        '',
+        `💰 Итого: ${total} ₽`,
+        '',
+        'Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.'
+      ])
+      .join('\n');
 
-📦 *Order Items*:
-${items.map(item => {
-  const product = products.find(p => p.id === item.productId);
-  return `- ${product?.title || 'Unknown Product'} x${item.quantity} - $${(product?.price * item.quantity).toFixed(2)}`;
-}).join('\n')}
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
-💵 *Total*: $${total.toFixed(2)}
+    await axios.post(url, {
+      chat_id: managerChatId,
+      text: orderText
+    });
 
-🏠 *Delivery Address*:
-${Object.entries(address).map(([key, value]) => `- ${key}: ${value}`).join('\n')}
-`;
+    console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: items.length });
 
-    // Send message to Telegram
-    await axios.post(
-      `https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`,
-      {
-        chat_id: process.env.MANAGER_CHAT_ID,
-        text: message,
-        parse_mode: 'Markdown'
-      }
-    );
-    
-    res.json({ success: true });
+    return res.json({
+      ok: true,
+      orderId: Date.now().toString()
+    });
   } catch (error) {
-    console.error('Error processing order:', error);
-    res.status(500).json({ error: 'Failed to process order' });
+    console.error('Ошибка отправки заказа менеджеру', error?.response?.data || error.message);
+    return res.status(500).json({ error: 'Не удалось отправить заказ менеджеру' });
   }
 });
 

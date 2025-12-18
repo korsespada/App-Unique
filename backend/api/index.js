@@ -7,6 +7,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 // Import the app after env is loaded
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 const { google } = require('googleapis');
 const NodeCache = require('node-cache');
 
@@ -211,6 +212,73 @@ app.get('/api/external-products', async (req, res) => {
 app.get('/api/:version/:shop/external-products', async (req, res) => {
   const { version, shop } = req.params;
   return handleExternalProducts(req, res, `external-products:${version}:${shop}`);
+});
+
+app.post(['/orders', '/api/orders'], async (req, res) => {
+  try {
+    const { telegramUserId, username, firstname, lastname, items } = req.body;
+
+    if (!telegramUserId || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Некорректные данные заказа' });
+    }
+
+    const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
+    const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
+
+    if (!botToken || !managerChatId) {
+      return res.status(500).json({ error: 'Бот не сконфигурирован' });
+    }
+
+    const total = items.reduce((sum, it) => {
+      const qty = Number(it?.quantity) || 1;
+      const price = Number(it?.price) || 0;
+      return sum + price * qty;
+    }, 0);
+
+    const orderText = [
+      '🆕 Новый заказ из Telegram Mini App',
+      '',
+      `👤 Клиент: ${(firstname || '').trim()} ${(lastname || '').trim()}`.trim(),
+      username ? `@${username}` : 'username: отсутствует',
+      `Telegram ID: ${telegramUserId}`,
+      '',
+      '🛒 Товары:'
+    ]
+      .concat(
+        items.map((it, idx) => {
+          const qty = Number(it?.quantity) || 1;
+          const price = Number(it?.price) || 0;
+          const lineTotal = price * qty;
+          const title = String(it?.title || '').trim() || 'Без названия';
+          const id = String(it?.id || '').trim() || '-';
+          return `${idx + 1}. ${title} (id: ${id}) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
+        })
+      )
+      .concat([
+        '',
+        `💰 Итого: ${total} ₽`,
+        '',
+        'Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.'
+      ])
+      .join('\n');
+
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+    await axios.post(url, {
+      chat_id: managerChatId,
+      text: orderText
+    });
+
+    console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: items.length });
+
+    return res.json({
+      ok: true,
+      orderId: Date.now().toString()
+    });
+  } catch (error) {
+    console.error('Ошибка отправки заказа менеджеру', error?.response?.data || error.message);
+    return res.status(500).json({ error: 'Не удалось отправить заказ менеджеру' });
+  }
 });
 
 // Export for Vercel serverless

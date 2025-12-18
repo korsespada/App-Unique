@@ -5,6 +5,7 @@ import { Product, AppView, CartItem } from './types';
 import { PRODUCTS } from './constants';
 
 import { useGetExternalProducts } from "@framework/api/product/external-get";
+import Api from "@framework/api/utils/api-config";
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>('home');
@@ -13,6 +14,7 @@ const App: React.FC = () => {
   const [activeBrand, setActiveBrand] = useState<string>('Все');
   const [searchQuery, setSearchQuery] = useState('');
   const [scrolled, setScrolled] = useState(false);
+  const [isSendingOrder, setIsSendingOrder] = useState(false);
 
   // Gallery state for ProductDetail
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -92,6 +94,46 @@ const App: React.FC = () => {
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  const sendOrderToManager = async () => {
+    if (isSendingOrder) return;
+    if (!cart.length) return;
+
+    const tg = window.Telegram?.WebApp;
+    const user = tg?.initDataUnsafe?.user;
+
+    if (!user?.id) {
+      alert('Откройте мини‑приложение внутри Telegram, чтобы отправить заказ менеджеру.');
+      return;
+    }
+
+    const payload = {
+      telegramUserId: String(user.id),
+      username: user.username || '',
+      firstname: user.first_name || '',
+      lastname: user.last_name || '',
+      items: cart.map((it) => ({
+        id: it.id,
+        title: it.name,
+        quantity: it.quantity,
+        price: it.price,
+        image: it.images?.[0] || ''
+      }))
+    };
+
+    try {
+      setIsSendingOrder(true);
+      await Api.post('/orders', payload, { timeout: 30000 });
+      alert('Заказ отправлен менеджеру');
+      setCart([]);
+      setCurrentView('home');
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Не удалось отправить заказ менеджеру';
+      alert(String(msg));
+    } finally {
+      setIsSendingOrder(false);
+    }
+  };
 
   const navigateToProduct = (product: Product) => {
     setSelectedProduct(product);
@@ -327,8 +369,12 @@ const App: React.FC = () => {
               <span className="text-3xl font-extrabold tracking-tight text-white opacity-0 select-none">{cartTotal.toLocaleString()} ₽</span>
             </div>
             <p className="mb-12 text-[10px] font-light uppercase tracking-[0.42em] text-white/25">включая доставку из Милана</p>
-            <button className="w-full rounded-2xl bg-white py-6 text-[11px] font-extrabold uppercase tracking-[0.42em] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]">
-              Оформить
+            <button
+              onClick={sendOrderToManager}
+              disabled={isSendingOrder}
+              className="w-full rounded-2xl bg-white py-6 text-[11px] font-extrabold uppercase tracking-[0.42em] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98] disabled:opacity-60"
+            >
+              {isSendingOrder ? 'Отправляем…' : 'Отправить менеджеру'}
             </button>
           </div>
         </>
