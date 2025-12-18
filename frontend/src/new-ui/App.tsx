@@ -326,7 +326,7 @@ const App: React.FC = () => {
           onClick={() => { setCurrentView('home'); window.scrollTo({top:0, behavior:'smooth'}); }}
           className="cursor-pointer select-none"
         >
-          <img src="/logo.svg" alt="Logo" className="h-6 w-auto opacity-95" />
+          <img src="/logo.svg" alt="Logo" className="logo-auto h-7 w-auto opacity-95" />
         </div>
       </nav>
 

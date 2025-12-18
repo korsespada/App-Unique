@@ -110,11 +110,31 @@ label {
     box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
   }
 
+  .logo-auto {
+    filter: none;
+  }
+  .dark .logo-auto,
+  [data-theme="dark"] .logo-auto {
+    filter: invert(1) brightness(1.15);
+  }
+  [data-theme="light"] .logo-auto {
+    filter: none;
+  }
+
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .logo-auto {
+    filter: invert(1) brightness(1.15);
+  }
+  [data-theme="light"] .logo-auto {
+    filter: none;
   }
 }
