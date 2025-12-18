@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
-import { ShoppingBag, Search, ArrowLeft, Plus, Minus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Search, ArrowLeft, Plus, Minus, Trash2, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { Product, AppView, CartItem } from './types';
 import { PRODUCTS } from './constants';
 
@@ -10,6 +10,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>('home');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [activeBrand, setActiveBrand] = useState<string>('Все');
   const [searchQuery, setSearchQuery] = useState('');
   const [scrolled, setScrolled] = useState(false);
 
@@ -52,14 +53,22 @@ const App: React.FC = () => {
 
   const sourceProducts = apiProducts.length ? apiProducts : PRODUCTS;
 
+  const derivedBrands = useMemo<string[]>(() => {
+    const uniq = Array.from(
+      new Set(sourceProducts.map((p) => String(p.brand || '').trim()).filter(Boolean))
+    );
+    return ['Все', ...uniq.sort((a, b) => a.localeCompare(b))];
+  }, [sourceProducts]);
+
   const filteredAndSortedProducts = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return sourceProducts.filter(p => {
+      const matchesBrand = activeBrand === 'Все' || p.brand === activeBrand;
       const matchesSearch = p.name.toLowerCase().includes(q) ||
                             p.brand.toLowerCase().includes(q);
-      return matchesSearch;
+      return matchesBrand && matchesSearch;
     });
-  }, [searchQuery, sourceProducts]);
+  }, [activeBrand, searchQuery, sourceProducts]);
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -108,6 +117,23 @@ const App: React.FC = () => {
             className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-6 pr-12 text-[13px] font-medium tracking-tight text-white placeholder:text-white/40 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
           />
           <Search size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/35" />
+        </div>
+      </div>
+
+      {/* Brand Select */}
+      <div className="px-6 mb-12">
+        <div className="relative group">
+          <select
+            value={activeBrand}
+            onChange={(e) => setActiveBrand(e.target.value)}
+            className="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
+          >
+            <option value="Все">Бренд: Все</option>
+            {derivedBrands.filter((b) => b !== 'Все').map((brand) => (
+              <option key={brand} value={brand}>{brand}</option>
+            ))}
+          </select>
+          <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition-colors group-hover:text-white/60" />
         </div>
       </div>
 
