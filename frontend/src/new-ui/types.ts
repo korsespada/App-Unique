@@ -1,5 +1,5 @@
 
-export type Category = 'Все' | 'Одежда' | 'Сумки' | 'Ювелирка' | 'Часы' | 'Аксессуары';
+export type Category = string;
 
 export interface Product {
   id: string;

@@ -4,6 +4,8 @@ import { ShoppingBag, Search, X, ArrowLeft, Plus, Minus, Trash2, ArrowUpDown, Ch
 import { Product, AppView, CartItem, Category, SortOption } from './types';
 import { PRODUCTS, CATEGORIES, BRANDS } from './constants';
 
+import { useGetExternalProducts } from "@framework/api/product/external-get";
+
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>('home');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -24,8 +26,48 @@ const App: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const { data: externalData } = useGetExternalProducts();
+
+  const apiProducts = useMemo<Product[]>(() => {
+    const raw = externalData?.products ?? [];
+    return raw
+      .map((p) => {
+        const id = String((p as any).id || p.product_id || '');
+        const name = String(p.title || p.name || p.product_id || '').trim();
+        const brand = String(p.brand || p.season_title || '').trim();
+        const category = String(p.category || 'Все');
+        const images = Array.isArray(p.images) && p.images.length ? p.images : [];
+
+        return {
+          id,
+          name,
+          brand: brand || ' ',
+          category,
+          price: Number((p as any).price) || 0,
+          images: images.length ? images : ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000'],
+          description: String(p.description || ''),
+          details: Array.isArray((p as any).details) ? (p as any).details : []
+        };
+      })
+      .filter((p) => Boolean(p.id) && Boolean(p.name));
+  }, [externalData]);
+
+  const sourceProducts = apiProducts.length ? apiProducts : PRODUCTS;
+
+  const derivedCategories = useMemo<string[]>(() => {
+    if (!apiProducts.length) return CATEGORIES;
+    const uniq = Array.from(new Set(apiProducts.map((p) => String(p.category || '').trim()).filter(Boolean)));
+    return ['Все', ...uniq.sort((a, b) => a.localeCompare(b))];
+  }, [apiProducts]);
+
+  const derivedBrands = useMemo<string[]>(() => {
+    if (!apiProducts.length) return BRANDS;
+    const uniq = Array.from(new Set(apiProducts.map((p) => String(p.brand || '').trim()).filter(Boolean)));
+    return ['Все', ...uniq.sort((a, b) => a.localeCompare(b))];
+  }, [apiProducts]);
+
   const filteredAndSortedProducts = useMemo(() => {
-    let result = PRODUCTS.filter(p => {
+    let result = sourceProducts.filter(p => {
       const matchesCategory = activeCategory === 'Все' || p.category === activeCategory;
       const matchesBrand = activeBrand === 'Все' || p.brand === activeBrand;
       const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -40,7 +82,7 @@ const App: React.FC = () => {
       default: break;
     }
     return result;
-  }, [activeCategory, activeBrand, searchQuery, sortOption]);
+  }, [activeCategory, activeBrand, searchQuery, sortOption, sourceProducts]);
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -90,7 +132,7 @@ const App: React.FC = () => {
 
       {/* Categories Horizontal Scroll */}
       <div className="px-6 mb-10 flex items-center gap-8 overflow-x-auto whitespace-nowrap scrollbar-hide">
-        {CATEGORIES.map(cat => (
+        {derivedCategories.map(cat => (
           <button
             key={cat}
             onClick={() => setActiveCategory(cat)}
@@ -110,7 +152,7 @@ const App: React.FC = () => {
             className="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
           >
             <option value="Все">Бренд: Все</option>
-            {BRANDS.filter(b => b !== 'Все').map(brand => (
+            {derivedBrands.filter(b => b !== 'Все').map(brand => (
               <option key={brand} value={brand}>{brand}</option>
             ))}
           </select>
