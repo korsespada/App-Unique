@@ -74,8 +74,15 @@ export default function GaShop({
   const [selectedProduct, setSelectedProduct] = useState<ExternalProduct | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const galleryRef = useRef<HTMLDivElement | null>(null);
-  const scrollRafRef = useRef<number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryContainerRef = useRef<HTMLDivElement | null>(null);
+  const pointerIdRef = useRef<number | null>(null);
+  const pointerStartXRef = useRef<number | null>(null);
+  const pointerStartYRef = useRef<number | null>(null);
+  const swipingRef = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffsetPx, setDragOffsetPx] = useState(0);
+  const dragOffsetPxRef = useRef(0);
 
   const filteredAndSortedProducts = useMemo(() => {
     const q = (searchQuery || "").trim().toLowerCase();
@@ -120,25 +127,13 @@ export default function GaShop({
 
   useEffect(() => {
     if (currentView !== "product-detail") return;
-    if (!galleryRef.current) return;
-    try {
-      galleryRef.current.scrollTo({ left: 0, behavior: "auto" });
-    } catch (e) {
-      // ignore
-    }
+    setDragOffsetPx(0);
+    dragOffsetPxRef.current = 0;
   }, [currentView, selectedProduct]);
 
-  const scrollGalleryToIndex = (index: number) => {
-    const el = galleryRef.current;
-    if (!el) return;
-    const width = el.clientWidth;
-    if (!width) return;
-    const left = Math.max(0, Math.round(index) * width);
-    try {
-      el.scrollTo({ left, behavior: "smooth" });
-    } catch (e) {
-      el.scrollLeft = left;
-    }
+  const clampImageIndex = (idx: number, imagesLen: number) => {
+    if (imagesLen <= 0) return 0;
+    return Math.max(0, Math.min(imagesLen - 1, idx));
   };
 
   const addToCart = (product: ExternalProduct) => {
@@ -187,10 +182,18 @@ export default function GaShop({
         <div className="relative">
           <SearchOutlined className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Поиск по коллекции..."
             value={searchQuery}
-            onChange={(e) => onSearch(e.target.value)}
+            onChange={(e) => {
+              onSearch(e.target.value);
+              try {
+                requestAnimationFrame(() => searchInputRef.current?.focus());
+              } catch (e) {
+                // ignore
+              }
+            }}
             className="w-full bg-gray-50 border-none py-3 pl-10 pr-3 text-sm rounded-2xl focus:ring-1 focus:ring-black outline-none text-black placeholder:text-gray-400"
           />
         </div>
@@ -293,20 +296,83 @@ export default function GaShop({
     const brand = getProductBrand(selectedProduct);
     const images = selectedProduct.images || [];
 
-    const onGalleryScroll = () => {
-      const el = galleryRef.current;
-      if (!el) return;
+    const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
+      if (images.length <= 1) return;
+      pointerIdRef.current = e.pointerId;
+      pointerStartXRef.current = e.clientX;
+      pointerStartYRef.current = e.clientY;
+      swipingRef.current = false;
+      setIsDragging(true);
+      dragOffsetPxRef.current = 0;
+      setDragOffsetPx(0);
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch (e) {
+        // ignore
+      }
+    };
 
-      if (scrollRafRef.current) {
-        cancelAnimationFrame(scrollRafRef.current);
+    const onPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
+      if (pointerIdRef.current !== e.pointerId) return;
+      const startX = pointerStartXRef.current;
+      const startY = pointerStartYRef.current;
+      if (startX === null || startY === null) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (!swipingRef.current) {
+        if (Math.abs(dx) < 6) return;
+        swipingRef.current = Math.abs(dx) >= Math.abs(dy);
       }
 
-      scrollRafRef.current = requestAnimationFrame(() => {
-        const width = el.clientWidth;
-        if (!width) return;
-        const idx = Math.max(0, Math.min(images.length - 1, Math.round(el.scrollLeft / width)));
-        setCurrentImageIndex(idx);
-      });
+      if (!swipingRef.current) return;
+
+      // В Telegram WebView свайп часто уходит в скролл/drag картинки —
+      // явно блокируем дефолтное поведение, когда распознали горизонтальный свайп.
+      try {
+        e.preventDefault();
+      } catch (e) {
+        // ignore
+      }
+
+      const containerWidth = galleryContainerRef.current?.clientWidth || 0;
+      const maxOffset = containerWidth ? containerWidth * 0.6 : 200;
+      const clamped = Math.max(-maxOffset, Math.min(maxOffset, dx));
+      dragOffsetPxRef.current = clamped;
+      setDragOffsetPx(clamped);
+    };
+
+    const finishDrag = () => {
+      if (pointerIdRef.current === null) return;
+      const containerWidth = galleryContainerRef.current?.clientWidth || 0;
+      const threshold = containerWidth ? containerWidth * 0.18 : 60;
+
+      const finalOffset = dragOffsetPxRef.current;
+
+      if (finalOffset <= -threshold) {
+        setCurrentImageIndex((prev) => clampImageIndex(prev + 1, images.length));
+      } else if (finalOffset >= threshold) {
+        setCurrentImageIndex((prev) => clampImageIndex(prev - 1, images.length));
+      }
+
+      setIsDragging(false);
+      dragOffsetPxRef.current = 0;
+      setDragOffsetPx(0);
+      pointerIdRef.current = null;
+      pointerStartXRef.current = null;
+      pointerStartYRef.current = null;
+      swipingRef.current = false;
+    };
+
+    const onPointerUp: React.PointerEventHandler<HTMLDivElement> = (e) => {
+      if (pointerIdRef.current !== e.pointerId) return;
+      finishDrag();
+    };
+
+    const onPointerCancel: React.PointerEventHandler<HTMLDivElement> = (e) => {
+      if (pointerIdRef.current !== e.pointerId) return;
+      finishDrag();
     };
 
     return (
@@ -325,16 +391,32 @@ export default function GaShop({
         <div className="relative w-full aspect-[4/5] bg-gray-50 overflow-hidden">
           {images.length > 0 ? (
             <div
-              ref={galleryRef}
-              onScroll={onGalleryScroll}
-              className="flex w-full h-full overflow-x-auto snap-x snap-mandatory scroll-smooth"
-              style={{ WebkitOverflowScrolling: "touch" }}
+              ref={galleryContainerRef}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerCancel}
+              className="w-full h-full overflow-hidden"
+              style={{ touchAction: "pan-y" }}
             >
-              {images.map((img, i) => (
-                <div key={`${img}-${i}`} className="w-full h-full flex-shrink-0 snap-center">
-                  <img src={img} alt={name} className="w-full h-full object-cover" />
-                </div>
-              ))}
+              <div
+                className="flex w-full h-full"
+                style={{
+                  transform: `translate3d(${-(currentImageIndex * 100)}%, 0, 0) translate3d(${dragOffsetPx}px, 0, 0)`,
+                  transition: isDragging ? "none" : "transform 250ms ease"
+                }}
+              >
+                {images.map((img, i) => (
+                  <div key={`${img}-${i}`} className="w-full h-full flex-shrink-0">
+                    <img
+                      src={img}
+                      alt={name}
+                      draggable={false}
+                      className="w-full h-full object-cover pointer-events-none select-none"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-300 text-sm">
@@ -351,7 +433,8 @@ export default function GaShop({
                 key={`${img}-${i}`}
                 onClick={() => {
                   setCurrentImageIndex(i);
-                  scrollGalleryToIndex(i);
+                  dragOffsetPxRef.current = 0;
+                  setDragOffsetPx(0);
                 }}
                 className={`w-16 h-20 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
                   i === currentImageIndex ? "border-black" : "border-transparent opacity-70"
@@ -501,14 +584,14 @@ export default function GaShop({
           }}
           className="cursor-pointer hover:opacity-70 transition-all"
         >
-          <img src="/logo.svg" alt="YEEZYUNIQUE" className="h-6" />
+          <img src="/logo.svg" alt="YEEZYUNIQUE" className="h-9" />
         </button>
       </nav>
 
       <main className="min-h-screen">
-        {currentView === "home" && <HomeView />}
-        {currentView === "product-detail" && <ProductDetailView />}
-        {currentView === "cart" && <CartView />}
+        {currentView === "home" && HomeView()}
+        {currentView === "product-detail" && ProductDetailView()}
+        {currentView === "cart" && CartView()}
       </main>
 
       <div className="fixed bottom-0 w-full h-16 bg-white/95 backdrop-blur-md border-t border-gray-100 px-10 flex justify-around items-center z-[90] rounded-t-[20px] shadow-2xl">
