@@ -1,8 +1,8 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { ShoppingBag, Search, X, ArrowLeft, Plus, Minus, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, Filter } from 'lucide-react';
-import { Product, AppView, CartItem, Category, SortOption } from './types';
-import { PRODUCTS, CATEGORIES, BRANDS } from './constants';
+import React, { useRef, useState, useMemo, useEffect } from 'react';
+import { ShoppingBag, Search, ArrowLeft, Plus, Minus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Product, AppView, CartItem } from './types';
+import { PRODUCTS } from './constants';
 
 import { useGetExternalProducts } from "@framework/api/product/external-get";
 
@@ -10,15 +10,13 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>('home');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [activeCategory, setActiveCategory] = useState<Category>('Все');
-  const [activeBrand, setActiveBrand] = useState<string>('Все');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption] = useState<SortOption>('brand-az');
-  const [isSortOpen, setIsSortOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   // Gallery state for ProductDetail
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchLastXRef = useRef<number | null>(null);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -54,35 +52,14 @@ const App: React.FC = () => {
 
   const sourceProducts = apiProducts.length ? apiProducts : PRODUCTS;
 
-  const derivedCategories = useMemo<string[]>(() => {
-    if (!apiProducts.length) return CATEGORIES;
-    const uniq = Array.from(new Set(apiProducts.map((p) => String(p.category || '').trim()).filter(Boolean)));
-    return ['Все', ...uniq.sort((a, b) => a.localeCompare(b))];
-  }, [apiProducts]);
-
-  const derivedBrands = useMemo<string[]>(() => {
-    if (!apiProducts.length) return BRANDS;
-    const uniq = Array.from(new Set(apiProducts.map((p) => String(p.brand || '').trim()).filter(Boolean)));
-    return ['Все', ...uniq.sort((a, b) => a.localeCompare(b))];
-  }, [apiProducts]);
-
   const filteredAndSortedProducts = useMemo(() => {
-    let result = sourceProducts.filter(p => {
-      const matchesCategory = activeCategory === 'Все' || p.category === activeCategory;
-      const matchesBrand = activeBrand === 'Все' || p.brand === activeBrand;
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            p.brand.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesBrand && matchesSearch;
+    const q = searchQuery.toLowerCase();
+    return sourceProducts.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(q) ||
+                            p.brand.toLowerCase().includes(q);
+      return matchesSearch;
     });
-
-    switch (sortOption) {
-      case 'price-asc': result.sort((a, b) => a.price - b.price); break;
-      case 'price-desc': result.sort((a, b) => b.price - a.price); break;
-      case 'brand-az': result.sort((a, b) => a.brand.localeCompare(b.brand)); break;
-      default: break;
-    }
-    return result;
-  }, [activeCategory, activeBrand, searchQuery, sortOption, sourceProducts]);
+  }, [searchQuery, sourceProducts]);
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -115,7 +92,7 @@ const App: React.FC = () => {
   };
 
   const HomeView = () => (
-    <div className="pb-32 pt-24 animate-in fade-in duration-700">
+    <div className="pb-32 pt-20 animate-in fade-in duration-700">
       {/* Search Header */}
       <div className="px-6 mb-10">
         <div className="relative">
@@ -124,47 +101,14 @@ const App: React.FC = () => {
             placeholder="Что вы ищете?"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            enterKeyHint="search"
             className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-6 pr-12 text-[13px] font-medium tracking-tight text-white placeholder:text-white/40 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
           />
           <Search size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/35" />
         </div>
-      </div>
-
-      {/* Categories Horizontal Scroll */}
-      <div className="px-6 mb-10 flex items-center gap-8 overflow-x-auto whitespace-nowrap scrollbar-hide">
-        {derivedCategories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className={`text-[10px] uppercase tracking-[0.28em] transition-all duration-200 ease-out ${activeCategory === cat ? 'text-white font-extrabold' : 'text-white/35 font-light hover:text-white/60'}`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Brand Select & Sort Bar */}
-      <div className="px-6 mb-12 flex items-center justify-between gap-4">
-        <div className="relative flex-1 group">
-          <select
-            value={activeBrand}
-            onChange={(e) => setActiveBrand(e.target.value)}
-            className="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
-          >
-            <option value="Все">Бренд: Все</option>
-            {derivedBrands.filter(b => b !== 'Все').map(brand => (
-              <option key={brand} value={brand}>{brand}</option>
-            ))}
-          </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition-colors group-hover:text-white/60" />
-        </div>
-
-        <button
-          onClick={() => setIsSortOpen(true)}
-          className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/80 transition-all duration-200 ease-out premium-shadow hover:bg-white/10 hover:text-white active:scale-[0.98]"
-        >
-          <Filter size={18} />
-        </button>
       </div>
 
       {/* Modern Grid */}
@@ -182,7 +126,7 @@ const App: React.FC = () => {
               </div>
               <div className="px-2">
                 <p className="mb-1 text-[9px] font-light uppercase tracking-[0.28em] text-white/40">{product.brand}</p>
-                <h3 className="line-clamp-1 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
+                <h3 className="line-clamp-2 min-h-[2.6em] text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
               </div>
             </div>
           ))
@@ -193,57 +137,46 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {/* Sort Overlay */}
-      {isSortOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" onClick={() => setIsSortOpen(false)} />
-          <div className="relative w-full rounded-t-[3rem] border-t border-white/10 bg-[#0b0b0c] p-10 text-white shadow-2xl animate-in slide-in-from-bottom duration-500">
-            <div className="mx-auto mb-10 h-1.5 w-16 rounded-full bg-white/10" />
-            <div className="flex justify-between items-center mb-12">
-              <h4 className="text-3xl font-extrabold tracking-tight">Сортировка</h4>
-              <button onClick={() => setIsSortOpen(false)} className="rounded-full border border-white/10 bg-white/5 p-3 text-white/50 transition-all hover:bg-white/10 hover:text-white active:scale-[0.98]">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="space-y-4">
-              {[
-                { label: 'Бренд (А-Я)', id: 'brand-az' },
-                { label: 'Новинки', id: 'newest' },
-                { label: 'Цена: по возрастанию', id: 'price-asc' },
-                { label: 'Цена: по убыванию', id: 'price-desc' }
-              ].map(opt => (
-                <button
-                  key={opt.id}
-                  onClick={() => { setSortOption(opt.id as SortOption); setIsSortOpen(false); }}
-                  className={`flex w-full items-center justify-between rounded-3xl border px-8 py-6 text-left transition-all duration-200 ease-out ${sortOption === opt.id ? 'border-white/20 bg-white/10 text-white shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] translate-x-1' : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/8 hover:text-white'}`}
-                >
-                  <span className="text-xs font-semibold uppercase tracking-[0.22em]">{opt.label}</span>
-                  {sortOption === opt.id && <div className="h-2.5 w-2.5 rounded-full bg-white animate-pulse" />}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 
   const ProductDetailView = () => {
     if (!selectedProduct) return null;
-    return (
-      <div className="pb-48 animate-in slide-in-from-right duration-500 bg-[#050505] text-white">
-        {/* Gallery Header */}
-        <div className="fixed top-0 z-[100] flex w-full max-w-md items-center justify-between px-6 py-6 blur-nav">
-          <button onClick={() => setCurrentView('home')} className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white/80 premium-shadow transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]">
-            <ArrowLeft size={20} />
-          </button>
-          <button className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white/80 premium-shadow">
-            <ShoppingBag size={20} />
-          </button>
-        </div>
 
+    const handleGalleryTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+      touchStartXRef.current = e.touches[0]?.clientX ?? null;
+      touchLastXRef.current = touchStartXRef.current;
+    };
+
+    const handleGalleryTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+      touchLastXRef.current = e.touches[0]?.clientX ?? null;
+    };
+
+    const handleGalleryTouchEnd = () => {
+      const start = touchStartXRef.current;
+      const end = touchLastXRef.current;
+      touchStartXRef.current = null;
+      touchLastXRef.current = null;
+      if (start == null || end == null) return;
+      const delta = start - end;
+      if (Math.abs(delta) < 40) return;
+      if (selectedProduct.images.length < 2) return;
+      if (delta > 0) {
+        setCurrentImageIndex((prev) => (prev === selectedProduct.images.length - 1 ? 0 : prev + 1));
+      } else {
+        setCurrentImageIndex((prev) => (prev === 0 ? selectedProduct.images.length - 1 : prev - 1));
+      }
+    };
+
+    return (
+      <div className="pb-32 pt-16 animate-in slide-in-from-right duration-500 bg-[#050505] text-white">
         {/* Hero Image Section */}
-        <div className="relative w-full aspect-[4/5] overflow-hidden">
+        <div
+          className="relative w-full aspect-[4/5] overflow-hidden"
+          onTouchStart={handleGalleryTouchStart}
+          onTouchMove={handleGalleryTouchMove}
+          onTouchEnd={handleGalleryTouchEnd}
+        >
           <img
             src={selectedProduct.images[currentImageIndex]}
             alt={selectedProduct.name}
@@ -280,9 +213,16 @@ const App: React.FC = () => {
             <div className="max-w-[70%]">
               <p className="mb-3 text-[10px] font-extralight uppercase tracking-[0.42em] text-white/40">{selectedProduct.brand}</p>
               <h2 className="text-4xl font-extrabold leading-none tracking-tight text-white">{selectedProduct.name}</h2>
+
+              <button
+                onClick={() => { addToCart(selectedProduct); setCurrentView('cart'); }}
+                className="mt-8 w-full rounded-3xl bg-white py-5 text-[11px] font-extrabold uppercase tracking-[0.34em] text-black shadow-2xl shadow-black/40 transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
+              >
+                В корзину
+              </button>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-extrabold text-white">{selectedProduct.price.toLocaleString()} ₽</p>
+              <p className="text-2xl font-extrabold text-white opacity-0 select-none">{selectedProduct.price.toLocaleString()} ₽</p>
               <div className="ml-auto mt-2 h-1 w-8 bg-white/40" />
             </div>
           </div>
@@ -292,7 +232,6 @@ const App: React.FC = () => {
           </p>
 
           <div className="space-y-8 mb-12">
-            <h4 className="text-[11px] font-light uppercase tracking-[0.35em] text-white/40">Особенности</h4>
             <div className="grid grid-cols-1 gap-5">
               {selectedProduct.details.map((detail, i) => (
                 <div key={i} className="flex items-center gap-5 rounded-[2rem] border border-white/10 bg-white/5 p-6 transition-all duration-300 ease-out hover:border-white/20 hover:bg-white/7 hover:translate-x-1">
@@ -302,16 +241,6 @@ const App: React.FC = () => {
               ))}
             </div>
           </div>
-
-          {/* Sticky Bottom Bar */}
-          <div className="fixed bottom-[70px] left-0 right-0 z-[85] mx-auto max-w-md border-t border-white/10 bg-black/35 px-6 pb-6 pt-5 backdrop-blur-2xl">
-            <button
-              onClick={() => { addToCart(selectedProduct); setCurrentView('cart'); }}
-              className="w-full rounded-3xl bg-white py-6 text-[11px] font-extrabold uppercase tracking-[0.34em] text-black shadow-2xl shadow-black/40 transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
-            >
-              В корзину
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -320,7 +249,7 @@ const App: React.FC = () => {
   const CartView = () => (
     <div className="min-h-screen animate-in fade-in duration-500 px-8 pt-24 pb-32 text-white">
       <div className="flex justify-between items-end mb-12">
-        <h2 className="text-5xl font-extrabold tracking-tight">Сумка</h2>
+        <h2 className="text-5xl font-extrabold tracking-tight">Корзина</h2>
         <span className="text-lg font-semibold text-white/35">{cartCount}</span>
       </div>
 
@@ -350,7 +279,7 @@ const App: React.FC = () => {
                     <div>
                       <p className="mb-1 text-[9px] font-light uppercase tracking-[0.34em] text-white/40">{item.brand}</p>
                       <h4 className="mb-1 text-[15px] font-semibold leading-tight text-white">{item.name}</h4>
-                      <p className="text-sm font-bold text-white/80">{item.price.toLocaleString()} ₽</p>
+                      <p className="text-sm font-bold text-white/80 opacity-0 select-none">{item.price.toLocaleString()} ₽</p>
                     </div>
                     <button onClick={() => updateQuantity(item.id, -item.quantity)} className="p-2 text-white/25 transition-colors hover:text-red-400">
                       <Trash2 size={20} />
@@ -369,7 +298,7 @@ const App: React.FC = () => {
           <div className="mb-10 rounded-[3.5rem] border border-white/10 bg-white/5 p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
             <div className="flex justify-between items-center mb-2">
               <span className="text-[10px] font-light uppercase tracking-[0.42em] text-white/40">Сумма заказа</span>
-              <span className="text-3xl font-extrabold tracking-tight text-white">{cartTotal.toLocaleString()} ₽</span>
+              <span className="text-3xl font-extrabold tracking-tight text-white opacity-0 select-none">{cartTotal.toLocaleString()} ₽</span>
             </div>
             <p className="mb-12 text-[10px] font-light uppercase tracking-[0.42em] text-white/25">включая доставку из Милана</p>
             <button className="w-full rounded-2xl bg-white py-6 text-[11px] font-extrabold uppercase tracking-[0.42em] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]">
@@ -384,25 +313,27 @@ const App: React.FC = () => {
   return (
     <div className="relative mx-auto min-h-screen max-w-md overflow-x-hidden bg-gradient-to-b from-black via-[#070707] to-[#050505] text-white">
       {/* Dynamic Navbar */}
-      <nav className={`fixed top-0 max-w-md w-full z-[120] flex items-center justify-between px-8 py-7 transition-all duration-500 ${scrolled || currentView !== 'home' ? 'blur-nav py-4 border-b border-white/10' : 'bg-transparent'}`}>
+      <nav className={`fixed top-0 max-w-md w-full z-[120] h-14 px-6 flex items-center justify-center transition-colors duration-300 ${scrolled || currentView !== 'home' ? 'blur-nav border-b border-white/10' : 'bg-transparent'}`}>
+        {currentView !== 'home' && (
+          <button
+            onClick={() => { setCurrentView('home'); window.scrollTo({top:0, behavior:'smooth'}); }}
+            className="absolute left-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 premium-shadow transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]"
+          >
+            <ArrowLeft size={18} />
+          </button>
+        )}
         <div
           onClick={() => { setCurrentView('home'); window.scrollTo({top:0, behavior:'smooth'}); }}
-          className="cursor-pointer text-[15px] font-extrabold uppercase tracking-[0.34em] text-white transition-all duration-200 ease-out hover:opacity-70"
+          className="cursor-pointer select-none"
         >
-          YEEZY<span className="text-white/35">UNIQUE</span>
+          <img src="/logo.svg" alt="Logo" className="h-6 w-auto opacity-95" />
         </div>
-        {currentView === 'home' && (
-          <div className="relative cursor-pointer text-white/90 transition-colors hover:text-white" onClick={() => setCurrentView('cart')}>
-            <ShoppingBag size={22} />
-            {cartCount > 0 && <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-black bg-white text-[8px] font-extrabold text-black">{cartCount}</span>}
-          </div>
-        )}
       </nav>
 
       <main>
-        {currentView === 'home' && <HomeView />}
-        {currentView === 'product-detail' && <ProductDetailView />}
-        {currentView === 'cart' && <CartView />}
+        {currentView === 'home' && HomeView()}
+        {currentView === 'product-detail' && ProductDetailView()}
+        {currentView === 'cart' && CartView()}
       </main>
 
       {/* Stylish Minimal Bottom Nav */}
