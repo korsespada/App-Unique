@@ -12,6 +12,7 @@ const App: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeBrand, setActiveBrand] = useState<string>('Все');
+  const [activeCategory, setActiveCategory] = useState<string>('Все');
   const [searchQuery, setSearchQuery] = useState('');
   const [scrolled, setScrolled] = useState(false);
   const [isSendingOrder, setIsSendingOrder] = useState(false);
@@ -62,15 +63,24 @@ const App: React.FC = () => {
     return ['Все', ...uniq.sort((a, b) => a.localeCompare(b))];
   }, [sourceProducts]);
 
+  const derivedCategories = useMemo<string[]>(() => {
+    const uniq = Array.from(
+      new Set(sourceProducts.map((p) => String(p.category || '').trim()).filter(Boolean))
+    );
+    return ['Все', ...uniq.sort((a, b) => a.localeCompare(b))];
+  }, [sourceProducts]);
+
   const filteredAndSortedProducts = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return sourceProducts.filter(p => {
       const matchesBrand = activeBrand === 'Все' || p.brand === activeBrand;
+      const matchesCategory = activeCategory === 'Все' || p.category === activeCategory;
       const matchesSearch = p.name.toLowerCase().includes(q) ||
-                            p.brand.toLowerCase().includes(q);
-      return matchesBrand && matchesSearch;
+                            p.brand.toLowerCase().includes(q) ||
+                            String(p.id).toLowerCase().includes(q);
+      return matchesBrand && matchesCategory && matchesSearch;
     });
-  }, [activeBrand, searchQuery, sourceProducts]);
+  }, [activeBrand, activeCategory, searchQuery, sourceProducts]);
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -163,7 +173,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Brand Select */}
-      <div className="px-6 mb-12">
+      <div className="px-6 mb-12 space-y-4">
         <div className="relative group">
           <select
             value={activeBrand}
@@ -173,6 +183,20 @@ const App: React.FC = () => {
             <option value="Все">Бренд: Все</option>
             {derivedBrands.filter((b) => b !== 'Все').map((brand) => (
               <option key={brand} value={brand}>{brand}</option>
+            ))}
+          </select>
+          <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition-colors group-hover:text-white/60" />
+        </div>
+
+        <div className="relative group">
+          <select
+            value={activeCategory}
+            onChange={(e) => setActiveCategory(e.target.value)}
+            className="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
+          >
+            <option value="Все">Категория: Все</option>
+            {derivedCategories.filter((c) => c !== 'Все').map((category) => (
+              <option key={category} value={category}>{category}</option>
             ))}
           </select>
           <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition-colors group-hover:text-white/60" />
@@ -282,9 +306,11 @@ const App: React.FC = () => {
               <p className="mb-3 text-[10px] font-extralight uppercase tracking-[0.42em] text-white/40">{selectedProduct.brand}</p>
               <h2 className="text-4xl font-extrabold leading-none tracking-tight text-white">{selectedProduct.name}</h2>
 
+              <p className="mt-6 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">ID: {selectedProduct.id}</p>
+
               <button
                 onClick={() => { addToCart(selectedProduct); setCurrentView('cart'); }}
-                className="mt-8 w-full rounded-3xl bg-white py-5 text-[11px] font-extrabold uppercase tracking-[0.34em] text-black shadow-2xl shadow-black/40 transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
+                className="mt-6 w-full rounded-3xl bg-white py-5 text-[11px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-2xl shadow-black/40 transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
               >
                 В корзину
               </button>
