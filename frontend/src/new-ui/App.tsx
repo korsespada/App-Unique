@@ -57,13 +57,16 @@ const App: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const { data } = await Api.get<GetProductsResponse>("/../products", {
+        const { data } = await Api.get<GetProductsResponse>(
+          "https://back-unique.vercel.app/products",
+          {
           params: {
             page: 1,
             limit: DEFAULT_LIMIT
           },
           timeout: 30000
-        });
+          }
+        );
         const backendProducts: BackendProduct[] = data.products || [];
         const mapped = backendProducts.map(mapBackendToUiProduct);
         setProducts(mapped);
