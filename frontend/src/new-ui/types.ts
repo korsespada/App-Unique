@@ -1,4 +1,4 @@
-export type Category = "Все" | "Одежда" | "Сумки" | "Ювелирка" | "Часы" | "Аксессуары";
+export type Category = "Все" | string;
 
 export interface Product {
   id: string;
@@ -8,7 +8,7 @@ export interface Product {
   price: number;
   images: string[];
   description: string;
-  details: string[];
+  details?: string[];
 }
 
 export interface CartItem extends Product {

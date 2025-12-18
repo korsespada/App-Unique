@@ -13,8 +13,10 @@ import {
   Filter
 } from "lucide-react";
 
+import Api from "@framework/api/utils/api-config";
+
+import type { GetProductsResponse, Product as BackendProduct } from "../types";
 import type { Product, AppView, CartItem, Category, SortOption } from "./types";
-import { PRODUCTS, CATEGORIES, BRANDS } from "./constants";
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>("home");
@@ -27,6 +29,22 @@ const App: React.FC = () => {
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const DEFAULT_LIMIT = 200;
+
+  const mapBackendToUiProduct = (p: BackendProduct): Product => ({
+    id: p.id,
+    name: p.title,
+    brand: p.brand,
+    category: p.category,
+    price: p.price,
+    images: (p.photos || []).map((photo) => photo.url),
+    description: p.description,
+    details: []
+  });
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -34,8 +52,54 @@ const App: React.FC = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    const fetch = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data } = await Api.get<GetProductsResponse>("/../products", {
+          params: {
+            page: 1,
+            limit: DEFAULT_LIMIT
+          },
+          timeout: 30000
+        });
+        const backendProducts: BackendProduct[] = data.products || [];
+        const mapped = backendProducts.map(mapBackendToUiProduct);
+        setProducts(mapped);
+      } catch (e: any) {
+        const message =
+          e?.response?.data?.error ||
+          e?.response?.data?.message ||
+          e?.message ||
+          "Не удалось загрузить товары";
+        setError(String(message));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetch();
+  }, []);
+
+  const categories = useMemo<string[]>(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      if (p.category) set.add(p.category);
+    });
+    return ["Все", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [products]);
+
+  const brands = useMemo<string[]>(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      if (p.brand) set.add(p.brand);
+    });
+    return ["Все", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [products]);
+
   const filteredAndSortedProducts = useMemo(() => {
-    let result = PRODUCTS.filter((p) => {
+    let result = products.filter((p) => {
       const matchesCategory = activeCategory === "Все" || p.category === activeCategory;
       const matchesBrand = activeBrand === "Все" || p.brand === activeBrand;
       const matchesSearch =
@@ -121,7 +185,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="px-6 mb-8 overflow-x-auto whitespace-nowrap scrollbar-hide flex gap-8 items-center">
-        {CATEGORIES.map((cat) => (
+        {categories.map((cat) => (
           <button
             key={cat}
             onClick={() => setActiveCategory(cat)}
@@ -142,7 +206,9 @@ const App: React.FC = () => {
             className="w-full appearance-none bg-white border border-neutral-100 py-3.5 pl-5 pr-10 text-[10px] uppercase tracking-widest rounded-2xl focus:ring-1 focus:ring-black outline-none transition-all text-neutral-900 font-extrabold premium-shadow cursor-pointer"
           >
             <option value="Все">Бренд: Все</option>
-            {BRANDS.filter((b) => b !== "Все").map((brand: string) => (
+            {brands
+              .filter((b) => b !== "Все")
+              .map((brand: string) => (
               <option key={brand} value={brand}>
                 {brand}
               </option>
@@ -381,8 +447,8 @@ const App: React.FC = () => {
 
   const CartView = () => (
     <div className="pt-28 pb-32 px-8 min-h-screen animate-in fade-in duration-500">
-      <div className="flex justify между items-end mb-12">
-        <h2 className="text-5xl font-black tracking-тighter">Сумка</h2>
+      <div className="flex justify-between items-end mb-12">
+        <h2 className="text-5xl font-black tracking-tight">Сумка</h2>
         <span className="text-neutral-300 font-black text-lg">{cartCount}</span>
       </div>
 
@@ -481,6 +547,29 @@ const App: React.FC = () => {
     </div>
   );
 
+  if (loading && products.length === 0) {
+    return (
+      <div className="max-w-md mx-auto min-h-screen flex items-center justify-center text-white">
+        Загрузка каталога...
+      </div>
+    );
+  }
+
+  if (error && products.length === 0) {
+    return (
+      <div className="max-w-md mx-auto min-h-screen flex flex-col items-center justify-center gap-3 text-center text-white px-4">
+        <div>{error}</div>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="px-6 py-3 bg-white text-black text-xs uppercase tracking-[0.3em] font-black rounded-2xl"
+        >
+          Повторить
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-md mx-auto min-h-screen relative overflow-x-hidden">
       <nav
@@ -496,10 +585,9 @@ const App: React.FC = () => {
             setCurrentView("home");
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
-          className="text-xl tracking-[0.3em] cursor-pointer hover:opacity-50 transition-all font-black text-black"
+          className="cursor-pointer hover:opacity-50 transition-all"
         >
-          YEEZY
-          <span className="text-neutral-300">UNIQUE</span>
+          <img src="/logo.svg" alt="YEEZYUNIQUE" className="h-8" />
         </button>
         {currentView === "home" && (
           <button
