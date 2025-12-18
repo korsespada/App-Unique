@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { ShoppingBag, Search, ArrowLeft, Plus, Minus, Trash2, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { Product, AppView, CartItem } from './types';
@@ -21,11 +20,43 @@ const App: React.FC = () => {
   const touchStartXRef = useRef<number | null>(null);
   const touchLastXRef = useRef<number | null>(null);
 
+  const productsRef = useRef<Product[]>([]);
+  const cartRef = useRef<CartItem[]>([]);
+  const isHistoryFirstRef = useRef(true);
+  const isPopNavRef = useRef(false);
+
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('tg_cart');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const restored = parsed
+        .filter((it) => it && typeof it === 'object' && (it as any).id && (it as any).name)
+        .map((it) => ({
+          ...(it as any),
+          quantity: Number((it as any).quantity) || 1
+        })) as CartItem[];
+      setCart(restored);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    cartRef.current = cart;
+    try {
+      localStorage.setItem('tg_cart', JSON.stringify(cart));
+    } catch {
+      // ignore
+    }
+  }, [cart]);
 
   const { data: externalData, isLoading: isExternalLoading, isFetching: isExternalFetching } = useGetExternalProducts();
 
@@ -59,6 +90,94 @@ const App: React.FC = () => {
 
   const sourceProducts = apiProducts;
   const isProductsLoading = isExternalLoading || isExternalFetching;
+
+  useEffect(() => {
+    productsRef.current = sourceProducts;
+  }, [sourceProducts]);
+
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    const backButton = tg?.BackButton as any;
+    if (!backButton) return;
+
+    const handler = () => window.history.back();
+
+    try {
+      backButton.onClick?.(handler);
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      try {
+        backButton.offClick?.(handler);
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    const backButton = tg?.BackButton as any;
+    if (!backButton) return;
+    if (currentView === 'home') backButton.hide();
+    else backButton.show();
+  }, [currentView]);
+
+  useEffect(() => {
+    const onPopState = (e: PopStateEvent) => {
+      const state = (e.state || {}) as any;
+      const view = state?.view as AppView | undefined;
+
+      isPopNavRef.current = true;
+
+      if (!view) {
+        setSelectedProduct(null);
+        setCurrentView('home');
+        return;
+      }
+
+      if (view === 'product-detail') {
+        const productId = String(state?.productId || '').trim();
+        const fromProducts = productsRef.current.find((p) => p.id === productId);
+        const fromCart = cartRef.current.find((p) => p.id === productId);
+        const product = fromProducts || fromCart;
+        if (product) {
+          setSelectedProduct(product);
+          setCurrentImageIndex(0);
+          setCurrentView('product-detail');
+        } else {
+          setSelectedProduct(null);
+          setCurrentView('home');
+        }
+        return;
+      }
+
+      setSelectedProduct(null);
+      setCurrentView(view);
+    };
+
+    window.history.replaceState({ view: 'home' }, '');
+    isHistoryFirstRef.current = false;
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (isPopNavRef.current) {
+      isPopNavRef.current = false;
+      return;
+    }
+
+    const state =
+      currentView === 'product-detail'
+        ? { view: currentView, productId: selectedProduct?.id || '' }
+        : { view: currentView };
+
+    window.history.pushState(state, '');
+  }, [currentView, selectedProduct?.id]);
 
   const derivedBrands = useMemo<string[]>(() => {
     const uniq = Array.from(
@@ -136,7 +255,8 @@ const App: React.FC = () => {
         id: it.id,
         title: it.name,
         quantity: it.quantity,
-        price: it.price,
+        hasPrice: it.hasPrice !== false,
+        price: it.hasPrice !== false ? it.price : null,
         image: it.images?.[0] || ''
       }))
     };
@@ -406,7 +526,11 @@ const App: React.FC = () => {
         <>
           <div className="space-y-8 mb-16">
             {cart.map(item => (
-              <div key={item.id} className="flex gap-8 items-center group">
+              <div
+                key={item.id}
+                className="flex gap-8 items-center group cursor-pointer"
+                onClick={() => navigateToProduct(item)}
+              >
                 <div className="h-32 w-28 flex-shrink-0 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 premium-shadow transition-transform duration-500 ease-out group-hover:scale-[1.03]">
                   <img src={item.images[0]} alt={item.name} className="w-full h-full object-cover" />
                 </div>
@@ -417,14 +541,14 @@ const App: React.FC = () => {
                       <h4 className="mb-1 text-[15px] font-semibold leading-tight text-white">{item.name}</h4>
                       <p className="text-sm font-bold text-white/80 opacity-0 select-none">{item.price.toLocaleString()} ₽</p>
                     </div>
-                    <button onClick={() => updateQuantity(item.id, -item.quantity)} className="p-2 text-white/25 transition-colors hover:text-red-400">
+                    <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -item.quantity); }} className="p-2 text-white/25 transition-colors hover:text-red-400">
                       <Trash2 size={20} />
                     </button>
                   </div>
                   <div className="flex items-center gap-4 self-start rounded-2xl border border-white/10 bg-white/5 px-2 py-1.5">
-                    <button onClick={() => updateQuantity(item.id, -1)} className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"><Minus size={14} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -1); }} className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"><Minus size={14} /></button>
                     <span className="min-w-[20px] text-center text-xs font-semibold text-white/80">{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.id, 1)} className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"><Plus size={14} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, 1); }} className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"><Plus size={14} /></button>
                   </div>
                 </div>
               </div>
@@ -439,7 +563,7 @@ const App: React.FC = () => {
             <button
               onClick={sendOrderToManager}
               disabled={isSendingOrder}
-              className="w-full rounded-2xl bg-white py-6 text-[11px] font-extrabold uppercase tracking-[0.42em] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98] disabled:opacity-60"
+              className="w-full rounded-2xl bg-white py-6 text-[11px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98] disabled:opacity-60"
             >
               {isSendingOrder ? 'Отправляем…' : 'Отправить менеджеру'}
             </button>
@@ -455,7 +579,7 @@ const App: React.FC = () => {
       <nav className={`fixed top-0 max-w-md w-full z-[120] h-14 px-6 flex items-center justify-center transition-colors duration-300 ${scrolled || currentView !== 'home' ? 'blur-nav border-b border-white/10' : 'bg-transparent'}`}>
         {currentView !== 'home' && (
           <button
-            onClick={() => { setCurrentView('home'); window.scrollTo({top:0, behavior:'smooth'}); }}
+            onClick={() => window.history.back()}
             className="absolute left-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 premium-shadow transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]"
           >
             <ArrowLeft size={18} />

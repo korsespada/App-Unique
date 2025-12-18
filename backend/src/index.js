@@ -363,9 +363,15 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       return res.status(500).json({ error: 'Бот не сконфигурирован' });
     }
 
+    let hasUnknownPrice = false;
     const total = items.reduce((sum, it) => {
       const qty = Number(it?.quantity) || 1;
-      const price = Number(it?.price) || 0;
+      const hasPrice = it?.hasPrice === false ? false : true;
+      const price = Number(it?.price);
+      if (!hasPrice || !Number.isFinite(price) || price <= 0) {
+        hasUnknownPrice = true;
+        return sum;
+      }
       return sum + price * qty;
     }, 0);
 
@@ -395,16 +401,24 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       .concat(
         items.map((it, idx) => {
           const qty = Number(it?.quantity) || 1;
-          const price = Number(it?.price) || 0;
-          const lineTotal = price * qty;
+          const hasPrice = it?.hasPrice === false ? false : true;
+          const price = Number(it?.price);
           const title = escapeHtml(String(it?.title || '').trim() || 'Без названия');
           const id = escapeHtml(String(it?.id || '').trim() || '-');
+
+          if (!hasPrice || !Number.isFinite(price) || price <= 0) {
+            return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт — цена уточняется`;
+          }
+
+          const lineTotal = price * qty;
           return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
         })
       )
       .concat([
         '',
-        `💰 Итого: ${escapeHtml(String(total))} ₽`,
+        hasUnknownPrice
+          ? (total > 0 ? `💰 Итого (без товаров с уточняемой ценой): ${escapeHtml(String(total))} ₽` : '💰 Итого: цена уточняется')
+          : `💰 Итого: ${escapeHtml(String(total))} ₽`,
         '',
         'Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.'
       ])
