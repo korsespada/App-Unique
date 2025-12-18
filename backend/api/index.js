@@ -133,14 +133,20 @@ async function loadProductsFromSheets() {
         });
 
         // Use photo URLs from Google Sheets if available, otherwise construct URLs
-        const images = photos.map(photo => {
+        // VK Cloud Object Storage: set VK_IMAGES_BASE_URL like:
+        // https://<bucket>.<region>.vkcs.cloud  (or your CDN/public endpoint)
+        const imagesBaseUrl = (process.env.VK_IMAGES_BASE_URL || '').replace(/\/$/, '');
+        const images = photos.map((photo) => {
           // If photo_url is provided in the sheet, use it
-          if (photo.photoUrl && photo.photoUrl.trim()) {
-            return photo.photoUrl;
+          if (photo.photoUrl && String(photo.photoUrl).trim()) {
+            return String(photo.photoUrl).trim();
           }
-          // Otherwise, construct URL using back-unique.vercel.app (where images are hosted)
-          return `https://back-unique.vercel.app/images/${productId}/${photo.filename}`;
-        });
+          // Otherwise, construct URL using VK_IMAGES_BASE_URL
+          if (imagesBaseUrl) {
+            return `${imagesBaseUrl}/images/${productId}/${photo.filename}`;
+          }
+          return '';
+        }).filter(Boolean);
 
         // Fallback image if no photos
         if (images.length === 0) {
