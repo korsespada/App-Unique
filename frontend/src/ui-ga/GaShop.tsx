@@ -7,9 +7,7 @@ import {
   ShoppingCartOutlined
 } from "@ant-design/icons";
 import { Button, Select } from "antd";
-import React, { useMemo, useState } from "react";
-
-import logoUrl from "@image/logo.svg";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ExternalProduct } from "@framework/types";
 
@@ -76,6 +74,8 @@ export default function GaShop({
   const [selectedProduct, setSelectedProduct] = useState<ExternalProduct | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const galleryRef = useRef<HTMLDivElement | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
 
   const filteredAndSortedProducts = useMemo(() => {
     const q = (searchQuery || "").trim().toLowerCase();
@@ -115,6 +115,29 @@ export default function GaShop({
       window.scrollTo(0, 0);
     } catch (e) {
       // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (currentView !== "product-detail") return;
+    if (!galleryRef.current) return;
+    try {
+      galleryRef.current.scrollTo({ left: 0, behavior: "auto" });
+    } catch (e) {
+      // ignore
+    }
+  }, [currentView, selectedProduct]);
+
+  const scrollGalleryToIndex = (index: number) => {
+    const el = galleryRef.current;
+    if (!el) return;
+    const width = el.clientWidth;
+    if (!width) return;
+    const left = Math.max(0, Math.round(index) * width);
+    try {
+      el.scrollTo({ left, behavior: "smooth" });
+    } catch (e) {
+      el.scrollLeft = left;
     }
   };
 
@@ -270,6 +293,22 @@ export default function GaShop({
     const brand = getProductBrand(selectedProduct);
     const images = selectedProduct.images || [];
 
+    const onGalleryScroll = () => {
+      const el = galleryRef.current;
+      if (!el) return;
+
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+      }
+
+      scrollRafRef.current = requestAnimationFrame(() => {
+        const width = el.clientWidth;
+        if (!width) return;
+        const idx = Math.max(0, Math.min(images.length - 1, Math.round(el.scrollLeft / width)));
+        setCurrentImageIndex(idx);
+      });
+    };
+
     return (
       <div className="pt-16 pb-32">
         <div className="px-4 mb-4 flex items-center justify-between">
@@ -283,13 +322,20 @@ export default function GaShop({
           </button>
         </div>
 
-        <div className="relative w-full aspect-[4/5] bg-gray-50">
-          {images[currentImageIndex] ? (
-            <img
-              src={images[currentImageIndex]}
-              alt={name}
-              className="w-full h-full object-cover"
-            />
+        <div className="relative w-full aspect-[4/5] bg-gray-50 overflow-hidden">
+          {images.length > 0 ? (
+            <div
+              ref={galleryRef}
+              onScroll={onGalleryScroll}
+              className="flex w-full h-full overflow-x-auto snap-x snap-mandatory scroll-smooth"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
+              {images.map((img, i) => (
+                <div key={`${img}-${i}`} className="w-full h-full flex-shrink-0 snap-center">
+                  <img src={img} alt={name} className="w-full h-full object-cover" />
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-300 text-sm">
               Нет фото
@@ -303,7 +349,10 @@ export default function GaShop({
               <button
                 type="button"
                 key={`${img}-${i}`}
-                onClick={() => setCurrentImageIndex(i)}
+                onClick={() => {
+                  setCurrentImageIndex(i);
+                  scrollGalleryToIndex(i);
+                }}
                 className={`w-16 h-20 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
                   i === currentImageIndex ? "border-black" : "border-transparent opacity-70"
                 }`}
@@ -452,7 +501,7 @@ export default function GaShop({
           }}
           className="cursor-pointer hover:opacity-70 transition-all"
         >
-          <img src={logoUrl} alt="YEEZYUNIQUE" className="h-6" />
+          <img src="/logo.svg" alt="YEEZYUNIQUE" className="h-6" />
         </button>
       </nav>
 
