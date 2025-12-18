@@ -2,7 +2,6 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { ShoppingBag, Search, ArrowLeft, Plus, Minus, Trash2, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { Product, AppView, CartItem } from './types';
-import { PRODUCTS } from './constants';
 
 import { useGetExternalProducts } from "@framework/api/product/external-get";
 import Api from "@framework/api/utils/api-config";
@@ -28,7 +27,7 @@ const App: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const { data: externalData } = useGetExternalProducts();
+  const { data: externalData, isLoading: isExternalLoading, isFetching: isExternalFetching } = useGetExternalProducts();
 
   const apiProducts = useMemo<Product[]>(() => {
     const raw = externalData?.products ?? [];
@@ -40,12 +39,16 @@ const App: React.FC = () => {
         const category = String(p.category || 'Все');
         const images = Array.isArray(p.images) && p.images.length ? p.images : [];
 
+        const rawPrice = Number((p as any).price);
+        const hasPrice = Number.isFinite(rawPrice) && rawPrice > 0;
+
         return {
           id,
           name,
           brand: brand || ' ',
           category,
-          price: Number((p as any).price) || 0,
+          price: hasPrice ? rawPrice : 1,
+          hasPrice,
           images: images.length ? images : ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000'],
           description: String(p.description || ''),
           details: Array.isArray((p as any).details) ? (p as any).details : []
@@ -54,7 +57,8 @@ const App: React.FC = () => {
       .filter((p) => Boolean(p.id) && Boolean(p.name));
   }, [externalData]);
 
-  const sourceProducts = apiProducts.length ? apiProducts : PRODUCTS;
+  const sourceProducts = apiProducts;
+  const isProductsLoading = isExternalLoading || isExternalFetching;
 
   const derivedBrands = useMemo<string[]>(() => {
     const uniq = Array.from(
@@ -222,7 +226,17 @@ const App: React.FC = () => {
 
       {/* Modern Grid */}
       <div className="grid grid-cols-2 gap-x-5 gap-y-10 px-6">
-        {filteredAndSortedProducts.length > 0 ? (
+        {isProductsLoading && sourceProducts.length === 0 ? (
+          Array.from({ length: 8 }).map((_, idx) => (
+            <div key={idx} className="animate-pulse">
+              <div className="mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5" />
+              <div className="px-2">
+                <div className="mb-2 h-3 w-16 rounded bg-white/10" />
+                <div className="h-4 w-28 rounded bg-white/10" />
+              </div>
+            </div>
+          ))
+        ) : filteredAndSortedProducts.length > 0 ? (
           filteredAndSortedProducts.map(product => (
             <div key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => navigateToProduct(product)}>
               <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow transition-all duration-300 ease-out group-hover:border-white/20 group-hover:bg-white/7">
@@ -340,7 +354,11 @@ const App: React.FC = () => {
               </button>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-extrabold text-white opacity-0 select-none">{selectedProduct.price.toLocaleString()} ₽</p>
+              {selectedProduct.hasPrice ? (
+                <p className="text-2xl font-extrabold text-white opacity-0 select-none">{selectedProduct.price.toLocaleString()} ₽</p>
+              ) : (
+                <p className="text-2xl font-extrabold text-white opacity-0 select-none"> </p>
+              )}
               <div className="ml-auto mt-2 h-1 w-8 bg-white/40" />
             </div>
           </div>
@@ -418,7 +436,6 @@ const App: React.FC = () => {
               <span className="text-[10px] font-light uppercase tracking-[0.42em] text-white/40">Сумма заказа</span>
               <span className="text-3xl font-extrabold tracking-tight text-white opacity-0 select-none">{cartTotal.toLocaleString()} ₽</span>
             </div>
-            <p className="mb-12 text-[10px] font-light uppercase tracking-[0.42em] text-white/25">включая доставку из Милана</p>
             <button
               onClick={sendOrderToManager}
               disabled={isSendingOrder}
