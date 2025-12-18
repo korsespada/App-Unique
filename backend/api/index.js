@@ -241,5 +241,60 @@ app.get('/api/external-products', async (req, res) => {
   return res.json(payload);
 });
 
+// Versioned external products endpoint (alias for Telegram frontend)
+app.get('/api/:version/:shop/external-products', async (req, res) => {
+  const { version, shop } = req.params;
+  const cacheKey = `external-products:${version}:${shop}`;
+
+  const cached = externalProductsCache.get(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
+
+  const sheetsProducts = await loadProductsFromSheets();
+  if (sheetsProducts && sheetsProducts.length > 0) {
+    const payload = { products: sheetsProducts };
+    externalProductsCache.set(cacheKey, payload);
+    return res.json(payload);
+  }
+
+  const mockProducts = [
+    {
+      id: '1',
+      title: 'Yeezy Boost 350 V2',
+      brand: 'Yeezy',
+      price: 220,
+      description: 'Classic Yeezy Boost 350 V2 sneakers',
+      images: ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500'],
+      category: 'Sneakers',
+      inStock: true
+    },
+    {
+      id: '2',
+      title: 'Yeezy Slide',
+      brand: 'Yeezy',
+      price: 90,
+      description: 'Comfortable Yeezy Slide sandals',
+      images: ['https://images.unsplash.com/photo-1603808033192-082d6919d3e1?w=500'],
+      category: 'Slides',
+      inStock: true
+    },
+    {
+      id: '3',
+      title: 'Yeezy Foam Runner',
+      brand: 'Yeezy',
+      price: 80,
+      description: 'Innovative Yeezy Foam Runner',
+      images: ['https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?w=500'],
+      category: 'Footwear',
+      inStock: true
+    }
+  ];
+
+  const payload = { products: mockProducts };
+  externalProductsCache.set(cacheKey, payload);
+  return res.json(payload);
+});
+
 // Export for Vercel serverless
 module.exports = app;
