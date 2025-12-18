@@ -8,7 +8,6 @@ import {
   AdminOrdersSingle,
   AdminProductList,
   AdminSlider,
-  LegacyCatalog,
   BotAddMasters,
   BotEditMasters,
   BotMasters,
@@ -39,10 +38,6 @@ export const routes = createBrowserRouter([
   {
     path: "/",
     element: <HomePage />
-  },
-  {
-    path: "/legacy-catalog",
-    element: <LegacyCatalog />
   },
   // admin
   { path: "/admin", element: <AdminHome /> },

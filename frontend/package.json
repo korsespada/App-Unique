@@ -34,7 +34,6 @@
     "react-router": "^6.10.0",
     "react-router-dom": "^6.10.0",
     "react-telegram-webapp": "^0.1.5",
-    "lucide-react": "^0.453.0",
     "yup": "^1.1.0"
   },
   "devDependencies": {
