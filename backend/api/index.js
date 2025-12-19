@@ -70,7 +70,7 @@ async function loadProductsFromSheets() {
     // Load products from products_processed sheet
     const productsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
-      range: 'products_processed!A2:I',
+      range: 'products_processed!A2:J',
     });
 
     // Load photos from product_photos sheet
@@ -146,7 +146,13 @@ async function loadProductsFromSheets() {
           id: productId,
           title: row[3] || 'Unnamed Product', // name (D)
           brand: row[7] || 'Golden Goose', // brand (H)
-          price: 200 + Math.floor(Math.random() * 300), // Random price 200-500
+          price: (() => {
+            const raw = String(row[9] ?? '')
+              .replace(/\s+/g, '')
+              .replace(',', '.');
+            const value = Number(raw);
+            return Number.isFinite(value) && value > 0 ? value : 0;
+          })(),
           description: row[4] || '', // description (E)
           images: images,
           category: row[5] || 'Shoes', // category (F)

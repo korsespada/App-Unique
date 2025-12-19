@@ -96,6 +96,48 @@ const App: React.FC = () => {
   }, [sourceProducts]);
 
   useEffect(() => {
+    if (!sourceProducts.length) return;
+
+    setCart((prev) => {
+      let changed = false;
+      const byId = new Map(sourceProducts.map((p) => [String(p.id), p] as const));
+
+      const next = prev.map((item) => {
+        const fresh = byId.get(String(item.id));
+
+        if (!fresh) {
+          if (item.hasPrice !== false || Number(item.price) !== 0) {
+            changed = true;
+            return { ...item, hasPrice: false, price: 0 };
+          }
+          return item;
+        }
+
+        const nextItem: CartItem = {
+          ...fresh,
+          quantity: item.quantity,
+        };
+
+        const itemFirstImg = Array.isArray(item.images) ? item.images[0] : undefined;
+        const freshFirstImg = Array.isArray(nextItem.images) ? nextItem.images[0] : undefined;
+
+        const same =
+          item.name === nextItem.name &&
+          item.brand === nextItem.brand &&
+          item.category === nextItem.category &&
+          Number(item.price) === Number(nextItem.price) &&
+          (item.hasPrice ?? true) === (nextItem.hasPrice ?? true) &&
+          itemFirstImg === freshFirstImg;
+
+        if (!same) changed = true;
+        return same ? item : nextItem;
+      });
+
+      return changed ? next : prev;
+    });
+  }, [sourceProducts]);
+
+  useEffect(() => {
     const tg = window.Telegram?.WebApp;
     const backButton = tg?.BackButton as any;
     if (!backButton) return;
