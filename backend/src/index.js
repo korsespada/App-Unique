@@ -140,6 +140,9 @@ function getProductImages(productId) {
 
   const imagesDir = path.join(__dirname, '..', 'public', 'images', productId);
 
+  const imagesBaseUrlRaw = process.env.VK_IMAGES_BASE_URL || process.env.IMAGES_BASE_URL || '';
+  const imagesBaseUrl = String(imagesBaseUrlRaw).trim().replace(/\/$/, '');
+
   try {
     if (!fs.existsSync(imagesDir)) {
       return [];
@@ -151,8 +154,11 @@ function getProductImages(productId) {
       .filter((name) => name.toLowerCase().endsWith('.jpg'))
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-    const baseUrl = 'https://back-unique.vercel.app';
-    return files.map((filename) => `${baseUrl}/images/${productId}/${filename}`);
+    if (imagesBaseUrl) {
+      return files.map((filename) => `${imagesBaseUrl}/images/${productId}/${filename}`);
+    }
+
+    return files.map((filename) => `/images/${productId}/${filename}`);
   } catch (error) {
     console.error(`Error reading images for product ${productId}:`, error.message);
     return [];
