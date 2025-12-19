@@ -95,30 +95,122 @@ async function loadProductsFromSheets() {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
 
+    const normalizeHeader = (value) => {
+      return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_');
+    };
+
+    const buildHeaderIndex = (headersRow) => {
+      const headers = Array.isArray(headersRow) ? headersRow : [];
+      const idx = {};
+      headers.forEach((h, i) => {
+        const key = normalizeHeader(h);
+        if (!key) return;
+        if (idx[key] == null) idx[key] = i;
+      });
+      return idx;
+    };
+
+    const looksLikeHeaderRow = (row) => {
+      if (!Array.isArray(row)) return false;
+      const normalized = row.map(normalizeHeader);
+      return (
+        normalized.includes('product_id') ||
+        normalized.includes('photo_filename') ||
+        normalized.includes('photo_order') ||
+        normalized.includes('is_main') ||
+        normalized.includes('status')
+      );
+    };
+
+    const parseBoolean = (value, defaultValue) => {
+      if (value == null || value === '') return defaultValue;
+      const v = String(value).trim().toLowerCase();
+      if (v === 'true' || v === '1' || v === 'yes') return true;
+      if (v === 'false' || v === '0' || v === 'no') return false;
+      return defaultValue;
+    };
+
+    const parsePrice = (value) => {
+      const raw = String(value ?? '').replace(/\s+/g, '').replace(',', '.');
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : 0;
+    };
+
+    const normalizePhotoFilename = (value) => {
+      const filename = String(value || '').trim();
+      if (!filename) return filename;
+      if (/\.[a-z0-9]+$/i.test(filename)) return filename;
+      return `${filename}.jpg`;
+    };
+
     // Load products from products_processed sheet
     const productsResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
-      range: 'products_processed!A2:J',
+      range: 'products_processed!A1:Z',
     });
 
     // Load photos from product_photos sheet
     const photosResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
-      range: 'product_photos!A2:F',
+      range: 'product_photos!A1:Z',
     });
 
-    const productsRows = productsResponse.data.values || [];
-    const photosRows = photosResponse.data.values || [];
+    let productsRows = productsResponse.data.values || [];
+    let productsHeader = null;
+    if (productsRows.length && looksLikeHeaderRow(productsRows[0])) {
+      productsHeader = buildHeaderIndex(productsRows[0]);
+      productsRows = productsRows.slice(1);
+    }
+
+    let photosRows = photosResponse.data.values || [];
+    let photosHeader = null;
+    if (photosRows.length && looksLikeHeaderRow(photosRows[0])) {
+      photosHeader = buildHeaderIndex(photosRows[0]);
+      photosRows = photosRows.slice(1);
+    }
     
     // Create a map of product_id -> photos
-    // Columns: A=id, B=product_id, C=photo_filename, D=photo_url, E=photo_order, F=is_main
+    // New columns: A=id, B=product_id, C=photo_filename, D=photo_order, E=is_main
     const photosMap = {};
     photosRows.forEach((row, index) => {
-      const productId = row[1];      // B: product_id
-      const filename = row[2];       // C: photo_filename
-      const photoUrl = row[3];       // D: photo_url
-      const order = row[4];          // E: photo_order
-      const isMain = row[5];         // F: is_main
+      if (!Array.isArray(row)) return;
+
+      let productId;
+      let filename;
+      let photoUrl;
+      let order;
+      let isMain;
+
+      if (photosHeader) {
+        const productIdIdx = photosHeader.product_id;
+        const filenameIdx = photosHeader.photo_filename ?? photosHeader.filename;
+        const photoUrlIdx = photosHeader.photo_url;
+        const orderIdx = photosHeader.photo_order ?? photosHeader.photo_order ?? photosHeader.order;
+        const isMainIdx = photosHeader.is_main;
+
+        productId = productIdIdx != null ? row[productIdIdx] : '';
+        filename = filenameIdx != null ? row[filenameIdx] : '';
+        photoUrl = photoUrlIdx != null ? row[photoUrlIdx] : '';
+        order = orderIdx != null ? row[orderIdx] : 0;
+        isMain = isMainIdx != null ? row[isMainIdx] : false;
+      } else {
+        if (row.length >= 5) {
+          productId = row[1];
+          filename = row[2];
+          order = row[3];
+          isMain = row[4];
+          photoUrl = row[5];
+        } else {
+          productId = row[1];
+          filename = row[2];
+          order = row[4];
+          isMain = row[5];
+          photoUrl = row[3];
+        }
+      }
       
       if (!productId) {
         return; // Skip rows without product_id
@@ -128,18 +220,59 @@ async function loadProductsFromSheets() {
         photosMap[productId] = [];
       }
       photosMap[productId].push({
-        filename: filename,
+        filename: normalizePhotoFilename(filename),
         photoUrl: photoUrl,
-        is_main: isMain === 'true' || isMain === true || isMain === 'TRUE',
-        order: parseInt(order) || 0
+        is_main: parseBoolean(isMain, false),
+        order: parseInt(order) || 0,
       });
     });
 
     // Map products with their photos
     const products = productsRows
-      .filter(row => row[8] === 'processed') // Filter by status column (I)
       .map((row) => {
-        const productId = row[0]; // product_id (A) - это же folder_path
+        if (!Array.isArray(row)) return null;
+
+        let productId;
+        let title;
+        let brand;
+        let description;
+        let category;
+        let price;
+        let status;
+
+        if (productsHeader) {
+          const pidIdx = productsHeader.product_id ?? productsHeader.id;
+          const nameIdx = productsHeader.name ?? productsHeader.title;
+          const descriptionIdx = productsHeader.description;
+          const categoryIdx = productsHeader.category;
+          const brandIdx = productsHeader.brand;
+          const priceIdx = productsHeader.price;
+          const statusIdx = productsHeader.status;
+
+          productId = pidIdx != null ? row[pidIdx] : row[0];
+          title = nameIdx != null ? row[nameIdx] : '';
+          description = descriptionIdx != null ? row[descriptionIdx] : '';
+          category = categoryIdx != null ? row[categoryIdx] : '';
+          brand = brandIdx != null ? row[brandIdx] : '';
+          price = parsePrice(priceIdx != null ? row[priceIdx] : 0);
+          status = statusIdx != null ? row[statusIdx] : '';
+        } else {
+          productId = row[0];
+          title = row[1];
+          description = row[2];
+          category = row[3];
+          brand = row[4];
+          price = parsePrice(row[5]);
+          status = row[6];
+        }
+
+        if (status != null && String(status).trim() && String(status).trim() !== 'processed') {
+          return null;
+        }
+
+        productId = String(productId || '').trim();
+        if (!productId) return null;
+
         const photos = photosMap[productId] || [];
         
         // Sort photos by order and get main photo first
@@ -172,22 +305,17 @@ async function loadProductsFromSheets() {
 
         return {
           id: productId,
-          title: row[3] || 'Unnamed Product', // name (D)
-          brand: row[7] || 'Golden Goose', // brand (H)
-          price: (() => {
-            const raw = String(row[9] ?? '')
-              .replace(/\s+/g, '')
-              .replace(',', '.');
-            const value = Number(raw);
-            return Number.isFinite(value) && value > 0 ? value : 0;
-          })(),
-          description: row[4] || '', // description (E)
+          title: String(title || 'Unnamed Product'),
+          brand: String(brand || 'Unknown Brand'),
+          price: price,
+          description: String(description || ''),
           images: images,
-          category: row[5] || 'Shoes', // category (F)
-          seo_title: row[6] || '', // seo_title (G)
+          category: String(category || 'uncategorized'),
+          seo_title: '',
           inStock: true
         };
-      });
+      })
+      .filter(Boolean);
 
     return products;
   } catch (error) {
