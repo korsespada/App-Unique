@@ -17,6 +17,7 @@ function parseInitData(initData) {
   const data = {};
   params.forEach((value, key) => {
     if (key === 'hash') return;
+    if (key === 'signature') return;
     data[key] = value;
   });
 
@@ -50,7 +51,7 @@ function validateTelegramInitData(initData, botToken, options = {}) {
   }
 
   const dataCheckString = buildDataCheckString(data);
-  const secretKey = crypto.createHmac('sha256', botTokenStr).update('WebAppData').digest();
+  const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botTokenStr).digest();
   const calculatedHash = crypto
     .createHmac('sha256', secretKey)
     .update(dataCheckString)
