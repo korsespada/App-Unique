@@ -13,15 +13,15 @@ function parseInitData(initData) {
   const normalized = raw.startsWith('?') ? raw.slice(1) : raw;
   const params = new URLSearchParams(normalized);
   const hash = params.get('hash') || '';
+  const signature = params.get('signature') || '';
 
   const data = {};
   params.forEach((value, key) => {
     if (key === 'hash') return;
-    if (key === 'signature') return;
     data[key] = value;
   });
 
-  return { hash, data };
+  return { hash, signature, data };
 }
 
 function buildDataCheckString(data) {
@@ -57,38 +57,70 @@ function validateTelegramInitData(initData, botToken, options = {}) {
     return { ok: false, error: 'botToken отсутствует' };
   }
 
-  const { hash, data } = parseInitData(initDataStr);
+  const { hash, signature, data } = parseInitData(initDataStr);
   if (!hash) {
     return { ok: false, error: 'hash отсутствует' };
   }
 
-  const dataCheckString = buildDataCheckString(data);
-  // Telegram docs wording/implementations differ in argument order for HMAC helper functions.
-  // We compute both variants (both are derived from bot token) and accept if either matches.
+  const dataWithSignature = data;
+  const dataWithoutSignature = { ...dataWithSignature };
+  delete dataWithoutSignature.signature;
+
+  const dataCheckStringWithSignature = buildDataCheckString(dataWithSignature);
+  const dataCheckStringWithoutSignature = buildDataCheckString(dataWithoutSignature);
+
+  const botIdFromToken = String(botTokenStr).split(':')[0] || '';
+  const botTokenSha256Prefix = crypto.createHash('sha256').update(botTokenStr).digest('hex').slice(0, 12);
+
   const secretKeyV1 = crypto.createHmac('sha256', 'WebAppData').update(botTokenStr).digest();
-  const calculatedHashV1 = crypto.createHmac('sha256', secretKeyV1).update(dataCheckString).digest('hex');
-
   const secretKeyV2 = crypto.createHmac('sha256', botTokenStr).update('WebAppData').digest();
-  const calculatedHashV2 = crypto.createHmac('sha256', secretKeyV2).update(dataCheckString).digest('hex');
 
-  const okV1 = safeHexEqual(calculatedHashV1, hash);
-  const okV2 = safeHexEqual(calculatedHashV2, hash);
+  const candidates = [
+    {
+      secret: 'v1',
+      dcs: 'withSignature',
+      value: crypto.createHmac('sha256', secretKeyV1).update(dataCheckStringWithSignature).digest('hex'),
+    },
+    {
+      secret: 'v1',
+      dcs: 'withoutSignature',
+      value: crypto.createHmac('sha256', secretKeyV1).update(dataCheckStringWithoutSignature).digest('hex'),
+    },
+    {
+      secret: 'v2',
+      dcs: 'withSignature',
+      value: crypto.createHmac('sha256', secretKeyV2).update(dataCheckStringWithSignature).digest('hex'),
+    },
+    {
+      secret: 'v2',
+      dcs: 'withoutSignature',
+      value: crypto.createHmac('sha256', secretKeyV2).update(dataCheckStringWithoutSignature).digest('hex'),
+    },
+  ];
 
-  if (!okV1 && !okV2) {
+  const matched = candidates.find((c) => safeHexEqual(c.value, hash)) || null;
+
+  if (!matched) {
     return {
       ok: false,
       error: 'initData не прошёл проверку подписи',
       debug: {
-        hasSignatureParam: String(initDataStr).includes('signature='),
-        keys: Object.keys(data).sort(),
+        botIdFromToken,
+        botTokenSha256Prefix,
+        hasSignatureParam: Boolean(signature) || String(initDataStr).includes('signature='),
+        keysWithSignature: Object.keys(dataWithSignature).sort(),
+        keysWithoutSignature: Object.keys(dataWithoutSignature).sort(),
         receivedHashPrefix: String(hash || '').slice(0, 12),
-        calculatedHashV1Prefix: String(calculatedHashV1 || '').slice(0, 12),
-        calculatedHashV2Prefix: String(calculatedHashV2 || '').slice(0, 12),
-        dataCheckStringSha256Prefix: crypto
-          .createHash('sha256')
-          .update(dataCheckString)
-          .digest('hex')
-          .slice(0, 12),
+        calculatedPrefixes: {
+          v1WithSignature: String(candidates[0].value || '').slice(0, 12),
+          v1WithoutSignature: String(candidates[1].value || '').slice(0, 12),
+          v2WithSignature: String(candidates[2].value || '').slice(0, 12),
+          v2WithoutSignature: String(candidates[3].value || '').slice(0, 12),
+        },
+        dcsSha256Prefixes: {
+          withSignature: crypto.createHash('sha256').update(dataCheckStringWithSignature).digest('hex').slice(0, 12),
+          withoutSignature: crypto.createHash('sha256').update(dataCheckStringWithoutSignature).digest('hex').slice(0, 12),
+        }
       },
     };
   }
@@ -110,7 +142,16 @@ function validateTelegramInitData(initData, botToken, options = {}) {
     }
   }
 
-  return { ok: true, data, user, debug: { matched: okV1 ? 'v1' : 'v2' } };
+  return {
+    ok: true,
+    data,
+    user,
+    debug: {
+      matched: `${matched.secret}:${matched.dcs}`,
+      botIdFromToken,
+      botTokenSha256Prefix,
+    }
+  };
 }
 
 module.exports = {
