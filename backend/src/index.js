@@ -384,6 +384,13 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 86400)
     });
     if (!auth.ok) {
+      console.warn('initData validation failed', {
+        error: auth.error,
+        debug: auth.debug,
+        initDataLen: String(initData ?? '').length,
+        hasHashParam: String(initData ?? '').includes('hash='),
+        hasSignatureParam: String(initData ?? '').includes('signature='),
+      });
       return res.status(401).json({ error: auth.error || 'initData невалиден' });
     }
 
