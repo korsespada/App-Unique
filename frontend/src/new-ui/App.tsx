@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [scrolled, setScrolled] = useState(false);
   const [isSendingOrder, setIsSendingOrder] = useState(false);
+  const [startProductId, setStartProductId] = useState<string | null>(null);
 
   // Gallery state for ProductDetail
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -29,6 +30,17 @@ const App: React.FC = () => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    const startParam = String(tg?.initDataUnsafe?.start_param || '').trim();
+    if (!startParam) return;
+
+    if (startParam.startsWith('product_')) {
+      const id = startParam.slice('product_'.length).trim();
+      if (id) setStartProductId(id);
+    }
   }, []);
 
   useEffect(() => {
@@ -333,6 +345,17 @@ const App: React.FC = () => {
     setCurrentView('product-detail');
     window.scrollTo(0, 0);
   };
+
+  useEffect(() => {
+    if (!startProductId) return;
+    if (!sourceProducts.length) return;
+
+    const product = sourceProducts.find((p) => String(p.id) === String(startProductId));
+    if (!product) return;
+
+    navigateToProduct(product);
+    setStartProductId(null);
+  }, [startProductId, sourceProducts]);
 
   const HomeView = () => (
     <div className="animate-in fade-in duration-700 pb-32 pt-20">

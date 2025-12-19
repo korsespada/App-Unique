@@ -14,6 +14,34 @@ const { validateTelegramInitData } = require('../src/telegramWebAppAuth');
 
 const app = express();
 
+let cachedBotUsername = null;
+
+async function getBotUsername(botToken) {
+  const fromEnv = String(process.env.BOT_USERNAME || '').trim().replace(/^@/, '');
+  if (fromEnv) return fromEnv;
+  if (cachedBotUsername) return cachedBotUsername;
+
+  try {
+    const url = `https://api.telegram.org/bot${botToken}/getMe`;
+    const resp = await axios.get(url);
+    const username = resp?.data?.result?.username ? String(resp.data.result.username) : '';
+    cachedBotUsername = username;
+    return username;
+  } catch {
+    return '';
+  }
+}
+
+function buildProductStartParam(productId) {
+  return `product_${String(productId)}`;
+}
+
+function buildMiniAppLink(botUsername, startParam) {
+  const safeUsername = String(botUsername || '').replace(/^@/, '').trim();
+  if (!safeUsername) return null;
+  return `https://t.me/${safeUsername}?startapp=${encodeURIComponent(String(startParam || ''))}`;
+}
+
 // Middleware
 const corsAllowList = String(process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || '')
   .split(',')
@@ -326,6 +354,8 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
     const safeUsername = escapeHtml((username || '').trim());
     const safeTelegramId = escapeHtml(String(telegramUserId));
 
+    const botUsername = await getBotUsername(botToken);
+
     const orderText = [
       '🆕 Новый заказ из Telegram Mini App',
       '',
@@ -340,8 +370,12 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
           const qty = Number(it?.quantity) || 1;
           const hasPrice = it?.hasPrice === false ? false : true;
           const price = Number(it?.price);
-          const title = escapeHtml(String(it?.title || '').trim() || 'Без названия');
+          const titleText = escapeHtml(String(it?.title || '').trim() || 'Без названия');
           const id = escapeHtml(String(it?.id || '').trim() || '-');
+
+          const startParam = buildProductStartParam(String(it?.id || '').trim());
+          const link = buildMiniAppLink(botUsername, startParam);
+          const title = link ? `<a href="${escapeHtml(link)}">${titleText}</a>` : titleText;
 
           if (!hasPrice || !Number.isFinite(price) || price <= 0) {
             return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт — цена уточняется`;
