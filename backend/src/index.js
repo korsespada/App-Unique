@@ -85,6 +85,7 @@ const fs = require('fs');
 const axios = require('axios');
 const NodeCache = require('node-cache');
 const { loadProductsAndPhotos, loadPublicProducts } = require('./googleSheets');
+const { validateTelegramInitData } = require('./telegramWebAppAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -95,7 +96,21 @@ const externalProductsCache = new NodeCache({ stdTTL: 60 });
 const profiles = new Map();
 
 // Middleware
-app.use(cors());
+const corsAllowList = String(process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((v) => v.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (corsAllowList.length === 0) return callback(null, true);
+      const ok = corsAllowList.includes(origin);
+      return callback(ok ? null : new Error('Not allowed by CORS'), ok);
+    }
+  })
+);
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -356,12 +371,6 @@ app.post('/profile', (req, res) => {
 
 app.post(['/orders', '/api/orders'], async (req, res) => {
   try {
-    const { telegramUserId, username, firstname, lastname, items } = req.body;
-
-    if (!telegramUserId || !items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Некорректные данные заказа' });
-    }
-
     const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
     const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
 
@@ -369,8 +378,57 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       return res.status(500).json({ error: 'Бот не сконфигурирован' });
     }
 
+    const { initData, items } = req.body;
+
+    const auth = validateTelegramInitData(initData, botToken, {
+      maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 86400)
+    });
+    if (!auth.ok) {
+      return res.status(401).json({ error: auth.error || 'initData невалиден' });
+    }
+
+    const user = auth.user || null;
+    const telegramUserId = user?.id ? String(user.id) : '';
+    const username = user?.username ? String(user.username) : '';
+    const firstname = user?.first_name ? String(user.first_name) : '';
+    const lastname = user?.last_name ? String(user.last_name) : '';
+
+    if (!telegramUserId) {
+      return res.status(400).json({ error: 'Некорректные данные пользователя Telegram' });
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Некорректные данные заказа' });
+    }
+
+    if (items.length > 50) {
+      return res.status(400).json({ error: 'Слишком много позиций в заказе' });
+    }
+
+    const normalizedItems = items
+      .map((it) => {
+        const id = String(it?.id ?? '').trim().slice(0, 80);
+        const title = String(it?.title ?? '').trim().slice(0, 120);
+        const quantity = Math.min(99, Math.max(1, Number(it?.quantity) || 1));
+        const hasPrice = it?.hasPrice === false ? false : true;
+        const price = hasPrice ? Number(it?.price) : NaN;
+
+        return {
+          id,
+          title,
+          quantity,
+          hasPrice,
+          price: hasPrice ? price : null,
+        };
+      })
+      .filter((it) => it.id && it.title);
+
+    if (normalizedItems.length === 0) {
+      return res.status(400).json({ error: 'Некорректные данные заказа' });
+    }
+
     let hasUnknownPrice = false;
-    const total = items.reduce((sum, it) => {
+    const total = normalizedItems.reduce((sum, it) => {
       const qty = Number(it?.quantity) || 1;
       const hasPrice = it?.hasPrice === false ? false : true;
       const price = Number(it?.price);
@@ -405,7 +463,7 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       '🛒 Товары:'
     ]
       .concat(
-        items.map((it, idx) => {
+        normalizedItems.map((it, idx) => {
           const qty = Number(it?.quantity) || 1;
           const hasPrice = it?.hasPrice === false ? false : true;
           const price = Number(it?.price);
@@ -438,7 +496,7 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       parse_mode: 'HTML'
     });
 
-    console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: items.length });
+    console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: normalizedItems.length });
 
     return res.json({
       ok: true,
@@ -451,11 +509,11 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
 });
 
 // Start server
-const server = require('http').createServer(app);
-
 async function startServer() {
   const port = await getAvailablePort(PORT);
-  
+
+  const server = require('http').createServer(app);
+
   server.listen(port, () => {
     console.log(`\n=== Server is running ===`);
     console.log(`Local:   http://localhost:${port}`);
@@ -466,7 +524,11 @@ async function startServer() {
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
       console.warn(`Port ${port} is in use, trying next port...`);
-      startServer();
+      try {
+        server.close(() => startServer());
+      } catch {
+        startServer();
+      }
     } else {
       console.error('Server error:', error);
       process.exit(1);

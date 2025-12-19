@@ -98,7 +98,7 @@ async function loadProductsAndPhotos() {
       brand: row[3] || 'Unknown Brand',
       category: row[4] || 'uncategorized',
       price: parseFloat(row[5]) || 0,
-      inStock: row[6] ? row[6].toLowerCase() === 'true' : true,
+      inStock: row[6] ? String(row[6]).toLowerCase() === 'true' : true,
     }));
 
     // Load photos
@@ -106,7 +106,7 @@ async function loadProductsAndPhotos() {
     const photos = photosData.map(row => ({
       product_id: row[0] || '',
       filename: row[1] || 'default.jpg',
-      is_main: row[2] ? row[2].toLowerCase() === 'true' : false,
+      is_main: row[2] ? String(row[2]).toLowerCase() === 'true' : false,
       order: parseInt(row[3]) || 0,
     }));
 

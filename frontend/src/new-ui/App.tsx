@@ -216,16 +216,28 @@ const App: React.FC = () => {
   };
 
   const updateQuantity = (id: string, delta: number) => {
-    setCart(prev => prev.map(item => {
-      if (item.id === id) {
-        const newQty = Math.max(0, item.quantity + delta);
-        return { ...item, quantity: newQty };
-      }
-      return item;
-    }).filter(item => item.quantity > 0));
+    setCart((prev) =>
+      prev
+        .map((item) => {
+          if (item.id !== id) return item;
+          const newQty = Math.max(0, item.quantity + delta);
+          return { ...item, quantity: newQty };
+        })
+        .filter((item) => item.quantity > 0)
+    );
   };
 
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const cartHasUnknownPrice = cart.some((item) => item.hasPrice === false);
+  const cartTotal = cart.reduce((sum, item) => {
+    if (item.hasPrice === false) return sum;
+    const price = Number(item.price);
+    const qty = Number(item.quantity) || 1;
+    if (!Number.isFinite(price) || price <= 0) return sum;
+    return sum + price * qty;
+  }, 0);
+  const cartTotalText = cartHasUnknownPrice
+    ? (cartTotal > 0 ? `${cartTotal.toLocaleString()} ₽ (без товаров с уточняемой ценой)` : 'цена уточняется')
+    : `${cartTotal.toLocaleString()} ₽`;
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const resetFilters = () => {
@@ -240,17 +252,15 @@ const App: React.FC = () => {
 
     const tg = window.Telegram?.WebApp;
     const user = tg?.initDataUnsafe?.user;
+    const initData = tg?.initData;
 
-    if (!user?.id) {
+    if (!user?.id || !initData) {
       alert('Откройте мини‑приложение внутри Telegram, чтобы отправить заказ менеджеру.');
       return;
     }
 
     const payload = {
-      telegramUserId: String(user.id),
-      username: user.username || '',
-      firstname: user.first_name || '',
-      lastname: user.last_name || '',
+      initData,
       items: cart.map((it) => ({
         id: it.id,
         title: it.name,
@@ -283,7 +293,7 @@ const App: React.FC = () => {
   };
 
   const HomeView = () => (
-    <div className="pb-32 pt-20 animate-in fade-in duration-700">
+    <div className="animate-in fade-in duration-700 pb-32 pt-20">
       {/* Search Header */}
       <div className="px-6 mb-10">
         <div className="relative">
@@ -422,7 +432,7 @@ const App: React.FC = () => {
       <div className="pb-32 pt-16 animate-in slide-in-from-right duration-500 bg-[#050505] text-white">
         {/* Hero Image Section */}
         <div
-          className="relative w-full aspect-[4/5] overflow-hidden"
+          className="relative aspect-[4/5] w-full overflow-hidden"
           onTouchStart={handleGalleryTouchStart}
           onTouchMove={handleGalleryTouchMove}
           onTouchEnd={handleGalleryTouchEnd}
@@ -558,7 +568,9 @@ const App: React.FC = () => {
           <div className="mb-10 rounded-[3.5rem] border border-white/10 bg-white/5 p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
             <div className="flex justify-between items-center mb-2">
               <span className="text-[10px] font-light uppercase tracking-[0.42em] text-white/40">Сумма заказа</span>
-              <span className="text-3xl font-extrabold tracking-tight text-white opacity-0 select-none">{cartTotal.toLocaleString()} ₽</span>
+              <span className="text-right text-[13px] font-semibold leading-tight tracking-tight text-white">
+                {cartTotalText}
+              </span>
             </div>
             <button
               onClick={sendOrderToManager}

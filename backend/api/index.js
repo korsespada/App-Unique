@@ -10,11 +10,26 @@ const cors = require('cors');
 const axios = require('axios');
 const { google } = require('googleapis');
 const NodeCache = require('node-cache');
+const { validateTelegramInitData } = require('../src/telegramWebAppAuth');
 
 const app = express();
 
 // Middleware
-app.use(cors());
+const corsAllowList = String(process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((v) => v.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (corsAllowList.length === 0) return callback(null, true);
+      const ok = corsAllowList.includes(origin);
+      return callback(ok ? null : new Error('Not allowed by CORS'), ok);
+    }
+  })
+);
 app.use(express.json());
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
@@ -216,12 +231,6 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
 
 app.post(['/orders', '/api/orders'], async (req, res) => {
   try {
-    const { telegramUserId, username, firstname, lastname, items } = req.body;
-
-    if (!telegramUserId || !items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Некорректные данные заказа' });
-    }
-
     const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
     const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
 
@@ -229,8 +238,57 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       return res.status(500).json({ error: 'Бот не сконфигурирован' });
     }
 
+    const { initData, items } = req.body;
+
+    const auth = validateTelegramInitData(initData, botToken, {
+      maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 86400)
+    });
+    if (!auth.ok) {
+      return res.status(401).json({ error: auth.error || 'initData невалиден' });
+    }
+
+    const user = auth.user || null;
+    const telegramUserId = user?.id ? String(user.id) : '';
+    const username = user?.username ? String(user.username) : '';
+    const firstname = user?.first_name ? String(user.first_name) : '';
+    const lastname = user?.last_name ? String(user.last_name) : '';
+
+    if (!telegramUserId) {
+      return res.status(400).json({ error: 'Некорректные данные пользователя Telegram' });
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Некорректные данные заказа' });
+    }
+
+    if (items.length > 50) {
+      return res.status(400).json({ error: 'Слишком много позиций в заказе' });
+    }
+
+    const normalizedItems = items
+      .map((it) => {
+        const id = String(it?.id ?? '').trim().slice(0, 80);
+        const title = String(it?.title ?? '').trim().slice(0, 120);
+        const quantity = Math.min(99, Math.max(1, Number(it?.quantity) || 1));
+        const hasPrice = it?.hasPrice === false ? false : true;
+        const price = hasPrice ? Number(it?.price) : NaN;
+
+        return {
+          id,
+          title,
+          quantity,
+          hasPrice,
+          price: hasPrice ? price : null,
+        };
+      })
+      .filter((it) => it.id && it.title);
+
+    if (normalizedItems.length === 0) {
+      return res.status(400).json({ error: 'Некорректные данные заказа' });
+    }
+
     let hasUnknownPrice = false;
-    const total = items.reduce((sum, it) => {
+    const total = normalizedItems.reduce((sum, it) => {
       const qty = Number(it?.quantity) || 1;
       const hasPrice = it?.hasPrice === false ? false : true;
       const price = Number(it?.price);
@@ -265,7 +323,7 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       '🛒 Товары:'
     ]
       .concat(
-        items.map((it, idx) => {
+        normalizedItems.map((it, idx) => {
           const qty = Number(it?.quantity) || 1;
           const hasPrice = it?.hasPrice === false ? false : true;
           const price = Number(it?.price);
@@ -298,7 +356,7 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       parse_mode: 'HTML'
     });
 
-    console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: items.length });
+    console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: normalizedItems.length });
 
     return res.json({
       ok: true,
