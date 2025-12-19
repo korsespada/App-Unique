@@ -617,7 +617,7 @@ const App: React.FC = () => {
             <button
               onClick={sendOrderToManager}
               disabled={isSendingOrder}
-              className="w-full rounded-2xl bg-white py-6 text-[11px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98] disabled:opacity-60"
+              className="w-full rounded-2xl bg-white py-6 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98] disabled:opacity-60"
             >
               {isSendingOrder ? 'Отправляем…' : 'Отправить менеджеру'}
             </button>

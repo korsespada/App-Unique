@@ -1,7 +1,17 @@
 const crypto = require('crypto');
 
+function normalizeEnvString(value) {
+  let s = String(value ?? '').trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
+
 function parseInitData(initData) {
-  const params = new URLSearchParams(String(initData || ''));
+  const raw = String(initData || '').trim();
+  const normalized = raw.startsWith('?') ? raw.slice(1) : raw;
+  const params = new URLSearchParams(normalized);
   const hash = params.get('hash') || '';
 
   const data = {};
@@ -23,21 +33,24 @@ function buildDataCheckString(data) {
 function validateTelegramInitData(initData, botToken, options = {}) {
   const maxAgeSeconds = Number(options.maxAgeSeconds ?? 86400);
 
-  if (!initData || typeof initData !== 'string') {
+  const initDataStr = normalizeEnvString(initData);
+  const botTokenStr = normalizeEnvString(botToken);
+
+  if (!initDataStr) {
     return { ok: false, error: 'initData отсутствует' };
   }
 
-  if (!botToken) {
+  if (!botTokenStr) {
     return { ok: false, error: 'botToken отсутствует' };
   }
 
-  const { hash, data } = parseInitData(initData);
+  const { hash, data } = parseInitData(initDataStr);
   if (!hash) {
     return { ok: false, error: 'hash отсутствует' };
   }
 
   const dataCheckString = buildDataCheckString(data);
-  const secretKey = crypto.createHash('sha256').update(botToken).digest();
+  const secretKey = crypto.createHmac('sha256', botTokenStr).update('WebAppData').digest();
   const calculatedHash = crypto
     .createHmac('sha256', secretKey)
     .update(dataCheckString)
