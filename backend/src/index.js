@@ -250,43 +250,29 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const upstreamUrl = 'https://app-unique.vercel.app/api/products';
-
   try {
-    const response = await axios.get(upstreamUrl, {
-      timeout: 28000,
-      validateStatus: () => true,
-    });
+    const publicProducts = await loadPublicProducts();
 
-    if (response.status < 200 || response.status >= 300) {
-      return res.status(502).json({
-        error: 'Upstream service returned non-2xx status',
-        upstream_status: response.status,
-      });
-    }
-
-    const upstreamProducts = Array.isArray(response.data?.products) ? response.data.products : [];
-    const products = upstreamProducts.map((p) => ({
-      ...p,
-      brand: p.brand || p.season_title || '',
+    const products = publicProducts.map((p) => ({
+      id: String(p.product_id || '').trim(),
+      product_id: String(p.product_id || '').trim(),
+      title: '',
+      name: '',
+      brand: String(p.season_title || ''),
+      season_title: String(p.season_title || ''),
+      category: String(p.category || ''),
+      description: normalizeDescription(p.description),
+      status: String(p.status || ''),
+      images: getProductImages(String(p.product_id || '').trim()),
+      inStock: true,
     }));
 
     const payload = normalizeProductDescriptions({ products });
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
   } catch (error) {
-    if (error?.code === 'ECONNABORTED') {
-      return res.status(504).json({
-        error: 'Upstream request timeout',
-        upstream_url: upstreamUrl,
-      });
-    }
-
-    const upstreamStatus = error?.response?.status;
-    return res.status(502).json({
-      error: 'Failed to fetch upstream products',
-      upstream_url: upstreamUrl,
-      upstream_status: upstreamStatus,
+    return res.status(500).json({
+      error: 'Failed to load products',
       message: error?.message,
     });
   }
@@ -300,43 +286,29 @@ app.get('/api/external-products', async (req, res) => {
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const upstreamUrl = 'https://app-unique.vercel.app/api/products';
-
   try {
-    const response = await axios.get(upstreamUrl, {
-      timeout: 28000,
-      validateStatus: () => true,
-    });
+    const publicProducts = await loadPublicProducts();
 
-    if (response.status < 200 || response.status >= 300) {
-      return res.status(502).json({
-        error: 'Upstream service returned non-2xx status',
-        upstream_status: response.status,
-      });
-    }
-
-    const upstreamProducts = Array.isArray(response.data?.products) ? response.data.products : [];
-    const products = upstreamProducts.map((p) => ({
-      ...p,
-      brand: p.brand || p.season_title || '',
+    const products = publicProducts.map((p) => ({
+      id: String(p.product_id || '').trim(),
+      product_id: String(p.product_id || '').trim(),
+      title: '',
+      name: '',
+      brand: String(p.season_title || ''),
+      season_title: String(p.season_title || ''),
+      category: String(p.category || ''),
+      description: normalizeDescription(p.description),
+      status: String(p.status || ''),
+      images: getProductImages(String(p.product_id || '').trim()),
+      inStock: true,
     }));
 
     const payload = normalizeProductDescriptions({ products });
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
   } catch (error) {
-    if (error?.code === 'ECONNABORTED') {
-      return res.status(504).json({
-        error: 'Upstream request timeout',
-        upstream_url: upstreamUrl,
-      });
-    }
-
-    const upstreamStatus = error?.response?.status;
-    return res.status(502).json({
-      error: 'Failed to fetch upstream products',
-      upstream_url: upstreamUrl,
-      upstream_status: upstreamStatus,
+    return res.status(500).json({
+      error: 'Failed to load products',
       message: error?.message,
     });
   }
