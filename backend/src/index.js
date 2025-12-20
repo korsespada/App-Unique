@@ -90,6 +90,37 @@ const { validateTelegramInitData } = require('./telegramWebAppAuth');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const normalizeDescription = (s) => (typeof s === 'string' ? s.replace(/\\n/g, '\n') : s);
+
+function normalizeProductDescriptions(payload) {
+  if (!payload) return payload;
+
+  if (Array.isArray(payload)) {
+    return payload.map((item) => normalizeProductDescriptions(item));
+  }
+
+  if (typeof payload !== 'object') return payload;
+
+  if (Array.isArray(payload.products)) {
+    return {
+      ...payload,
+      products: payload.products.map((p) => ({
+        ...p,
+        description: normalizeDescription(p?.description),
+      })),
+    };
+  }
+
+  if ('description' in payload) {
+    return {
+      ...payload,
+      description: normalizeDescription(payload.description),
+    };
+  }
+
+  return payload;
+}
+
 let cachedBotUsername = null;
 
 async function getBotUsername(botToken) {
@@ -215,7 +246,7 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
 
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
-    return res.json(cached);
+    return res.json(normalizeProductDescriptions(cached));
   }
 
   const upstreamUrl = 'https://app-unique.vercel.app/api/products';
@@ -239,7 +270,7 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
       brand: p.brand || p.season_title || '',
     }));
 
-    const payload = { products };
+    const payload = normalizeProductDescriptions({ products });
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
   } catch (error) {
@@ -265,7 +296,7 @@ app.get('/api/external-products', async (req, res) => {
 
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
-    return res.json(cached);
+    return res.json(normalizeProductDescriptions(cached));
   }
 
   const upstreamUrl = 'https://app-unique.vercel.app/api/products';
@@ -289,7 +320,7 @@ app.get('/api/external-products', async (req, res) => {
       brand: p.brand || p.season_title || '',
     }));
 
-    const payload = { products };
+    const payload = normalizeProductDescriptions({ products });
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
   } catch (error) {
@@ -316,7 +347,7 @@ app.get('/api/products', async (req, res) => {
 
     const result = products.map((p) => ({
       product_id: p.product_id,
-      description: p.description,
+      description: normalizeDescription(p.description),
       category: p.category,
       season_title: p.season_title,
       status: p.status,
@@ -356,7 +387,14 @@ app.get('/products', async (req, res) => {
       );
     }
     
-    res.json(filteredProducts.map(p => getProductWithPhotos(p, photos)));
+    res.json(
+      filteredProducts
+        .map((p) => getProductWithPhotos(p, photos))
+        .map((p) => ({
+          ...p,
+          description: normalizeDescription(p?.description),
+        }))
+    );
   } catch (error) {
     console.error('Error in /products:', error);
     res.status(500).json({ error: 'Failed to load products' });
@@ -370,7 +408,11 @@ app.get('/products/:id', async (req, res) => {
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
-    res.json(getProductWithPhotos(product, photos));
+    const payload = getProductWithPhotos(product, photos);
+    res.json({
+      ...payload,
+      description: normalizeDescription(payload?.description),
+    });
   } catch (error) {
     console.error('Error in /products/:id:', error);
     res.status(500).json({ error: 'Failed to load product' });

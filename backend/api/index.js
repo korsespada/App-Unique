@@ -14,6 +14,37 @@ const { validateTelegramInitData } = require('../src/telegramWebAppAuth');
 
 const app = express();
 
+const normalizeDescription = (s) => (typeof s === 'string' ? s.replace(/\\n/g, '\n') : s);
+
+function normalizeProductDescriptions(payload) {
+  if (!payload) return payload;
+
+  if (Array.isArray(payload)) {
+    return payload.map((item) => normalizeProductDescriptions(item));
+  }
+
+  if (typeof payload !== 'object') return payload;
+
+  if (Array.isArray(payload.products)) {
+    return {
+      ...payload,
+      products: payload.products.map((p) => ({
+        ...p,
+        description: normalizeDescription(p?.description),
+      })),
+    };
+  }
+
+  if ('description' in payload) {
+    return {
+      ...payload,
+      description: normalizeDescription(payload.description),
+    };
+  }
+
+  return payload;
+}
+
 let cachedBotUsername = null;
 
 async function getBotUsername(botToken) {
@@ -360,17 +391,17 @@ const mockProducts = [
 async function handleExternalProducts(req, res, cacheKey) {
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
-    return res.json(cached);
+    return res.json(normalizeProductDescriptions(cached));
   }
 
   const sheetsProducts = await loadProductsFromSheets();
   if (sheetsProducts && sheetsProducts.length > 0) {
-    const payload = { products: sheetsProducts };
+    const payload = normalizeProductDescriptions({ products: sheetsProducts });
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
   }
 
-  const payload = { products: mockProducts };
+  const payload = normalizeProductDescriptions({ products: mockProducts });
   externalProductsCache.set(cacheKey, payload);
   return res.json(payload);
 }
