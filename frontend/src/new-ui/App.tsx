@@ -558,7 +558,10 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <p className="mb-12 text-[15px] font-medium leading-relaxed text-white/70">
+          <p
+            className="mb-12 text-[15px] font-medium leading-relaxed text-white/70"
+            style={{ whiteSpace: 'pre-line' }}
+          >
             {selectedProduct.description}
           </p>
 
