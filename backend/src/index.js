@@ -90,7 +90,8 @@ const { validateTelegramInitData } = require('./telegramWebAppAuth');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const normalizeDescription = (s) => (typeof s === 'string' ? s.replace(/\\n/g, '\n') : s);
+const normalizeDescription = (s) =>
+  typeof s === 'string' ? s.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n') : s;
 
 function normalizeProductDescriptions(payload) {
   if (!payload) return payload;
