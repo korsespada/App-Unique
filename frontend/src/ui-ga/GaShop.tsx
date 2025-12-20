@@ -457,7 +457,10 @@ export default function GaShop({
           <div className="h-px bg-gray-50 my-3" />
 
           {selectedProduct.description && (
-            <p className="text-sm text-gray-600 leading-[1.7] mb-4 font-normal text-justify">
+            <p
+              className="text-sm text-gray-600 leading-[1.7] mb-4 font-normal text-justify"
+              style={{ whiteSpace: 'pre-line' }}
+            >
               {selectedProduct.description}
             </p>
           )}
