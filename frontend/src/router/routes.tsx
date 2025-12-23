@@ -6,7 +6,6 @@ import {
   AdminHome,
   AdminOrders,
   AdminOrdersSingle,
-  AdminProductList,
   AdminSlider,
   BotAddMasters,
   BotEditMasters,
@@ -19,10 +18,6 @@ import {
   Checkout,
   HomePage,
   LegacyCatalog,
-  ProductAdd,
-  ProductEdit,
-  ProductList,
-  ProductSingle,
   UserCart,
   UserProfile,
   UserProfileAddAddresses,
@@ -46,10 +41,6 @@ export const routes = createBrowserRouter([
   },
   // admin
   { path: "/admin", element: <AdminHome /> },
-  //  ## products
-  { path: "/admin/products", element: <AdminProductList /> },
-  { path: "/admin/products/add", element: <ProductAdd /> },
-  { path: "/admin/products/:product_id", element: <ProductEdit /> },
   // ## categories
   { path: "/admin/categories", element: <Categories /> },
   { path: "/admin/categories/:parentId", element: <CategoriesAdd /> },
@@ -62,14 +53,6 @@ export const routes = createBrowserRouter([
   { path: "/admin/slider/add", element: <AdminAddSlider /> },
 
   // user
-  {
-    path: "/products",
-    element: <ProductList />
-  },
-  {
-    path: "/products/:product_id",
-    element: <ProductSingle />
-  },
   {
     path: "/categories",
     element: <Categories />

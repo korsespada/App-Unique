@@ -1,18 +1,7 @@
-import Container from "@components/container";
-import ProductLists from "@components/product/list";
-import ProductsSkeleton from "@components/skeleton/products";
-import { useGetProducts } from "@framework/api/product/get";
-import { Suspense } from "react";
+import { Navigate } from "react-router-dom";
 
 function UserCategoriesList() {
-  const { data } = useGetProducts({});
-  return (
-    <Container title="Товары" backwardUrl="/">
-      <Suspense fallback={<ProductsSkeleton />}>
-        <ProductLists pageType="user" data={data} />
-      </Suspense>
-    </Container>
-  );
+  return <Navigate to="/" replace />;
 }
 
 export default UserCategoriesList;

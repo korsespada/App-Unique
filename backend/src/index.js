@@ -22,17 +22,13 @@ const checkEnvVars = () => {
       message: 'Manager chat ID is missing - Order notifications will not be sent'
     },
     // Required for Google Sheets integration
-    GOOGLE_SERVICE_ACCOUNT_EMAIL: {
+    PB_URL: {
       required: false,
-      message: 'Google service account email is missing - Using mock data'
+      message: 'PB_URL is missing - PocketBase product data will be unavailable'
     },
-    GOOGLE_PRIVATE_KEY: {
+    PB_TOKEN: {
       required: false,
-      message: 'Google private key is missing - Using mock data'
-    },
-    GOOGLE_SHEETS_SPREADSHEET_ID: {
-      required: false,
-      message: 'Google Sheets ID is missing - Using mock data'
+      message: 'PB_TOKEN is missing - PocketBase requests may fail'
     }
   };
 
@@ -60,11 +56,7 @@ const checkEnvVars = () => {
 
   return {
     isBotEnabled: !!botToken && !!managerChatId,
-    isGoogleSheetsEnabled: !!(
-      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
-      process.env.GOOGLE_PRIVATE_KEY &&
-      process.env.GOOGLE_SHEETS_SPREADSHEET_ID
-    )
+    isGoogleSheetsEnabled: !!String(process.env.PB_URL || '').trim()
   };
 };
 
@@ -75,20 +67,29 @@ if (!isBotEnabled) {
 }
 
 if (!isGoogleSheetsEnabled) {
-  console.warn('⚠️  Google Sheets integration is disabled - Using mock data');
+  console.warn('⚠️  PocketBase integration is disabled - Using mock data');
 }
 
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const axios = require('axios');
 const NodeCache = require('node-cache');
-const { loadProductsAndPhotos, loadPublicProducts } = require('./googleSheets');
-const { validateTelegramInitData } = require('./telegramWebAppAuth');
+const { listActiveProducts } = require('./pocketbaseClient');
+const { validateTelegramInitData, parseInitData } = require('./telegramWebAppAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+const ORDER_RATE_WINDOW_MS = Number(process.env.ORDER_RATE_WINDOW_MS || 5 * 60 * 1000);
+const ORDER_RATE_MAX = Number(process.env.ORDER_RATE_MAX || 30);
+const TG_ORDER_INITDATA_MAX_AGE_SECONDS = Number(
+  process.env.TG_ORDER_INITDATA_MAX_AGE_SECONDS || process.env.TG_INITDATA_MAX_AGE_SECONDS || 300
+);
+const ORDER_ANTI_REPLAY_TTL_SECONDS = Number(process.env.ORDER_ANTI_REPLAY_TTL_SECONDS || 10 * 60);
+
+const usedInitDataHashCache = new NodeCache({ stdTTL: ORDER_ANTI_REPLAY_TTL_SECONDS });
 
 const normalizeDescription = (s) =>
   typeof s === 'string' ? s.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n') : s;
@@ -162,6 +163,12 @@ const corsAllowList = String(process.env.CORS_ALLOW_ORIGINS || process.env.ALLOW
   .filter(Boolean);
 
 app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' }
+  })
+);
+
+app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
@@ -174,6 +181,14 @@ app.use(
 app.use(express.json());
 app.use(express.static('public'));
 
+const orderRateLimiter = rateLimit({
+  windowMs: ORDER_RATE_WINDOW_MS,
+  max: ORDER_RATE_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Слишком много запросов. Попробуйте позже.' }
+});
+
 // Simple health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -182,62 +197,26 @@ app.get('/health', (req, res) => {
 // Middleware to load products and photos for each request
 async function loadData() {
   try {
-    console.log('Loading data from Google Sheets...');
-    const data = await loadProductsAndPhotos();
-    console.log('Successfully loaded data from Google Sheets');
-    return data;
+    console.log('Loading data from PocketBase...');
+    const products = await getCachedActiveProducts();
+    console.log('Successfully loaded data from PocketBase');
+    return { products };
   } catch (error) {
-    console.error('Error loading data from Google Sheets:', error.message);
+    console.error('Error loading data from PocketBase:', error.message);
     throw error;
   }
 }
 
-// Helper function to get product with photos
-function getProductWithPhotos(product, photos) {
-  const productPhotos = photos
-    .filter(photo => photo.product_id === product.id)
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
-    .map(photo => ({
-      ...photo,
-      url: `/images/${product.id}/${photo.filename}`
-    }));
-
-  return {
-    ...product,
-    photos: productPhotos
-  };
-}
-
-function getProductImages(productId) {
-  if ((process.env.DISABLE_IMAGES || '').toLowerCase() === 'true') {
-    return [];
+async function getCachedActiveProducts() {
+  const cacheKey = 'pb:active-products';
+  const cached = externalProductsCache.get(cacheKey);
+  if (cached) {
+    return cached;
   }
 
-  const imagesDir = path.join(__dirname, '..', 'public', 'images', productId);
-
-  const imagesBaseUrlRaw = process.env.VK_IMAGES_BASE_URL || process.env.IMAGES_BASE_URL || '';
-  const imagesBaseUrl = String(imagesBaseUrlRaw).trim().replace(/\/$/, '');
-
-  try {
-    if (!fs.existsSync(imagesDir)) {
-      return [];
-    }
-
-    const files = fs.readdirSync(imagesDir, { withFileTypes: true })
-      .filter((d) => d.isFile())
-      .map((d) => d.name)
-      .filter((name) => name.toLowerCase().endsWith('.jpg'))
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-
-    if (imagesBaseUrl) {
-      return files.map((filename) => `${imagesBaseUrl}/images/${productId}/${filename}`);
-    }
-
-    return files.map((filename) => `/images/${productId}/${filename}`);
-  } catch (error) {
-    console.error(`Error reading images for product ${productId}:`, error.message);
-    return [];
-  }
+  const products = await listActiveProducts();
+  externalProductsCache.set(cacheKey, products);
+  return products;
 }
 
 // Routes
@@ -251,22 +230,7 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
   }
 
   try {
-    const publicProducts = await loadPublicProducts();
-
-    const products = publicProducts.map((p) => ({
-      id: String(p.product_id || '').trim(),
-      product_id: String(p.product_id || '').trim(),
-      title: '',
-      name: '',
-      brand: String(p.season_title || ''),
-      season_title: String(p.season_title || ''),
-      category: String(p.category || ''),
-      description: normalizeDescription(p.description),
-      status: String(p.status || ''),
-      images: getProductImages(String(p.product_id || '').trim()),
-      inStock: true,
-    }));
-
+    const products = await getCachedActiveProducts();
     const payload = normalizeProductDescriptions({ products });
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
@@ -287,22 +251,7 @@ app.get('/api/external-products', async (req, res) => {
   }
 
   try {
-    const publicProducts = await loadPublicProducts();
-
-    const products = publicProducts.map((p) => ({
-      id: String(p.product_id || '').trim(),
-      product_id: String(p.product_id || '').trim(),
-      title: '',
-      name: '',
-      brand: String(p.season_title || ''),
-      season_title: String(p.season_title || ''),
-      category: String(p.category || ''),
-      description: normalizeDescription(p.description),
-      status: String(p.status || ''),
-      images: getProductImages(String(p.product_id || '').trim()),
-      inStock: true,
-    }));
-
+    const products = await getCachedActiveProducts();
     const payload = normalizeProductDescriptions({ products });
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
@@ -316,15 +265,14 @@ app.get('/api/external-products', async (req, res) => {
 
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await loadPublicProducts();
-
+    const products = await getCachedActiveProducts();
     const result = products.map((p) => ({
-      product_id: p.product_id,
+      product_id: String(p.product_id || p.id || '').trim(),
       description: normalizeDescription(p.description),
-      category: p.category,
-      season_title: p.season_title,
-      status: p.status,
-      images: getProductImages(p.product_id),
+      category: String(p.category || ''),
+      season_title: String(p.season_title || p.brand || ''),
+      status: String(p.status || ''),
+      images: Array.isArray(p.images) ? p.images : [],
     }));
 
     res.json({ products: result });
@@ -336,7 +284,7 @@ app.get('/api/products', async (req, res) => {
 
 app.get('/products', async (req, res) => {
   try {
-    const { products, photos } = await loadData();
+    const { products } = await loadData();
     let filteredProducts = [...products];
     
     // Apply filters
@@ -361,12 +309,10 @@ app.get('/products', async (req, res) => {
     }
     
     res.json(
-      filteredProducts
-        .map((p) => getProductWithPhotos(p, photos))
-        .map((p) => ({
-          ...p,
-          description: normalizeDescription(p?.description),
-        }))
+      filteredProducts.map((p) => ({
+        ...p,
+        description: normalizeDescription(p?.description),
+      }))
     );
   } catch (error) {
     console.error('Error in /products:', error);
@@ -374,17 +320,16 @@ app.get('/products', async (req, res) => {
   }
 });
 
-app.get('/products/:id', async (req, res) => {
+app.get(['/api/products/:id', '/products/:id'], async (req, res) => {
   try {
-    const { products, photos } = await loadData();
-    const product = products.find(p => p.id === req.params.id);
+    const { products } = await loadData();
+    const product = products.find((p) => String(p.id || p.product_id || '').trim() === String(req.params.id || '').trim());
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
-    const payload = getProductWithPhotos(product, photos);
     res.json({
-      ...payload,
-      description: normalizeDescription(payload?.description),
+      ...product,
+      description: normalizeDescription(product?.description),
     });
   } catch (error) {
     console.error('Error in /products/:id:', error);
@@ -412,7 +357,7 @@ app.post('/profile', (req, res) => {
   res.json({ success: true });
 });
 
-app.post(['/orders', '/api/orders'], async (req, res) => {
+app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
   try {
     const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
     const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
@@ -423,8 +368,22 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
 
     const { initData, items } = req.body;
 
+    let initDataHash = '';
+    try {
+      initDataHash = String(parseInitData(initData).hash || '').trim();
+    } catch {
+      initDataHash = '';
+    }
+
+    if (initDataHash) {
+      const replayKey = `order:initDataHash:${initDataHash}`;
+      if (usedInitDataHashCache.get(replayKey)) {
+        return res.status(409).json({ error: 'Повторная отправка заказа. Обновите приложение и попробуйте снова.' });
+      }
+    }
+
     const auth = validateTelegramInitData(initData, botToken, {
-      maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 86400)
+      maxAgeSeconds: TG_ORDER_INITDATA_MAX_AGE_SECONDS
     });
     if (!auth.ok) {
       console.warn('initData validation failed', {
@@ -435,6 +394,10 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
         hasSignatureParam: String(initData ?? '').includes('signature='),
       });
       return res.status(401).json({ error: auth.error || 'initData невалиден' });
+    }
+
+    if (initDataHash) {
+      usedInitDataHashCache.set(`order:initDataHash:${initDataHash}`, true);
     }
 
     const user = auth.user || null;

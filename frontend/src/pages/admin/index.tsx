@@ -14,7 +14,6 @@ function Admin() {
       <BackButtonDemo />
       <ShowPopupDemo />
       <HapticFeedbackDemo /> */}
-      <Button onClick={() => navigate("/admin/products")}>Товары</Button>
       <Button onClick={() => navigate("/admin/categories")}>Категории</Button>
       <Button onClick={() => navigate("/admin/orders")}>
         Заказы пользователей

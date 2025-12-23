@@ -5,25 +5,19 @@ import Api from "../utils/api-config";
 
 async function fetchExternalProducts(): Promise<ExternalProductsResponse> {
   try {
-    const { data } = await Api.get("/external-products", {
-      timeout: 30000
-    });
-
-    if (!data || typeof data !== "object" || !("products" in data)) {
-      throw new Error("Invalid response format");
-    }
-
-    return data as ExternalProductsResponse;
-  } catch (e: any) {
-    const serverError = e?.response?.data?.error;
-    const serverMessage = e?.response?.data?.message;
+    const { data } = await Api.get<ExternalProductsResponse>("/external-products");
+    return data;
+  } catch (e: unknown) {
+    const err: any = e as any;
+    const serverError = err?.response?.data?.error;
+    const serverMessage = err?.response?.data?.message;
     let message = "Network error";
     if (typeof serverError === "string" && serverError) {
       message = serverError;
     } else if (typeof serverMessage === "string" && serverMessage) {
       message = serverMessage;
-    } else if (typeof e?.message === "string" && e.message) {
-      message = e.message;
+    } else if (typeof err?.message === "string" && err.message) {
+      message = err.message;
     }
 
     throw new Error(message);
