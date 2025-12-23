@@ -4,7 +4,7 @@ import {
 } from "@framework/api/product/external-get";
 import Api from "@framework/api/utils/api-config";
 import {
-  ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Heart, Minus, Plus, Search, ShoppingBag, Trash2, X
+  ArrowLeft, ChevronDown, Heart, Minus, Plus, Search, ShoppingBag, Trash2, X
 } from "lucide-react";
 import React, {
   useCallback, useEffect, useMemo, useRef, useState
@@ -33,6 +33,8 @@ const App: React.FC = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const touchStartXRef = useRef<number | null>(null);
   const touchLastXRef = useRef<number | null>(null);
+  const [detailImageSrc, setDetailImageSrc] = useState<string>("");
+  const [isDetailImageLoading, setIsDetailImageLoading] = useState(false);
 
   const productsRef = useRef<Product[]>([]);
   const cartRef = useRef<CartItem[]>([]);
@@ -538,6 +540,31 @@ const App: React.FC = () => {
     setStartProductId(null);
   }, [navigateToProduct, sourceProducts, startProductId]);
 
+  useEffect(() => {
+    const nextSrc = selectedProduct?.images?.[currentImageIndex] || "";
+    if (!selectedProduct || !nextSrc) return;
+    if (nextSrc === detailImageSrc) return;
+
+    let cancelled = false;
+    setIsDetailImageLoading(true);
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      setDetailImageSrc(nextSrc);
+      setIsDetailImageLoading(false);
+    };
+    img.onerror = () => {
+      if (cancelled) return;
+      setDetailImageSrc(nextSrc);
+      setIsDetailImageLoading(false);
+    };
+    img.src = nextSrc;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentImageIndex, detailImageSrc, selectedProduct]);
+
   function HomeView() {
     return (
 <div className="animate-in fade-in duration-700 pb-32 pt-20">
@@ -584,8 +611,8 @@ const App: React.FC = () => {
       {/* Filters */}
       <div className="px-6 mb-12 space-y-4">
         {/* Categories tabs */}
-        <div className="-mx-6 px-6">
-          <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">
+        <div className="w-full overflow-hidden">
+          <div className="no-scrollbar flex max-w-full gap-3 overflow-x-auto pb-1">
             {derivedCategories.map((category) => {
               const active = category === activeCategory;
               return (
@@ -593,7 +620,7 @@ const App: React.FC = () => {
                   key={category}
                   type="button"
                   onClick={() => setActiveCategory(category)}
-                  className={`shrink-0 rounded-full border px-4 py-2 text-[11px] font-semibold tracking-normal transition-all duration-200 ease-out premium-shadow active:scale-[0.98] ${
+                  className={`shrink-0 rounded-full border px-5 py-2.5 text-[12px] font-semibold tracking-normal transition-all duration-200 ease-out premium-shadow active:scale-[0.98] ${
                     active
                       ? "border-white/15 bg-white text-black"
                       : "border-white/10 bg-white/5 text-white/75 hover:bg-white/10"
@@ -692,6 +719,11 @@ const App: React.FC = () => {
               </div>
               <div className="px-2">
                 <h3 className="line-clamp-2 min-h-[2.6em] -mt-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
+                {product.hasPrice ? (
+                  <p className="mt-1 text-[12px] font-semibold text-white/75">{product.price.toLocaleString()} ₽</p>
+                ) : (
+                  <p className="mt-1 text-[12px] font-semibold text-white/45">Цена по запросу</p>
+                )}
               </div>
             </div>
             );
@@ -735,33 +767,56 @@ const App: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-x-5 gap-y-10 px-6">
-            {favoriteProducts.map((product) => (
-              <div
-                key={product.id}
-                className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]"
-                onClick={() => navigateToProduct(product)}
-              >
-                <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow">
-                  <img
-                    src={getThumbUrl(product.images[0])}
-                    alt={product.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover"
-                  />
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+            {favoriteProducts.map((product) => {
+              const isFavorited = favorites.includes(String(product.id));
+              const isBumping = favoriteBumpId === String(product.id);
 
-                  <div className="premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl">
-                    <Heart size={18} className="fill-red-500 text-red-500" />
+              return (
+                <div key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => navigateToProduct(product)}>
+                  <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow transition-all duration-300 ease-out group-hover:border-white/20 group-hover:bg-white/7">
+                    <img
+                      src={getThumbUrl(product.images[0])}
+                      alt={product.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(product.id);
+                      }}
+                      aria-label={
+                        isFavorited ? "Убрать из избранного" : "Добавить в избранное"
+                      }
+                      className={`premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96] ${
+                        isBumping ? "scale-[1.06]" : "scale-100"
+                      }`}
+                    >
+                      <Heart
+                        size={18}
+                        className={
+                          isFavorited
+                            ? "fill-red-500 text-red-500 transition-colors"
+                            : "text-white/80 transition-colors"
+                        }
+                      />
+                    </button>
+                  </div>
+                  <div className="px-2">
+                    <h3 className="line-clamp-2 min-h-[2.6em] -mt-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
+                    {product.hasPrice ? (
+                      <p className="mt-1 text-[12px] font-semibold text-white/75">{product.price.toLocaleString()} ₽</p>
+                    ) : (
+                      <p className="mt-1 text-[12px] font-semibold text-white/45">Цена по запросу</p>
+                    )}
                   </div>
                 </div>
-                <div className="px-2">
-                  <h3 className="line-clamp-2 min-h-[2.6em] text-[13px] font-semibold tracking-tight text-white">
-                    {product.name}
-                  </h3>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -770,6 +825,8 @@ const App: React.FC = () => {
 
   function ProductDetailView() {
     if (!selectedProduct) return null;
+
+    const resolvedDetailSrc = detailImageSrc || selectedProduct.images?.[currentImageIndex] || "";
 
     const isFavorited = favorites.includes(String(selectedProduct.id));
     const isBumping = favoriteBumpId === String(selectedProduct.id);
@@ -822,26 +879,18 @@ const App: React.FC = () => {
           </button>
 
           <img
-            src={selectedProduct.images[currentImageIndex]}
+            src={resolvedDetailSrc}
             alt={selectedProduct.name}
-            className="h-full w-full object-cover transition-opacity duration-700 ease-in-out"
+            className={`h-full w-full object-cover transition-opacity duration-500 ease-in-out ${
+              isDetailImageLoading ? "opacity-95" : "opacity-100"
+            }`}
             decoding="async"
           />
 
           <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black to-transparent" />
 
           {selectedProduct.images.length > 1 && (
-            <div className="pointer-events-none absolute bottom-12 left-0 right-0 flex items-center justify-between px-6">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCurrentImageIndex((prev) =>
-                    prev === 0 ? selectedProduct.images.length - 1 : prev - 1
-                  );
-                }}
-                className="border-white/15 premium-shadow pointer-events-auto rounded-3xl border bg-black/40 p-4 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.97]">
-                <ChevronLeft size={20} />
-              </button>
+            <div className="pointer-events-none absolute bottom-12 left-0 right-0 flex items-center justify-center px-6">
               <div className="flex gap-2.5">
                 {selectedProduct.images.map((_, i) => (
                   <div
@@ -854,23 +903,13 @@ const App: React.FC = () => {
                   />
                 ))}
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCurrentImageIndex((prev) =>
-                    prev === selectedProduct.images.length - 1 ? 0 : prev + 1
-                  );
-                }}
-                className="border-white/15 premium-shadow pointer-events-auto rounded-3xl border bg-black/40 p-4 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.97]">
-                <ChevronRight size={20} />
-              </button>
             </div>
           )}
         </div>
 
         <div className="relative z-10 -mt-8 rounded-t-[3rem] bg-[#070707] px-8 pt-12">
-          <div className="mb-10 flex items-start justify-between">
-            <div className="max-w-[70%]">
+          <div className="mb-10">
+            <div className="mb-6">
               <p className="mb-3 text-[10px] font-extralight uppercase tracking-[0.42em] text-white/40">
                 {selectedProduct.brand}
               </p>
@@ -878,18 +917,16 @@ const App: React.FC = () => {
                 {selectedProduct.name}
               </h2>
 
-            </div>
-            <div className="text-right">
               {selectedProduct.hasPrice ? (
-                <p className="text-2xl font-extrabold text-white">
+                <p className="mt-3 text-[16px] font-extrabold text-white">
                   {selectedProduct.price.toLocaleString()} ₽
                 </p>
               ) : (
-                <p className="text-[12px] font-semibold tracking-normal text-white/60">
+                <p className="mt-3 text-[13px] font-semibold tracking-normal text-white/60">
                   Цена по запросу
                 </p>
               )}
-              <div className="ml-auto mt-2 h-1 w-8 bg-white/40" />
+              <div className="mt-4 h-1 w-8 bg-white/40" />
             </div>
           </div>
 
@@ -966,17 +1003,12 @@ const App: React.FC = () => {
   function CartView() {
     return (
 <div
-        className={`animate-in fade-in duration-500 px-8 pt-24 pb-32 text-white ${
+        className={`animate-in fade-in duration-500 px-4 pt-24 pb-32 text-white ${
           cart.length === 0 ? "h-[100dvh] overflow-hidden" : "min-h-screen"
         }`}
       >
         <div className="mb-12 flex items-baseline justify-between gap-6">
           <h2 className="text-5xl font-extrabold tracking-tight">Корзина</h2>
-          {cartCount > 0 && (
-            <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[12px] font-semibold text-white/80">
-              {cartCount}
-            </span>
-          )}
         </div>
 
       {cart.length === 0 ? (
@@ -1041,10 +1073,10 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          <div className="mb-10 rounded-[3.5rem] border border-white/10 bg-white/5 p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
+          <div className="mb-10 w-full rounded-[3.5rem] border border-white/10 bg-white/5 p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
             <div className="flex justify-between items-center mb-2">
               <span className="text-[10px] font-light uppercase tracking-[0.42em] text-white/40">Сумма заказа</span>
-              <span className="text-right text-[13px] font-semibold leading-tight tracking-tight text-white">
+              <span className="text-right text-[15px] font-semibold leading-tight tracking-tight text-white">
                 {cartTotalText}
               </span>
             </div>
@@ -1056,7 +1088,7 @@ const App: React.FC = () => {
                 value={orderComment}
                 onChange={(e) => setOrderComment(e.target.value)}
                 rows={3}
-                placeholder="Напишите комментарий к заказу"
+                placeholder="Комментарий к заказу"
                 className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-[13px] font-medium text-white/80 outline-none transition-all duration-200 ease-out premium-shadow placeholder:text-white/35 focus:border-white/20 focus:ring-2 focus:ring-white/10"
               />
             </div>

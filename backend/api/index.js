@@ -258,11 +258,14 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
     const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
     const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
 
+    // ...
     if (!botToken || !managerChatId) {
       return res.status(500).json({ error: 'Бот не сконфигурирован' });
     }
 
-    const { initData, items } = req.body;
+    const { initData, items, comment } = req.body;
+    const safeCommentRaw = typeof comment === 'string' ? comment.trim() : '';
+    const safeComment = safeCommentRaw.slice(0, 1000);
 
     const auth = validateTelegramInitData(initData, botToken, {
       maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 86400)
@@ -352,9 +355,11 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       `👤 Клиент: ${`${safeFirst} ${safeLast}`.trim()}`.trim(),
       safeUsername ? `@${safeUsername}` : 'username: отсутствует',
       `Telegram ID: <code>${safeTelegramId}</code>`,
+      safeComment ? `Комментарий: ${escapeHtml(safeComment)}` : '',
       '',
       '🛒 Товары:'
     ]
+      .filter(Boolean)
       .concat(
         normalizedItems.map((it, idx) => {
           const qty = Number(it?.quantity) || 1;
