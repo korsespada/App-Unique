@@ -526,6 +526,8 @@ const App: React.FC = () => {
       if (currentView === "home") homeScrollYRef.current = window.scrollY || 0;
       setSelectedProduct(product);
       setCurrentImageIndex(0);
+      setDetailImageSrc(product?.images?.[0] || "");
+      setIsDetailImageLoading(false);
       setCurrentView("product-detail");
       window.scrollTo(0, 0);
     },
@@ -620,7 +622,7 @@ const App: React.FC = () => {
           )}
         </div>
 
-        <div className="mt-6 h-px w-full bg-white/10" />
+        <div className="-mx-4 mt-6 h-px w-full bg-white/10" />
 
         {currentView === "product-detail" && (
           <button
@@ -746,9 +748,9 @@ const App: React.FC = () => {
               <div className="px-2">
                 <h3 className="line-clamp-2 min-h-[2.6em] -mt-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
                 {product.hasPrice ? (
-                  <p className="mt-0.5 text-[14px] font-extrabold text-white/85">{product.price.toLocaleString()} ₽</p>
+                  <p className="mt-0 text-[14px] font-extrabold text-white/85">{product.price.toLocaleString()} ₽</p>
                 ) : (
-                  <p className="mt-0.5 text-[13px] font-semibold text-white/45">Цена по запросу</p>
+                  <p className="mt-0 text-[13px] font-semibold text-white/45">Цена по запросу</p>
                 )}
               </div>
             </div>
@@ -772,7 +774,7 @@ const App: React.FC = () => {
         {hasNextPage && (
           <div className="mt-8 flex flex-col items-center gap-4">
             {(isFetchingNextPage || isExternalFetching) && (
-              <div className="text-[12px] font-semibold text-white/55">
+              <div className="animate-pulse text-[12px] font-semibold text-white/55">
                 Загружаем товары…
               </div>
             )}
@@ -1111,7 +1113,7 @@ const App: React.FC = () => {
                     </button>
                   </div>
                   <div className="flex items-center gap-4 self-start rounded-2xl border border-white/10 bg-white/5 px-2 py-1.5">
-                    <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -1); }} className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"><Minus size={14} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); if (item.quantity > 1) updateQuantity(item.id, -1); }} className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"><Minus size={14} /></button>
                     <span className="min-w-[20px] text-center text-xs font-semibold text-white/80">{item.quantity}</span>
                     <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, 1); }} className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"><Plus size={14} /></button>
                   </div>
@@ -1205,15 +1207,15 @@ const App: React.FC = () => {
             type="button"
             onClick={() => {
               setCurrentView("home");
-              if (currentView === "cart") scrollHomeToTop("smooth");
-              else restoreHomeScroll("smooth");
+              restoreHomeScroll("smooth");
             }}
             className={`transition-all ${
               currentView === "home"
                 ? "scale-125 text-white"
                 : "text-neutral-500 hover:text-white"
-            }`}>
-            <Search size={22} strokeWidth={currentView === "home" ? 3 : 2} />
+            }`}
+          >
+            <Search size={22} strokeWidth={currentView === "home" ? 3 : 2} className="mx-4" />
           </button>
 
           <button
