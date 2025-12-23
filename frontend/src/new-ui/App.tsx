@@ -63,6 +63,11 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const getDetailImageUrl = useCallback(
+    (url: string) => getThumbUrl(url, "1000x1250"),
+    [getThumbUrl]
+  );
+
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
@@ -558,18 +563,37 @@ const App: React.FC = () => {
       setDetailImageSrc(nextSrc);
       setIsDetailImageLoading(false);
     };
-    img.src = nextSrc;
+    img.src = getDetailImageUrl(nextSrc);
 
     return () => {
       cancelled = true;
     };
-  }, [currentImageIndex, detailImageSrc, selectedProduct]);
+  }, [currentImageIndex, detailImageSrc, getDetailImageUrl, selectedProduct]);
+
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const images = Array.isArray(selectedProduct.images) ? selectedProduct.images : [];
+    if (images.length < 2) return;
+
+    const nextIndex = currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
+    const prevIndex = currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
+    const toPrefetch = [images[nextIndex], images[prevIndex]].filter(Boolean);
+
+    toPrefetch.forEach((src) => {
+      try {
+        const img = new Image();
+        img.src = getDetailImageUrl(String(src));
+      } catch {
+        // ignore
+      }
+    });
+  }, [currentImageIndex, getDetailImageUrl, selectedProduct]);
 
   function HomeView() {
     return (
 <div className="animate-in fade-in duration-700 pb-32 pt-20">
       {/* Search Header */}
-      <div className="px-6 mb-10">
+      <div className="px-4 mb-6">
         <div className="relative">
           <input
             type="text"
@@ -596,6 +620,8 @@ const App: React.FC = () => {
           )}
         </div>
 
+        <div className="mt-6 h-px w-full bg-white/10" />
+
         {currentView === "product-detail" && (
           <button
             type="button"
@@ -609,7 +635,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="px-6 mb-12 space-y-4">
+      <div className="px-4 mb-12 space-y-4">
         {/* Categories tabs */}
         <div className="w-full overflow-hidden">
           <div className="no-scrollbar flex max-w-full gap-3 overflow-x-auto pb-1">
@@ -659,14 +685,14 @@ const App: React.FC = () => {
         )}
       </div>
 
-      <div className="px-6 mb-6">
+      <div className="px-4 mb-6">
         <p className="text-[12px] font-medium tracking-normal [font-kerning:normal] text-white/55">
           Товаров: {totalItems}
         </p>
       </div>
 
       {/* Modern Grid */}
-      <div className="grid grid-cols-2 gap-x-5 gap-y-10 px-6">
+      <div className="grid grid-cols-2 gap-4 px-4">
         {isProductsLoading && sourceProducts.length === 0 ? (
           Array.from({ length: 8 }).map((_, idx) => (
             <div key={idx} className="animate-pulse">
@@ -720,9 +746,9 @@ const App: React.FC = () => {
               <div className="px-2">
                 <h3 className="line-clamp-2 min-h-[2.6em] -mt-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
                 {product.hasPrice ? (
-                  <p className="mt-1 text-[12px] font-semibold text-white/75">{product.price.toLocaleString()} ₽</p>
+                  <p className="mt-0.5 text-[14px] font-extrabold text-white/85">{product.price.toLocaleString()} ₽</p>
                 ) : (
-                  <p className="mt-1 text-[12px] font-semibold text-white/45">Цена по запросу</p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-white/45">Цена по запросу</p>
                 )}
               </div>
             </div>
@@ -742,7 +768,27 @@ const App: React.FC = () => {
         )}
       </div>
 
-      <div ref={loadMoreRef} className="h-12" />
+      <div className="px-4">
+        {hasNextPage && (
+          <div className="mt-8 flex flex-col items-center gap-4">
+            {(isFetchingNextPage || isExternalFetching) && (
+              <div className="text-[12px] font-semibold text-white/55">
+                Загружаем товары…
+              </div>
+            )}
+            {!isFetchingNextPage && (
+              <button
+                type="button"
+                onClick={() => fetchNextPage()}
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-[12px] font-semibold text-white/80 transition-colors hover:bg-white/10"
+              >
+                Загрузить ещё
+              </button>
+            )}
+          </div>
+        )}
+        <div ref={loadMoreRef} className="h-12" />
+      </div>
 
     </div>
     );
@@ -755,7 +801,7 @@ const App: React.FC = () => {
 
     return (
       <div className="animate-in fade-in duration-700 pb-32 pt-24 text-white">
-        <div className="px-8 mb-12">
+        <div className="px-4 mb-12">
           <h2 className="text-5xl font-extrabold tracking-tight">Избранное</h2>
         </div>
 
@@ -766,7 +812,7 @@ const App: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-x-5 gap-y-10 px-6">
+          <div className="grid grid-cols-2 gap-4 px-4">
             {favoriteProducts.map((product) => {
               const isFavorited = favorites.includes(String(product.id));
               const isBumping = favoriteBumpId === String(product.id);
@@ -809,9 +855,9 @@ const App: React.FC = () => {
                   <div className="px-2">
                     <h3 className="line-clamp-2 min-h-[2.6em] -mt-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
                     {product.hasPrice ? (
-                      <p className="mt-1 text-[12px] font-semibold text-white/75">{product.price.toLocaleString()} ₽</p>
+                      <p className="mt-0.5 text-[14px] font-extrabold text-white/85">{product.price.toLocaleString()} ₽</p>
                     ) : (
-                      <p className="mt-1 text-[12px] font-semibold text-white/45">Цена по запросу</p>
+                      <p className="mt-0.5 text-[13px] font-semibold text-white/45">Цена по запросу</p>
                     )}
                   </div>
                 </div>
@@ -826,7 +872,8 @@ const App: React.FC = () => {
   function ProductDetailView() {
     if (!selectedProduct) return null;
 
-    const resolvedDetailSrc = detailImageSrc || selectedProduct.images?.[currentImageIndex] || "";
+    const rawDetailSrc = detailImageSrc || selectedProduct.images?.[currentImageIndex] || "";
+    const resolvedDetailSrc = rawDetailSrc ? getDetailImageUrl(rawDetailSrc) : "";
 
     const isFavorited = favorites.includes(String(selectedProduct.id));
     const isBumping = favoriteBumpId === String(selectedProduct.id);
@@ -1129,8 +1176,7 @@ const App: React.FC = () => {
             type="button"
             onClick={() => {
               setCurrentView("home");
-              if (currentView === "cart") scrollHomeToTop("smooth");
-              else restoreHomeScroll("smooth");
+              restoreHomeScroll("smooth");
             }}
             className="cursor-pointer select-none"
             aria-label="На главную"
