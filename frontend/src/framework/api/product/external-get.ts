@@ -1,39 +1,62 @@
 import { ExternalProduct, ExternalProductsResponse } from "@framework/types";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 
 import Api from "../utils/api-config";
 
-async function fetchExternalProducts(): Promise<ExternalProductsResponse> {
+export type ExternalProductsPagedResponse = ExternalProductsResponse & {
+  page: number;
+  perPage: number;
+  totalPages: number;
+  totalItems: number;
+  hasNextPage: boolean;
+};
+
+async function fetchExternalProductsPage(
+  page: number
+): Promise<ExternalProductsPagedResponse> {
   try {
-    const { data } = await Api.get<ExternalProductsResponse>("/external-products");
+    const { data } = await Api.get<ExternalProductsPagedResponse>(
+      "/external-products",
+      {
+        params: { page, perPage: 40 }
+      }
+    );
     return data;
   } catch (e: unknown) {
-    const err: any = e as any;
+    const err = e as {
+      response?: { data?: { error?: unknown; message?: unknown } };
+      message?: unknown;
+    };
+
     const serverError = err?.response?.data?.error;
     const serverMessage = err?.response?.data?.message;
-    let message = "Network error";
+
+    let msg = "Network error";
     if (typeof serverError === "string" && serverError) {
-      message = serverError;
+      msg = serverError;
     } else if (typeof serverMessage === "string" && serverMessage) {
-      message = serverMessage;
+      msg = serverMessage;
     } else if (typeof err?.message === "string" && err.message) {
-      message = err.message;
+      msg = err.message;
     }
 
-    throw new Error(message);
+    throw new Error(msg);
   }
 }
 
-export const useGetExternalProducts = () =>
-  useQuery<ExternalProductsResponse, Error>(
+export function useGetExternalProducts() {
+  return useInfiniteQuery<ExternalProductsPagedResponse, Error>(
     ["external-products"],
-    fetchExternalProducts,
+    ({ pageParam = 1 }) => fetchExternalProductsPage(Number(pageParam)),
     {
+      getNextPageParam: (lastPage) =>
+        lastPage.hasNextPage ? lastPage.page + 1 : undefined,
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       refetchOnMount: false
     }
   );
+}
 
 export type { ExternalProduct };

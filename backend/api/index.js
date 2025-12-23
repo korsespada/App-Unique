@@ -94,16 +94,6 @@ app.use(express.json());
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
 
-async function getCachedActiveProducts() {
-  const cacheKey = 'pb:active-products';
-  const cached = externalProductsCache.get(cacheKey);
-  if (cached) return cached;
-
-  const products = await listActiveProducts();
-  externalProductsCache.set(cacheKey, products);
-  return products;
-}
-
 // Legacy name kept, but source is now PocketBase
 async function loadProductsFromSheets() {
   try {
@@ -125,16 +115,28 @@ async function loadProductsFromSheets() {
   }
 }
 
-async function handleExternalProducts(req, res, cacheKey) {
+async function handleExternalProducts(req, res) {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const perPage = Math.max(1, Math.min(200, Number(req.query.perPage) || 40));
+
+  const cacheKey = `external-products:${page}:${perPage}`;
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const products = await getCachedActiveProducts();
-  const payload = normalizeProductDescriptions({ products });
+  const pb = await listActiveProducts(page, perPage);
+  const payload = {
+    products: pb.items,
+    page: pb.page,
+    perPage: pb.perPage,
+    totalPages: pb.totalPages,
+    totalItems: pb.totalItems,
+    hasNextPage: pb.page < pb.totalPages,
+  };
+
   externalProductsCache.set(cacheKey, payload);
-  return res.json(payload);
+  return res.json(normalizeProductDescriptions(payload));
 }
 
 // Health check
@@ -144,18 +146,18 @@ app.get('/health', (req, res) => {
 
 // External products endpoint
 app.get('/api/external-products', async (req, res) => {
-  return handleExternalProducts(req, res, 'external-products:default');
+  return handleExternalProducts(req, res);
 });
 
 // Versioned external products endpoint (alias for Telegram frontend)
 app.get('/api/:version/:shop/external-products', async (req, res) => {
-  const { version, shop } = req.params;
-  return handleExternalProducts(req, res, `external-products:${version}:${shop}`);
+  return handleExternalProducts(req, res);
 });
 
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await getCachedActiveProducts();
+    const pb = await listActiveProducts(1, 2000);
+    const products = pb.items;
     const result = products.map((p) => ({
       product_id: String(p.product_id || p.id || '').trim(),
       description: normalizeDescription(p.description),
@@ -173,7 +175,8 @@ app.get('/api/products', async (req, res) => {
 
 app.get('/products', async (req, res) => {
   try {
-    const products = await getCachedActiveProducts();
+    const pb = await listActiveProducts(1, 2000);
+    const products = pb.items;
 
     let filteredProducts = [...products];
 
@@ -208,7 +211,8 @@ app.get('/products', async (req, res) => {
 
 app.get(['/api/products/:id', '/products/:id'], async (req, res) => {
   try {
-    const products = await getCachedActiveProducts();
+    const pb = await listActiveProducts(1, 2000);
+    const products = pb.items;
     const id = String(req.params.id || '').trim();
     const product = products.find((p) => String(p.id || p.product_id || '').trim() === id);
     if (!product) {

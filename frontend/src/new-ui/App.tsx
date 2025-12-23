@@ -1,17 +1,25 @@
-import React, { useRef, useState, useMemo, useEffect } from 'react';
-import { ShoppingBag, Search, ArrowLeft, Plus, Minus, Trash2, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
-import { Product, AppView, CartItem } from './types';
-
-import { useGetExternalProducts } from "@framework/api/product/external-get";
+import {
+  ExternalProductsPagedResponse,
+  useGetExternalProducts
+} from "@framework/api/product/external-get";
 import Api from "@framework/api/utils/api-config";
+import {
+ ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, Search, ShoppingBag, Trash2, X
+} from "lucide-react";
+import React, {
+ useEffect, useMemo, useRef, useState
+} from "react";
+
+import { AppView, CartItem, Product } from "./types";
+
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<AppView>('home');
+  const [currentView, setCurrentView] = useState<AppView>("home");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [activeBrand, setActiveBrand] = useState<string>('Все');
-  const [activeCategory, setActiveCategory] = useState<string>('Все');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeBrand, setActiveBrand] = useState<string>("Все");
+  const [activeCategory, setActiveCategory] = useState<string>("Все");
+  const [searchQuery, setSearchQuery] = useState("");
   const [scrolled, setScrolled] = useState(false);
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [startProductId, setStartProductId] = useState<string | null>(null);
@@ -28,29 +36,31 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
-    const startParam = String(tg?.initDataUnsafe?.start_param || '').trim();
+    const startParam = String(tg?.initDataUnsafe?.start_param || "").trim();
     if (!startParam) return;
 
-    if (startParam.startsWith('product_')) {
-      const id = startParam.slice('product_'.length).trim();
+    if (startParam.startsWith("product_")) {
+      const id = startParam.slice("product_".length).trim();
       if (id) setStartProductId(id);
     }
   }, []);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('tg_cart');
+      const raw = localStorage.getItem("tg_cart");
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return;
       const restored = parsed
-        .filter((it) => it && typeof it === 'object' && (it as any).id && (it as any).name)
+        .filter(
+          (it) => it && typeof it === "object" && (it as any).id && (it as any).name
+        )
         .map((it) => ({
           ...(it as any),
           quantity: Number((it as any).quantity) || 1
@@ -64,22 +74,51 @@ const App: React.FC = () => {
   useEffect(() => {
     cartRef.current = cart;
     try {
-      localStorage.setItem('tg_cart', JSON.stringify(cart));
+      localStorage.setItem("tg_cart", JSON.stringify(cart));
     } catch {
       // ignore
     }
   }, [cart]);
 
-  const { data: externalData, isLoading: isExternalLoading, isFetching: isExternalFetching } = useGetExternalProducts();
+  const {
+    data: externalData,
+    isLoading: isExternalLoading,
+    isFetching: isExternalFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useGetExternalProducts();
+
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (!first?.isIntersecting) return;
+        if (!hasNextPage) return;
+        if (isFetchingNextPage) return;
+        fetchNextPage();
+      },
+      { root: null, rootMargin: "600px 0px", threshold: 0 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const apiProducts = useMemo<Product[]>(() => {
-    const raw = externalData?.products ?? [];
+    const pages = (externalData?.pages || []) as ExternalProductsPagedResponse[];
+    const raw = pages.flatMap((p) => (Array.isArray(p?.products) ? p.products : []));
     return raw
       .map((p) => {
-        const id = String((p as any).id || p.product_id || '');
-        const name = String(p.title || p.name || p.product_id || '').trim();
-        const brand = String(p.brand || p.season_title || '').trim();
-        const category = String(p.category || 'Все');
+        const id = String((p as any).id || p.product_id || "");
+        const name = String(p.title || p.name || p.product_id || "").trim();
+        const brand = String(p.brand || p.season_title || "").trim();
+        const category = String(p.category || "Все");
         const images = Array.isArray(p.images) && p.images.length ? p.images : [];
 
         const rawPrice = Number((p as any).price);
@@ -88,12 +127,16 @@ const App: React.FC = () => {
         return {
           id,
           name,
-          brand: brand || ' ',
+          brand: brand || " ",
           category,
           price: hasPrice ? rawPrice : 1,
           hasPrice,
-          images: images.length ? images : ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000'],
-          description: String(p.description || ''),
+          images: images.length
+            ? images
+            : [
+              "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
+            ],
+          description: String(p.description || ""),
           details: Array.isArray((p as any).details) ? (p as any).details : []
         };
       })
@@ -112,7 +155,9 @@ const App: React.FC = () => {
 
     setCart((prev) => {
       let changed = false;
-      const byId = new Map(sourceProducts.map((p) => [String(p.id), p] as const));
+      const byId = new Map(
+        sourceProducts.map((p) => [String(p.id), p] as const)
+      );
 
       const next = prev.map((item) => {
         const fresh = byId.get(String(item.id));
@@ -127,11 +172,15 @@ const App: React.FC = () => {
 
         const nextItem: CartItem = {
           ...fresh,
-          quantity: item.quantity,
+          quantity: item.quantity
         };
 
-        const itemFirstImg = Array.isArray(item.images) ? item.images[0] : undefined;
-        const freshFirstImg = Array.isArray(nextItem.images) ? nextItem.images[0] : undefined;
+        const itemFirstImg = Array.isArray(item.images)
+          ? item.images[0]
+          : undefined;
+        const freshFirstImg = Array.isArray(nextItem.images)
+          ? nextItem.images[0]
+          : undefined;
 
         const same =
           item.name === nextItem.name &&
@@ -151,7 +200,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
-    const backButton = tg?.BackButton as any;
+    const backButton = tg?.BackButton;
     if (!backButton) return;
 
     const handler = () => window.history.back();
@@ -173,9 +222,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
-    const backButton = tg?.BackButton as any;
+    const backButton = tg?.BackButton;
     if (!backButton) return;
-    if (currentView === 'home') backButton.hide();
+    if (currentView === "home") backButton.hide();
     else backButton.show();
   }, [currentView]);
 
@@ -188,22 +237,24 @@ const App: React.FC = () => {
 
       if (!view) {
         setSelectedProduct(null);
-        setCurrentView('home');
+        setCurrentView("home");
         return;
       }
 
-      if (view === 'product-detail') {
-        const productId = String(state?.productId || '').trim();
-        const fromProducts = productsRef.current.find((p) => p.id === productId);
+      if (view === "product-detail") {
+        const productId = String(state?.productId || "").trim();
+        const fromProducts = productsRef.current.find(
+          (p) => p.id === productId
+        );
         const fromCart = cartRef.current.find((p) => p.id === productId);
         const product = fromProducts || fromCart;
         if (product) {
           setSelectedProduct(product);
           setCurrentImageIndex(0);
-          setCurrentView('product-detail');
+          setCurrentView("product-detail");
         } else {
           setSelectedProduct(null);
-          setCurrentView('home');
+          setCurrentView("home");
         }
         return;
       }
@@ -212,11 +263,11 @@ const App: React.FC = () => {
       setCurrentView(view);
     };
 
-    window.history.replaceState({ view: 'home' }, '');
+    window.history.replaceState({ view: "home" }, "");
     isHistoryFirstRef.current = false;
 
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   useEffect(() => {
@@ -226,44 +277,54 @@ const App: React.FC = () => {
     }
 
     const state =
-      currentView === 'product-detail'
-        ? { view: currentView, productId: selectedProduct?.id || '' }
-        : { view: currentView };
+      currentView === "product-detail"
+      ? { view: currentView, productId: selectedProduct?.id || "" }
+      : { view: currentView };
 
-    window.history.pushState(state, '');
+    window.history.pushState(state, "");
   }, [currentView, selectedProduct?.id]);
 
   const derivedBrands = useMemo<string[]>(() => {
     const uniq = Array.from(
-      new Set(sourceProducts.map((p) => String(p.brand || '').trim()).filter(Boolean))
+      new Set(
+        sourceProducts.map((p) => String(p.brand || "").trim()).filter(Boolean)
+      )
     );
-    return ['Все', ...uniq.sort((a, b) => a.localeCompare(b))];
+    return ["Все", ...uniq.sort((a, b) => a.localeCompare(b))];
   }, [sourceProducts]);
 
   const derivedCategories = useMemo<string[]>(() => {
     const uniq = Array.from(
-      new Set(sourceProducts.map((p) => String(p.category || '').trim()).filter(Boolean))
+      new Set(
+        sourceProducts
+          .map((p) => String(p.category || "").trim())
+          .filter(Boolean)
+      )
     );
-    return ['Все', ...uniq.sort((a, b) => a.localeCompare(b))];
+    return ["Все", ...uniq.sort((a, b) => a.localeCompare(b))];
   }, [sourceProducts]);
 
   const filteredAndSortedProducts = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return sourceProducts.filter(p => {
-      const matchesBrand = activeBrand === 'Все' || p.brand === activeBrand;
-      const matchesCategory = activeCategory === 'Все' || p.category === activeCategory;
-      const matchesSearch = p.name.toLowerCase().includes(q) ||
-                            p.brand.toLowerCase().includes(q) ||
-                            String(p.id).toLowerCase().includes(q);
+    return sourceProducts.filter((p) => {
+      const matchesBrand = activeBrand === "Все" || p.brand === activeBrand;
+      const matchesCategory =        activeCategory === "Все" || p.category === activeCategory;
+      const matchesSearch =        p.name.toLowerCase().includes(q) ||
+        p.brand.toLowerCase().includes(q) ||
+        String(p.id).toLowerCase().includes(q);
       return matchesBrand && matchesCategory && matchesSearch;
     });
   }, [activeBrand, activeCategory, searchQuery, sourceProducts]);
 
   const addToCart = (product: Product) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+        return prev.map((item) =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
       }
       return [...prev, { ...product, quantity: 1 }];
     });
@@ -272,12 +333,12 @@ const App: React.FC = () => {
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
       prev
-        .map((item) => {
-          if (item.id !== id) return item;
-          const newQty = Math.max(0, item.quantity + delta);
-          return { ...item, quantity: newQty };
-        })
-        .filter((item) => item.quantity > 0)
+      .map((item) => {
+        if (item.id !== id) return item;
+        const newQty = Math.max(0, item.quantity + delta);
+        return { ...item, quantity: newQty };
+      })
+      .filter((item) => item.quantity > 0)
     );
   };
 
@@ -290,14 +351,16 @@ const App: React.FC = () => {
     return sum + price * qty;
   }, 0);
   const cartTotalText = cartHasUnknownPrice
-    ? (cartTotal > 0 ? `${cartTotal.toLocaleString()} ₽ (без товаров с уточняемой ценой)` : 'цена уточняется')
+    ? cartTotal > 0
+      ? `${cartTotal.toLocaleString()} ₽ (без товаров с уточняемой ценой)`
+      : "цена уточняется"
     : `${cartTotal.toLocaleString()} ₽`;
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const resetFilters = () => {
-    setActiveBrand('Все');
-    setActiveCategory('Все');
-    setSearchQuery('');
+    setActiveBrand("Все");
+    setActiveCategory("Все");
+    setSearchQuery("");
   };
 
   const sendOrderToManager = async () => {
@@ -309,7 +372,9 @@ const App: React.FC = () => {
     const initData = tg?.initData;
 
     if (!user?.id || !initData) {
-      alert('Откройте мини‑приложение внутри Telegram, чтобы отправить заказ менеджеру.');
+      alert(
+        "Откройте мини‑приложение внутри Telegram, чтобы отправить заказ менеджеру."
+      );
       return;
     }
 
@@ -321,18 +386,20 @@ const App: React.FC = () => {
         quantity: it.quantity,
         hasPrice: it.hasPrice !== false,
         price: it.hasPrice !== false ? it.price : null,
-        image: it.images?.[0] || ''
+        image: it.images?.[0] || ""
       }))
     };
 
     try {
       setIsSendingOrder(true);
-      await Api.post('/orders', payload, { timeout: 30000 });
-      alert('Заказ отправлен менеджеру');
+      await Api.post("/orders", payload, { timeout: 30000 });
+      alert("Заказ отправлен менеджеру");
       setCart([]);
-      setCurrentView('home');
+      setCurrentView("home");
     } catch (e: any) {
-      const msg = e?.response?.data?.error || e?.message || 'Не удалось отправить заказ менеджеру';
+      const msg =        e?.response?.data?.error
+        || e?.message
+        || "Не удалось отправить заказ менеджеру";
       alert(String(msg));
     } finally {
       setIsSendingOrder(false);
@@ -342,7 +409,7 @@ const App: React.FC = () => {
   const navigateToProduct = (product: Product) => {
     setSelectedProduct(product);
     setCurrentImageIndex(0);
-    setCurrentView('product-detail');
+    setCurrentView("product-detail");
     window.scrollTo(0, 0);
   };
 
@@ -350,15 +417,18 @@ const App: React.FC = () => {
     if (!startProductId) return;
     if (!sourceProducts.length) return;
 
-    const product = sourceProducts.find((p) => String(p.id) === String(startProductId));
+    const product = sourceProducts.find(
+      (p) => String(p.id) === String(startProductId)
+    );
     if (!product) return;
 
     navigateToProduct(product);
     setStartProductId(null);
   }, [startProductId, sourceProducts]);
 
-  const HomeView = () => (
-    <div className="animate-in fade-in duration-700 pb-32 pt-20">
+  function HomeView() {
+    return (
+<div className="animate-in fade-in duration-700 pb-32 pt-20">
       {/* Search Header */}
       <div className="px-6 mb-10">
         <div className="relative">
@@ -463,9 +533,10 @@ const App: React.FC = () => {
       </div>
 
     </div>
-  );
+    );
+  }
 
-  const ProductDetailView = () => {
+  function ProductDetailView() {
     if (!selectedProduct) return null;
 
     const handleGalleryTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -487,46 +558,64 @@ const App: React.FC = () => {
       if (Math.abs(delta) < 40) return;
       if (selectedProduct.images.length < 2) return;
       if (delta > 0) {
-        setCurrentImageIndex((prev) => (prev === selectedProduct.images.length - 1 ? 0 : prev + 1));
+        setCurrentImageIndex((prev) =>
+          prev === selectedProduct.images.length - 1 ? 0 : prev + 1
+        );
       } else {
-        setCurrentImageIndex((prev) => (prev === 0 ? selectedProduct.images.length - 1 : prev - 1));
+        setCurrentImageIndex((prev) =>
+          prev === 0 ? selectedProduct.images.length - 1 : prev - 1
+        );
       }
     };
 
     return (
-      <div className="pb-32 pt-16 animate-in slide-in-from-right duration-500 bg-[#050505] text-white">
+      <div className="animate-in slide-in-from-right bg-[#050505] pb-32 pt-16 text-white duration-500">
         {/* Hero Image Section */}
         <div
           className="relative aspect-[4/5] w-full overflow-hidden"
           onTouchStart={handleGalleryTouchStart}
           onTouchMove={handleGalleryTouchMove}
-          onTouchEnd={handleGalleryTouchEnd}
-        >
+          onTouchEnd={handleGalleryTouchEnd}>
           <img
             src={selectedProduct.images[currentImageIndex]}
             alt={selectedProduct.name}
-            className="w-full h-full object-cover transition-opacity duration-700 ease-in-out"
+            className="h-full w-full object-cover transition-opacity duration-700 ease-in-out"
           />
 
           <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black to-transparent" />
 
           {selectedProduct.images.length > 1 && (
-            <div className="absolute bottom-12 left-0 right-0 px-6 flex justify-between items-center pointer-events-none">
+            <div className="pointer-events-none absolute bottom-12 left-0 right-0 flex items-center justify-between px-6">
               <button
-                onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev === 0 ? selectedProduct.images.length - 1 : prev - 1)); }}
-                className="pointer-events-auto rounded-3xl border border-white/15 bg-black/40 p-4 backdrop-blur-2xl premium-shadow transition-all duration-200 ease-out active:scale-[0.97]"
-              >
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentImageIndex((prev) =>
+                    prev === 0 ? selectedProduct.images.length - 1 : prev - 1
+                  );
+                }}
+                className="border-white/15 premium-shadow pointer-events-auto rounded-3xl border bg-black/40 p-4 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.97]">
                 <ChevronLeft size={20} />
               </button>
               <div className="flex gap-2.5">
                 {selectedProduct.images.map((_, i) => (
-                  <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i === currentImageIndex ? 'w-8 bg-white' : 'w-2 bg-white/25'}`} />
+                  <div
+                    key={i}
+                    className={`h-1.5 rounded-full transition-all duration-500 ${
+                      i === currentImageIndex
+                        ? "w-8 bg-white"
+                        : "w-2 bg-white/25"
+                    }`}
+                  />
                 ))}
               </div>
               <button
-                onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev === selectedProduct.images.length - 1 ? 0 : prev + 1)); }}
-                className="pointer-events-auto rounded-3xl border border-white/15 bg-black/40 p-4 backdrop-blur-2xl premium-shadow transition-all duration-200 ease-out active:scale-[0.97]"
-              >
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentImageIndex((prev) =>
+                    prev === selectedProduct.images.length - 1 ? 0 : prev + 1
+                  );
+                }}
+                className="border-white/15 premium-shadow pointer-events-auto rounded-3xl border bg-black/40 p-4 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.97]">
                 <ChevronRight size={20} />
               </button>
             </div>
@@ -534,25 +623,36 @@ const App: React.FC = () => {
         </div>
 
         <div className="relative z-10 -mt-8 rounded-t-[3rem] bg-[#070707] px-8 pt-12">
-          <div className="flex justify-between items-start mb-10">
+          <div className="mb-10 flex items-start justify-between">
             <div className="max-w-[70%]">
-              <p className="mb-3 text-[10px] font-extralight uppercase tracking-[0.42em] text-white/40">{selectedProduct.brand}</p>
-              <h2 className="text-4xl font-extrabold leading-none tracking-tight text-white">{selectedProduct.name}</h2>
+              <p className="mb-3 text-[10px] font-extralight uppercase tracking-[0.42em] text-white/40">
+                {selectedProduct.brand}
+              </p>
+              <h2 className="text-4xl font-extrabold leading-none tracking-tight text-white">
+                {selectedProduct.name}
+              </h2>
 
-              <p className="mt-6 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">ID: {selectedProduct.id}</p>
+              <p className="mt-6 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
+ID:{selectedProduct.id}</p>
 
               <button
-                onClick={() => { addToCart(selectedProduct); setCurrentView('cart'); }}
-                className="mt-6 w-full rounded-3xl bg-white py-5 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-2xl shadow-black/40 transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
-              >
+                onClick={() => {
+                  addToCart(selectedProduct);
+                  setCurrentView("cart");
+                }}
+                className="mt-6 w-full rounded-3xl bg-white py-5 text-[14px] font-extrabold uppercase tracking-normal text-black shadow-2xl shadow-black/40 transition-all duration-200 ease-out [font-kerning:normal] hover:bg-white/90 active:scale-[0.98]">
                 В корзину
               </button>
             </div>
             <div className="text-right">
               {selectedProduct.hasPrice ? (
-                <p className="text-2xl font-extrabold text-white opacity-0 select-none">{selectedProduct.price.toLocaleString()} ₽</p>
+                <p className="select-none text-2xl font-extrabold text-white opacity-0">
+                  {selectedProduct.price.toLocaleString()} ₽
+                </p>
               ) : (
-                <p className="text-2xl font-extrabold text-white opacity-0 select-none"> </p>
+                <p className="select-none text-2xl font-extrabold text-white opacity-0">
+                  {" "}
+                </p>
               )}
               <div className="ml-auto mt-2 h-1 w-8 bg-white/40" />
             </div>
@@ -560,17 +660,23 @@ const App: React.FC = () => {
 
           <p
             className="mb-12 text-[15px] font-medium leading-relaxed text-white/70"
-            style={{ whiteSpace: 'pre-line' }}
+            style={{ whiteSpace: "pre-line" }}
           >
             {selectedProduct.description}
           </p>
 
-          <div className="space-y-8 mb-12">
+          <div className="mb-12 space-y-8">
             <div className="grid grid-cols-1 gap-5">
               {selectedProduct.details.map((detail, i) => (
-                <div key={i} className="flex items-center gap-5 rounded-[2rem] border border-white/10 bg-white/5 p-6 transition-all duration-300 ease-out hover:border-white/20 hover:bg-white/7 hover:translate-x-1">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-xs font-semibold text-white/50 premium-shadow">0{i+1}</div>
-                  <span className="text-[13px] font-semibold text-white/85">{detail}</span>
+                <div
+                  key={i}
+                  className="hover:bg-white/7 flex items-center gap-5 rounded-[2rem] border border-white/10 bg-white/5 p-6 transition-all duration-300 ease-out hover:translate-x-1 hover:border-white/20">
+                  <div className="premium-shadow flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-xs font-semibold text-white/50">
+                    0{i + 1}
+                  </div>
+                  <span className="text-white/85 text-[13px] font-semibold">
+                    {detail}
+                  </span>
                 </div>
               ))}
             </div>
@@ -578,10 +684,11 @@ const App: React.FC = () => {
         </div>
       </div>
     );
-  };
+  }
 
-  const CartView = () => (
-    <div className="min-h-screen animate-in fade-in duration-500 px-8 pt-24 pb-32 text-white">
+  function CartView() {
+    return (
+<div className="min-h-screen animate-in fade-in duration-500 px-8 pt-24 pb-32 text-white">
       <div className="flex justify-between items-end mb-12">
         <h2 className="text-5xl font-extrabold tracking-tight">Корзина</h2>
         <span className="text-lg font-semibold text-white/35">{cartCount}</span>
@@ -652,53 +759,81 @@ const App: React.FC = () => {
       )}
     </div>
   );
+}
 
   return (
     <div className="relative mx-auto min-h-screen max-w-md overflow-x-hidden bg-gradient-to-b from-black via-[#070707] to-[#050505] text-white">
       {/* Dynamic Navbar */}
-      <nav className={`fixed top-0 max-w-md w-full z-[120] h-14 px-6 flex items-center justify-center transition-colors duration-300 ${scrolled || currentView !== 'home' ? 'blur-nav border-b border-white/10' : 'bg-transparent'}`}>
-        {currentView !== 'home' && (
+      <nav
+        className={`fixed top-0 z-[120] flex h-14 w-full max-w-md items-center justify-center px-6 transition-colors duration-300 ${
+          scrolled || currentView !== "home"
+            ? "blur-nav border-b border-white/10"
+            : "bg-transparent"
+        }`}>
+        {currentView !== "home" && (
           <button
             onClick={() => window.history.back()}
-            className="absolute left-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 premium-shadow transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]"
-          >
+            className="premium-shadow absolute left-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]">
             <ArrowLeft size={18} />
           </button>
         )}
         <div
-          onClick={() => { setCurrentView('home'); window.scrollTo({top:0, behavior:'smooth'}); }}
-          className="cursor-pointer select-none"
-        >
-          <img src="/logo.svg" alt="Logo" className="logo-auto h-7 w-auto opacity-95" />
+          onClick={() => {
+            setCurrentView("home");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="cursor-pointer select-none">
+          <img
+            src="/logo.svg"
+            alt="Logo"
+            className="logo-auto h-7 w-auto opacity-95"
+          />
         </div>
       </nav>
 
       <main>
-        {currentView === 'home' && HomeView()}
-        {currentView === 'product-detail' && ProductDetailView()}
-        {currentView === 'cart' && CartView()}
+        {currentView === "home" && HomeView()}
+        {currentView === "product-detail" && ProductDetailView()}
+        {currentView === "cart" && CartView()}
       </main>
 
       {/* Stylish Minimal Bottom Nav */}
-      <div className="fixed bottom-0 max-w-md w-full px-12 pb-6 pt-2 z-[110] flex justify-center">
+      <div className="fixed bottom-0 z-[110] flex w-full max-w-md justify-center px-12 pb-6 pt-2">
         <div className="flex items-center gap-16 rounded-[2rem] border border-white/10 bg-black/50 px-12 py-3 shadow-2xl backdrop-blur-2xl">
           <button
-            onClick={() => { setCurrentView('home'); window.scrollTo({top:0, behavior:'smooth'}); }}
-            className={`transition-all ${currentView === 'home' ? 'text-white scale-125' : 'text-neutral-500 hover:text-white'}`}
-          >
-            <Search size={22} strokeWidth={currentView === 'home' ? 3 : 2} />
+            onClick={() => {
+              setCurrentView("home");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className={`transition-all ${
+              currentView === "home"
+                ? "scale-125 text-white"
+                : "text-neutral-500 hover:text-white"
+            }`}>
+            <Search size={22} strokeWidth={currentView === "home" ? 3 : 2} />
           </button>
           <button
-            onClick={() => setCurrentView('cart')}
-            className={`relative transition-all ${currentView === 'cart' ? 'text-white scale-125' : 'text-neutral-500 hover:text-white'}`}
-          >
-            <ShoppingBag size={22} strokeWidth={currentView === 'cart' ? 3 : 2} />
-            {cartCount > 0 && <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-white text-[6px] font-extrabold text-black">{cartCount}</span>}
+            onClick={() => setCurrentView("cart")}
+            className={`relative transition-all ${
+              currentView === "cart"
+                ? "scale-125 text-white"
+                : "text-neutral-500 hover:text-white"
+            }`}>
+            <ShoppingBag
+              size={22}
+              strokeWidth={currentView === "cart" ? 3 : 2}
+            />
+            {cartCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white text-[6px] font-extrabold text-black">
+                {cartCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
     </div>
   );
-};
+}
+
 
 export default App;

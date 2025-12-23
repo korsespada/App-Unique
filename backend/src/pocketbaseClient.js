@@ -95,20 +95,31 @@ function mapPbProductToExternal(record) {
   };
 }
 
-async function listActiveProducts() {
+async function listActiveProducts(page = 1, perPage = 2000) {
   const api = pbApi();
+
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePerPage = Math.max(1, Math.min(2000, Number(perPage) || 2000));
 
   const { data } = await api.get('/api/collections/products/records', {
     params: {
-      page: 1,
-      perPage: 2000,
+      page: safePage,
+      perPage: safePerPage,
       filter: 'status = "active"',
       expand: 'brand,category',
     },
   });
 
   const items = Array.isArray(data?.items) ? data.items : [];
-  return items.map(mapPbProductToExternal).filter((p) => p.id);
+  const mapped = items.map(mapPbProductToExternal).filter((p) => p.id);
+
+  return {
+    items: mapped,
+    page: Number(data?.page) || safePage,
+    perPage: Number(data?.perPage) || safePerPage,
+    totalPages: Number(data?.totalPages) || 1,
+    totalItems: Number(data?.totalItems) || mapped.length,
+  };
 }
 
 module.exports = {

@@ -17,7 +17,6 @@ import {
   CategoriesEdit,
   Checkout,
   HomePage,
-  LegacyCatalog,
   UserCart,
   UserProfile,
   UserProfileAddAddresses,
@@ -34,10 +33,6 @@ export const routes = createBrowserRouter([
   {
     path: "/",
     element: <HomePage />
-  },
-  {
-    path: "/legacy-catalog",
-    element: <LegacyCatalog />
   },
   // admin
   { path: "/admin", element: <AdminHome /> },
