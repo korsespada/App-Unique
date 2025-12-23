@@ -532,6 +532,8 @@ const App: React.FC = () => {
         )}
       </div>
 
+      <div ref={loadMoreRef} className="h-12" />
+
     </div>
     );
   }
