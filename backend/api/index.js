@@ -119,20 +119,44 @@ async function handleExternalProducts(req, res) {
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.max(1, Math.min(200, Number(req.query.perPage) || 40));
 
-  const cacheKey = `external-products:${page}:${perPage}`;
+  const search = String(req.query.search || '').trim();
+  const brand = String(req.query.brand || '').trim();
+  const category = String(req.query.category || '').trim();
+
+  const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}`;
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const pb = await listActiveProducts(page, perPage);
+  const pbAll = await listActiveProducts(1, 2000);
+
+  const q = search.toLowerCase();
+  const filtered = pbAll.items.filter((p) => {
+    if (brand && String(p.brand || '') !== brand) return false;
+    if (category && String(p.category || '') !== category) return false;
+    if (q) {
+      const title = String(p.title || p.name || '').toLowerCase();
+      const desc = String(p.description || '').toLowerCase();
+      if (!title.includes(q) && !desc.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * perPage;
+  const end = start + perPage;
+  const pageItems = filtered.slice(start, end);
+
   const payload = {
-    products: pb.items,
-    page: pb.page,
-    perPage: pb.perPage,
-    totalPages: pb.totalPages,
-    totalItems: pb.totalItems,
-    hasNextPage: pb.page < pb.totalPages,
+    products: pageItems,
+    page: safePage,
+    perPage,
+    totalPages,
+    totalItems,
+    hasNextPage: safePage < totalPages,
   };
 
   externalProductsCache.set(cacheKey, payload);
@@ -344,7 +368,7 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
           const title = link ? `<a href="${escapeHtml(link)}">${titleText}</a>` : titleText;
 
           if (!hasPrice || !Number.isFinite(price) || price <= 0) {
-            return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт — цена уточняется`;
+            return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт — Цена по запросу`;
           }
 
           const lineTotal = price * qty;
@@ -353,9 +377,9 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       )
       .concat([
         '',
-        hasUnknownPrice
-          ? (total > 0 ? `💰 Итого (без товаров с уточняемой ценой): ${escapeHtml(String(total))} ₽` : '💰 Итого: цена уточняется')
-          : `💰 Итого: ${escapeHtml(String(total))} ₽`,
+        total > 0
+          ? `💰 Итого: ${escapeHtml(String(total))} ₽`
+          : '💰 Итого: Цена по запросу',
         '',
         'Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.'
       ])

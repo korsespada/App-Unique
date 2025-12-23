@@ -25,6 +25,7 @@ const App: React.FC = () => {
   const [startProductId, setStartProductId] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoriteBumpId, setFavoriteBumpId] = useState<string | null>(null);
+  const [orderComment, setOrderComment] = useState<string>("");
 
   const homeScrollYRef = useRef(0);
 
@@ -37,6 +38,28 @@ const App: React.FC = () => {
   const cartRef = useRef<CartItem[]>([]);
   const isHistoryFirstRef = useRef(true);
   const isPopNavRef = useRef(false);
+  const lastPushedViewRef = useRef<AppView>("home");
+
+  const getThumbUrl = useCallback((url: string, thumb: string = "400x500") => {
+    const raw = String(url || "").trim();
+    if (!raw) return raw;
+
+    try {
+      const u = new URL(raw);
+
+      if (!u.searchParams.has("thumb") && u.pathname.includes("/api/files/")) {
+        u.searchParams.set("thumb", thumb);
+      }
+
+      if (u.searchParams.has("w")) {
+        u.searchParams.set("w", "600");
+      }
+
+      return u.toString();
+    } catch {
+      return raw;
+    }
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -57,6 +80,13 @@ const App: React.FC = () => {
     const y = homeScrollYRef.current || 0;
     requestAnimationFrame(() => {
       window.scrollTo({ top: y, behavior });
+    });
+  };
+
+  const scrollHomeToTop = (behavior: "auto" | "smooth" = "auto") => {
+    homeScrollYRef.current = 0;
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior });
     });
   };
 
@@ -151,7 +181,11 @@ const App: React.FC = () => {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useGetExternalProducts();
+  } = useGetExternalProducts({
+    search: searchQuery,
+    brand: activeBrand === "Все" ? "" : activeBrand,
+    category: activeCategory === "Все" ? "" : activeCategory
+  });
 
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
@@ -193,7 +227,7 @@ const App: React.FC = () => {
           name,
           brand: brand || " ",
           category,
-          price: hasPrice ? rawPrice : 1,
+          price: hasPrice ? rawPrice : 0,
           hasPrice,
           images: images.length
             ? images
@@ -205,6 +239,13 @@ const App: React.FC = () => {
         };
       })
       .filter((p) => Boolean(p.id) && Boolean(p.name));
+  }, [externalData]);
+
+  const totalItems = useMemo(() => {
+    const pages = (externalData?.pages || []) as ExternalProductsPagedResponse[];
+    const first = pages[0];
+    const v = Number((first as any)?.totalItems);
+    return Number.isFinite(v) && v >= 0 ? v : 0;
   }, [externalData]);
 
   const sourceProducts = apiProducts;
@@ -304,7 +345,7 @@ const App: React.FC = () => {
       if (!view) {
         setSelectedProduct(null);
         setCurrentView("home");
-        restoreHomeScroll();
+        scrollHomeToTop();
         return;
       }
 
@@ -330,7 +371,9 @@ const App: React.FC = () => {
       setCurrentView(view);
 
       if (view === "home") {
-        restoreHomeScroll();
+        const fromView = state?.fromView as AppView | undefined;
+        if (fromView === "product-detail") restoreHomeScroll();
+        else scrollHomeToTop();
       }
     };
 
@@ -347,12 +390,14 @@ const App: React.FC = () => {
       return;
     }
 
+    const fromView = lastPushedViewRef.current;
     const state =
       currentView === "product-detail"
-      ? { view: currentView, productId: selectedProduct?.id || "" }
-      : { view: currentView };
+      ? { view: currentView, productId: selectedProduct?.id || "", fromView }
+      : { view: currentView, fromView };
 
     window.history.pushState(state, "");
+    lastPushedViewRef.current = currentView;
   }, [currentView, selectedProduct?.id]);
 
   const derivedBrands = useMemo<string[]>(() => {
@@ -376,16 +421,8 @@ const App: React.FC = () => {
   }, [sourceProducts]);
 
   const filteredAndSortedProducts = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    return sourceProducts.filter((p) => {
-      const matchesBrand = activeBrand === "Все" || p.brand === activeBrand;
-      const matchesCategory =        activeCategory === "Все" || p.category === activeCategory;
-      const matchesSearch =        p.name.toLowerCase().includes(q) ||
-        p.brand.toLowerCase().includes(q) ||
-        String(p.id).toLowerCase().includes(q);
-      return matchesBrand && matchesCategory && matchesSearch;
-    });
-  }, [activeBrand, activeCategory, searchQuery, sourceProducts]);
+    return sourceProducts;
+  }, [sourceProducts]);
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
@@ -421,11 +458,9 @@ const App: React.FC = () => {
     if (!Number.isFinite(price) || price <= 0) return sum;
     return sum + price * qty;
   }, 0);
-  const cartTotalText = cartHasUnknownPrice
-    ? cartTotal > 0
-      ? `${cartTotal.toLocaleString()} ₽ (без товаров с уточняемой ценой)`
-      : "цена уточняется"
-    : `${cartTotal.toLocaleString()} ₽`;
+  const cartTotalText = cartTotal > 0
+    ? `${cartTotal.toLocaleString()} ₽`
+    : "Цена по запросу";
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const resetFilters = () => {
@@ -451,6 +486,7 @@ const App: React.FC = () => {
 
     const payload = {
       initData,
+      comment: orderComment,
       items: cart.map((it) => ({
         id: it.id,
         title: it.name,
@@ -466,6 +502,7 @@ const App: React.FC = () => {
       await Api.post("/orders", payload, { timeout: 30000 });
       alert("Заказ отправлен менеджеру");
       setCart([]);
+      setOrderComment("");
       setCurrentView("home");
     } catch (e: any) {
       const msg =        e?.response?.data?.error
@@ -544,8 +581,32 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {/* Brand Select */}
+      {/* Filters */}
       <div className="px-6 mb-12 space-y-4">
+        {/* Categories tabs */}
+        <div className="-mx-6 px-6">
+          <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1">
+            {derivedCategories.map((category) => {
+              const active = category === activeCategory;
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setActiveCategory(category)}
+                  className={`shrink-0 rounded-full border px-4 py-2 text-[11px] font-semibold tracking-normal transition-all duration-200 ease-out premium-shadow active:scale-[0.98] ${
+                    active
+                      ? "border-white/15 bg-white text-black"
+                      : "border-white/10 bg-white/5 text-white/75 hover:bg-white/10"
+                  }`}
+                >
+                  {category === "Все" ? "Все" : category}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Brand Select */}
         <div className="relative group">
           <select
             value={activeBrand}
@@ -555,20 +616,6 @@ const App: React.FC = () => {
             <option value="Все">Все бренды</option>
             {derivedBrands.filter((b) => b !== "Все").map((brand) => (
               <option key={brand} value={brand}>{brand}</option>
-            ))}
-          </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition-colors group-hover:text-white/60" />
-        </div>
-
-        <div className="relative group">
-          <select
-            value={activeCategory}
-            onChange={(e) => setActiveCategory(e.target.value)}
-            className="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
-          >
-            <option value="Все">Все категории</option>
-            {derivedCategories.filter((c) => c !== "Все").map((category) => (
-              <option key={category} value={category}>{category}</option>
             ))}
           </select>
           <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition-colors group-hover:text-white/60" />
@@ -587,7 +634,7 @@ const App: React.FC = () => {
 
       <div className="px-6 mb-6">
         <p className="text-[12px] font-medium tracking-normal [font-kerning:normal] text-white/55">
-          Товаров: {filteredAndSortedProducts.length}
+          Товаров: {totalItems}
         </p>
       </div>
 
@@ -612,8 +659,11 @@ const App: React.FC = () => {
             <div key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => navigateToProduct(product)}>
               <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow transition-all duration-300 ease-out group-hover:border-white/20 group-hover:bg-white/7">
                 <img
-                  src={product.images[0]}
+                  src={getThumbUrl(product.images[0])}
                   alt={product.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
                 />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
 
@@ -641,7 +691,7 @@ const App: React.FC = () => {
                 </button>
               </div>
               <div className="px-2">
-                <h3 className="line-clamp-2 min-h-[2.6em] text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
+                <h3 className="line-clamp-2 min-h-[2.6em] -mt-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
               </div>
             </div>
             );
@@ -692,7 +742,13 @@ const App: React.FC = () => {
                 onClick={() => navigateToProduct(product)}
               >
                 <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow">
-                  <img src={product.images[0]} alt={product.name} />
+                  <img
+                    src={getThumbUrl(product.images[0])}
+                    alt={product.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
 
                   <div className="premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl">
@@ -717,6 +773,7 @@ const App: React.FC = () => {
 
     const isFavorited = favorites.includes(String(selectedProduct.id));
     const isBumping = favoriteBumpId === String(selectedProduct.id);
+    const isInCart = cart.some((it) => String(it.id) === String(selectedProduct.id));
 
     const handleGalleryTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
       touchStartXRef.current = e.touches[0]?.clientX ?? null;
@@ -748,17 +805,27 @@ const App: React.FC = () => {
     };
 
     return (
-      <div className="animate-in slide-in-from-right bg-[#050505] pb-36 pt-16 text-white duration-500">
+      <div className="animate-in slide-in-from-right bg-[#050505] pb-36 pt-0 text-white duration-500">
         {/* Hero Image Section */}
         <div
           className="relative aspect-[4/5] w-full overflow-hidden"
           onTouchStart={handleGalleryTouchStart}
           onTouchMove={handleGalleryTouchMove}
           onTouchEnd={handleGalleryTouchEnd}>
+          <button
+            type="button"
+            onClick={() => window.history.back()}
+            className="premium-shadow absolute left-4 top-4 z-20 rounded-2xl border border-white/10 bg-black/40 p-2.5 text-white/90 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.98]"
+            aria-label="Назад"
+          >
+            <ArrowLeft size={18} />
+          </button>
+
           <img
             src={selectedProduct.images[currentImageIndex]}
             alt={selectedProduct.name}
             className="h-full w-full object-cover transition-opacity duration-700 ease-in-out"
+            decoding="async"
           />
 
           <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black to-transparent" />
@@ -811,18 +878,15 @@ const App: React.FC = () => {
                 {selectedProduct.name}
               </h2>
 
-              <p className="mt-6 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
-ID:{selectedProduct.id}</p>
-
             </div>
             <div className="text-right">
               {selectedProduct.hasPrice ? (
-                <p className="select-none text-2xl font-extrabold text-white opacity-0">
+                <p className="text-2xl font-extrabold text-white">
                   {selectedProduct.price.toLocaleString()} ₽
                 </p>
               ) : (
-                <p className="select-none text-2xl font-extrabold text-white opacity-0">
-                  {" "}
+                <p className="text-[12px] font-semibold tracking-normal text-white/60">
+                  Цена по запросу
                 </p>
               )}
               <div className="ml-auto mt-2 h-1 w-8 bg-white/40" />
@@ -859,10 +923,20 @@ ID:{selectedProduct.id}</p>
             <div className="flex items-stretch gap-4">
               <button
                 type="button"
-                onClick={() => addToCart(selectedProduct)}
-                className="flex-1 rounded-2xl bg-white py-4 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
+                onClick={() => {
+                  if (isInCart) {
+                    setCurrentView("cart");
+                    return;
+                  }
+                  addToCart(selectedProduct);
+                }}
+                className={`flex-1 rounded-2xl py-4 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] shadow-xl transition-all duration-200 ease-out active:scale-[0.98] ${
+                  isInCart
+                    ? "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    : "bg-white text-black hover:bg-white/90"
+                }`}
               >
-                Добавить в корзину
+                {isInCart ? "Перейти в корзину →" : "Добавить в корзину"}
               </button>
 
               <button
@@ -896,8 +970,13 @@ ID:{selectedProduct.id}</p>
           cart.length === 0 ? "h-[100dvh] overflow-hidden" : "min-h-screen"
         }`}
       >
-        <div className="mb-12">
+        <div className="mb-12 flex items-baseline justify-between gap-6">
           <h2 className="text-5xl font-extrabold tracking-tight">Корзина</h2>
+          {cartCount > 0 && (
+            <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[12px] font-semibold text-white/80">
+              {cartCount}
+            </span>
+          )}
         </div>
 
       {cart.length === 0 ? (
@@ -929,14 +1008,24 @@ ID:{selectedProduct.id}</p>
                 onClick={() => navigateToProduct(item)}
               >
                 <div className="h-32 w-28 flex-shrink-0 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 premium-shadow transition-transform duration-500 ease-out group-hover:scale-[1.03]">
-                  <img src={item.images[0]} alt={item.name} className="w-full h-full object-cover" />
+                  <img
+                    src={getThumbUrl(item.images[0], "240x320")}
+                    alt={item.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <div className="flex-1 flex flex-col gap-3">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="mb-1 text-[9px] font-light uppercase tracking-[0.34em] text-white/40">{item.brand}</p>
                       <h4 className="mb-1 text-[15px] font-semibold leading-tight text-white">{item.name}</h4>
-                      <p className="text-sm font-bold text-white/80 opacity-0 select-none">{item.price.toLocaleString()} ₽</p>
+                      {item.hasPrice !== false && Number(item.price) > 0 ? (
+                        <p className="text-sm font-bold text-white/80">{Number(item.price).toLocaleString()} ₽</p>
+                      ) : (
+                        <p className="text-[12px] font-semibold text-white/55">Цена по запросу</p>
+                      )}
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -item.quantity); }} className="p-2 text-white/25 transition-colors hover:text-red-400">
                       <Trash2 size={20} />
@@ -959,10 +1048,23 @@ ID:{selectedProduct.id}</p>
                 {cartTotalText}
               </span>
             </div>
+            <div className="mt-8">
+              <label className="mb-3 block text-[10px] font-light uppercase tracking-[0.42em] text-white/40">
+                Комментарий
+              </label>
+              <textarea
+                value={orderComment}
+                onChange={(e) => setOrderComment(e.target.value)}
+                rows={3}
+                placeholder="Напишите комментарий к заказу"
+                className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-[13px] font-medium text-white/80 outline-none transition-all duration-200 ease-out premium-shadow placeholder:text-white/35 focus:border-white/20 focus:ring-2 focus:ring-white/10"
+              />
+            </div>
+
             <button
               onClick={sendOrderToManager}
               disabled={isSendingOrder}
-              className="w-full rounded-2xl bg-white py-6 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98] disabled:opacity-60"
+              className="mt-6 w-full rounded-2xl bg-white py-6 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98] disabled:opacity-60"
             >
               {isSendingOrder ? 'Отправляем…' : 'Отправить менеджеру'}
             </button>
@@ -976,47 +1078,39 @@ ID:{selectedProduct.id}</p>
   return (
     <div className="relative mx-auto min-h-screen max-w-md overflow-x-hidden bg-gradient-to-b from-black via-[#070707] to-[#050505] text-white">
       {/* Dynamic Navbar */}
-      <nav
-        className={`fixed top-0 z-[120] flex h-14 w-full max-w-md items-center justify-center px-6 transition-colors duration-300 ${
-          scrolled || currentView !== "home"
-            ? "blur-nav border-b border-white/10"
-            : "bg-transparent"
-        }`}>
-        {currentView !== "home" && (
+      {currentView !== "product-detail" && (
+        <nav
+          className={`fixed top-0 z-[120] flex h-14 w-full max-w-md items-center justify-center px-6 transition-colors duration-300 ${
+            scrolled || currentView !== "home"
+              ? "blur-nav border-b border-white/10"
+              : "bg-transparent"
+          }`}>
+          {currentView !== "home" && (
+            <button
+              type="button"
+              onClick={() => window.history.back()}
+              className="premium-shadow absolute left-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]">
+              <ArrowLeft size={18} />
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => window.history.back()}
-            className="premium-shadow absolute left-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]">
-            <ArrowLeft size={18} />
+            onClick={() => {
+              setCurrentView("home");
+              if (currentView === "cart") scrollHomeToTop("smooth");
+              else restoreHomeScroll("smooth");
+            }}
+            className="cursor-pointer select-none"
+            aria-label="На главную"
+          >
+            <img
+              src="/logo.svg"
+              alt="Logo"
+              className="logo-auto h-7 w-auto opacity-95"
+            />
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            setCurrentView("home");
-            restoreHomeScroll("smooth");
-          }}
-          className="cursor-pointer select-none"
-          aria-label="На главную"
-        >
-          <img
-            src="/logo.svg"
-            alt="Logo"
-            className="logo-auto h-7 w-auto opacity-95"
-          />
-        </button>
-
-        {currentView === "cart" && cartCount > 0 && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center">
-            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-2 text-[11px] font-extrabold text-black">
-              {cartCount}
-            </span>
-            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.22em] text-white/55">
-              Корзина
-            </span>
-          </div>
-        )}
-      </nav>
+        </nav>
+      )}
 
       <main>
         {currentView === "home" && HomeView()}
@@ -1033,7 +1127,8 @@ ID:{selectedProduct.id}</p>
             type="button"
             onClick={() => {
               setCurrentView("home");
-              restoreHomeScroll("smooth");
+              if (currentView === "cart") scrollHomeToTop("smooth");
+              else restoreHomeScroll("smooth");
             }}
             className={`transition-all ${
               currentView === "home"
@@ -1056,7 +1151,7 @@ ID:{selectedProduct.id}</p>
             <Heart
               size={22}
               strokeWidth={currentView === "favorites" ? 3 : 2}
-              className={favorites.length ? "fill-red-500 text-red-500" : undefined}
+              className={currentView === "favorites" ? "text-white" : undefined}
             />
           </button>
 
@@ -1083,7 +1178,6 @@ ID:{selectedProduct.id}</p>
       )}
     </div>
   );
-}
-
+};
 
 export default App;

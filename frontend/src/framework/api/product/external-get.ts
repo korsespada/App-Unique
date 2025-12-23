@@ -11,14 +11,31 @@ export type ExternalProductsPagedResponse = ExternalProductsResponse & {
   hasNextPage: boolean;
 };
 
+export type ExternalProductsQuery = {
+  search?: string;
+  brand?: string;
+  category?: string;
+};
+
 async function fetchExternalProductsPage(
-  page: number
+  page: number,
+  query?: ExternalProductsQuery
 ): Promise<ExternalProductsPagedResponse> {
   try {
+    const search = String(query?.search || '').trim();
+    const brand = String(query?.brand || '').trim();
+    const category = String(query?.category || '').trim();
+
     const { data } = await Api.get<ExternalProductsPagedResponse>(
       "/external-products",
       {
-        params: { page, perPage: 40 }
+        params: {
+          page,
+          perPage: 40,
+          ...(search ? { search } : {}),
+          ...(brand ? { brand } : {}),
+          ...(category ? { category } : {})
+        }
       }
     );
     return data;
@@ -44,10 +61,14 @@ async function fetchExternalProductsPage(
   }
 }
 
-export function useGetExternalProducts() {
+export function useGetExternalProducts(query?: ExternalProductsQuery) {
+  const search = String(query?.search || '').trim();
+  const brand = String(query?.brand || '').trim();
+  const category = String(query?.category || '').trim();
+
   return useInfiniteQuery<ExternalProductsPagedResponse, Error>(
-    ["external-products"],
-    ({ pageParam = 1 }) => fetchExternalProductsPage(Number(pageParam)),
+    ["external-products", { search, brand, category }],
+    ({ pageParam = 1 }) => fetchExternalProductsPage(Number(pageParam), { search, brand, category }),
     {
       getNextPageParam: (lastPage) =>
         lastPage.hasNextPage ? lastPage.page + 1 : undefined,

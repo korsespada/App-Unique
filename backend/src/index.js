@@ -366,7 +366,9 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
       return res.status(500).json({ error: 'Бот не сконфигурирован' });
     }
 
-    const { initData, items } = req.body;
+    const { initData, items, comment } = req.body;
+    const safeCommentRaw = typeof comment === 'string' ? comment.trim() : '';
+    const safeComment = safeCommentRaw.slice(0, 1000);
 
     let initDataHash = '';
     try {
@@ -474,9 +476,11 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
       `👤 Клиент: ${`${safeFirst} ${safeLast}`.trim()}`.trim(),
       safeUsername ? `@${safeUsername}` : 'username: отсутствует',
       `Telegram ID: <code>${safeTelegramId}</code>`,
+      safeComment ? `Комментарий: ${escapeHtml(safeComment)}` : '',
       '',
       '🛒 Товары:'
     ]
+      .filter(Boolean)
       .concat(
         normalizedItems.map((it, idx) => {
           const qty = Number(it?.quantity) || 1;
@@ -490,7 +494,7 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
           const title = link ? `<a href="${escapeHtml(link)}">${titleText}</a>` : titleText;
 
           if (!hasPrice || !Number.isFinite(price) || price <= 0) {
-            return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт — цена уточняется`;
+            return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт — Цена по запросу`;
           }
 
           const lineTotal = price * qty;
@@ -499,9 +503,9 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
       )
       .concat([
         '',
-        hasUnknownPrice
-          ? (total > 0 ? `💰 Итого (без товаров с уточняемой ценой): ${escapeHtml(String(total))} ₽` : '💰 Итого: цена уточняется')
-          : `💰 Итого: ${escapeHtml(String(total))} ₽`,
+        total > 0
+          ? `💰 Итого: ${escapeHtml(String(total))} ₽`
+          : '💰 Итого: Цена по запросу',
         '',
         'Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.'
       ])
