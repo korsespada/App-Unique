@@ -62,7 +62,7 @@ function Checkout() {
 
   useEffect(() => {
     if (!locState) {
-      navigate("/cart");
+      navigate("/");
     } else {
       refetch();
     }

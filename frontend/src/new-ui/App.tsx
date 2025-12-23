@@ -4,10 +4,10 @@ import {
 } from "@framework/api/product/external-get";
 import Api from "@framework/api/utils/api-config";
 import {
- ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, Search, ShoppingBag, Trash2, X
+  ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Heart, Minus, Plus, Search, ShoppingBag, Trash2, X
 } from "lucide-react";
 import React, {
- useEffect, useMemo, useRef, useState
+  useCallback, useEffect, useMemo, useRef, useState
 } from "react";
 
 import { AppView, CartItem, Product } from "./types";
@@ -23,6 +23,10 @@ const App: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [startProductId, setStartProductId] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [favoriteBumpId, setFavoriteBumpId] = useState<string | null>(null);
+
+  const homeScrollYRef = useRef(0);
 
   // Gallery state for ProductDetail
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -41,6 +45,22 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const onScroll = () => {
+      if (currentView !== "home") return;
+      homeScrollYRef.current = window.scrollY || 0;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [currentView]);
+
+  const restoreHomeScroll = (behavior: "auto" | "smooth" = "auto") => {
+    const y = homeScrollYRef.current || 0;
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: y, behavior });
+    });
+  };
+
+  useEffect(() => {
     const tg = window.Telegram?.WebApp;
     const startParam = String(tg?.initDataUnsafe?.start_param || "").trim();
     if (!startParam) return;
@@ -49,6 +69,39 @@ const App: React.FC = () => {
       const id = startParam.slice("product_".length).trim();
       if (id) setStartProductId(id);
     }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("tg_favorites");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      setFavorites(parsed.map((x) => String(x)).filter(Boolean));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("tg_favorites", JSON.stringify(favorites));
+    } catch {
+      // ignore
+    }
+  }, [favorites]);
+
+  const toggleFavorite = useCallback((productId: string) => {
+    const id = String(productId);
+    setFavorites((prev) => {
+      const has = prev.includes(id);
+      const next = has ? prev.filter((x) => x !== id) : [...prev, id];
+      return next;
+    });
+    setFavoriteBumpId(id);
+    window.setTimeout(() => {
+      setFavoriteBumpId((curr) => (curr === id ? null : curr));
+    }, 180);
   }, []);
 
   useEffect(() => {
@@ -79,6 +132,17 @@ const App: React.FC = () => {
       // ignore
     }
   }, [cart]);
+
+  useEffect(() => {
+    if (currentView !== "cart") return undefined;
+    if (cart.length !== 0) return undefined;
+
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [cart.length, currentView]);
 
   const {
     data: externalData,
@@ -199,11 +263,13 @@ const App: React.FC = () => {
   }, [sourceProducts]);
 
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
+    const tg = window.Telegram?.WebApp as any;
     const backButton = tg?.BackButton;
-    if (!backButton) return;
+    if (!backButton) return undefined;
 
-    const handler = () => window.history.back();
+    const handler = () => {
+      window.history.back();
+    };
 
     try {
       backButton.onClick?.(handler);
@@ -221,7 +287,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
+    const tg = window.Telegram?.WebApp as any;
     const backButton = tg?.BackButton;
     if (!backButton) return;
     if (currentView === "home") backButton.hide();
@@ -238,6 +304,7 @@ const App: React.FC = () => {
       if (!view) {
         setSelectedProduct(null);
         setCurrentView("home");
+        restoreHomeScroll();
         return;
       }
 
@@ -261,6 +328,10 @@ const App: React.FC = () => {
 
       setSelectedProduct(null);
       setCurrentView(view);
+
+      if (view === "home") {
+        restoreHomeScroll();
+      }
     };
 
     window.history.replaceState({ view: "home" }, "");
@@ -406,12 +477,16 @@ const App: React.FC = () => {
     }
   };
 
-  const navigateToProduct = (product: Product) => {
-    setSelectedProduct(product);
-    setCurrentImageIndex(0);
-    setCurrentView("product-detail");
-    window.scrollTo(0, 0);
-  };
+  const navigateToProduct = useCallback(
+    (product: Product) => {
+      if (currentView === "home") homeScrollYRef.current = window.scrollY || 0;
+      setSelectedProduct(product);
+      setCurrentImageIndex(0);
+      setCurrentView("product-detail");
+      window.scrollTo(0, 0);
+    },
+    [currentView]
+  );
 
   useEffect(() => {
     if (!startProductId) return;
@@ -424,7 +499,7 @@ const App: React.FC = () => {
 
     navigateToProduct(product);
     setStartProductId(null);
-  }, [startProductId, sourceProducts]);
+  }, [navigateToProduct, sourceProducts, startProductId]);
 
   function HomeView() {
     return (
@@ -441,12 +516,12 @@ const App: React.FC = () => {
             autoCorrect="off"
             autoCapitalize="none"
             enterKeyHint="search"
-            className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-6 pr-12 text-[13px] font-medium tracking-tight text-white placeholder:text-white/40 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
+            className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-6 pr-12 text-[13px] font-medium tracking-normal [font-kerning:normal] text-white placeholder:text-white/40 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
           />
           {searchQuery.trim() ? (
             <button
               type="button"
-              onClick={() => setSearchQuery('')}
+              onClick={() => setSearchQuery("")}
               className="absolute right-4 top-1/2 -translate-y-1/2 rounded-xl p-2 text-white/40 transition-colors hover:text-white/70"
               aria-label="Очистить поиск"
             >
@@ -456,6 +531,17 @@ const App: React.FC = () => {
             <Search size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/35" />
           )}
         </div>
+
+        {currentView === "product-detail" && (
+          <button
+            type="button"
+            onClick={() => setCurrentView("cart")}
+            className="premium-shadow absolute right-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]"
+            aria-label="Открыть корзину"
+          >
+            <ShoppingBag size={18} />
+          </button>
+        )}
       </div>
 
       {/* Brand Select */}
@@ -466,8 +552,8 @@ const App: React.FC = () => {
             onChange={(e) => setActiveBrand(e.target.value)}
             className="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
           >
-            <option value="Все">Бренд: Все</option>
-            {derivedBrands.filter((b) => b !== 'Все').map((brand) => (
+            <option value="Все">Все бренды</option>
+            {derivedBrands.filter((b) => b !== "Все").map((brand) => (
               <option key={brand} value={brand}>{brand}</option>
             ))}
           </select>
@@ -480,13 +566,29 @@ const App: React.FC = () => {
             onChange={(e) => setActiveCategory(e.target.value)}
             className="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
           >
-            <option value="Все">Категория: Все</option>
-            {derivedCategories.filter((c) => c !== 'Все').map((category) => (
+            <option value="Все">Все категории</option>
+            {derivedCategories.filter((c) => c !== "Все").map((category) => (
               <option key={category} value={category}>{category}</option>
             ))}
           </select>
           <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition-colors group-hover:text-white/60" />
         </div>
+
+        {(activeBrand !== "Все" || activeCategory !== "Все" || searchQuery.trim()) && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="w-full text-left text-[12px] font-semibold tracking-normal [font-kerning:normal] text-red-400"
+          >
+            Сбросить фильтры
+          </button>
+        )}
+      </div>
+
+      <div className="px-6 mb-6">
+        <p className="text-[12px] font-medium tracking-normal [font-kerning:normal] text-white/55">
+          Товаров: {filteredAndSortedProducts.length}
+        </p>
       </div>
 
       {/* Modern Grid */}
@@ -502,22 +604,48 @@ const App: React.FC = () => {
             </div>
           ))
         ) : filteredAndSortedProducts.length > 0 ? (
-          filteredAndSortedProducts.map(product => (
+          filteredAndSortedProducts.map((product) => {
+            const isFavorited = favorites.includes(String(product.id));
+            const isBumping = favoriteBumpId === String(product.id);
+
+            return (
             <div key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => navigateToProduct(product)}>
               <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow transition-all duration-300 ease-out group-hover:border-white/20 group-hover:bg-white/7">
                 <img
                   src={product.images[0]}
                   alt={product.name}
-                  className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
                 />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFavorite(product.id);
+                  }}
+                  aria-label={
+                    isFavorited ? "Убрать из избранного" : "Добавить в избранное"
+                  }
+                  className={`premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96] ${
+                    isBumping ? "scale-[1.06]" : "scale-100"
+                  }`}
+                >
+                  <Heart
+                    size={18}
+                    className={
+                      isFavorited
+                        ? "fill-red-500 text-red-500 transition-colors"
+                        : "text-white/80 transition-colors"
+                    }
+                  />
+                </button>
               </div>
               <div className="px-2">
-                <p className="mb-1 text-[9px] font-light uppercase tracking-[0.28em] text-white/40">{product.brand}</p>
                 <h3 className="line-clamp-2 min-h-[2.6em] text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
               </div>
             </div>
-          ))
+            );
+          })
         ) : (
           <div className="col-span-2 py-40 text-center">
             <p className="text-[13px] font-medium tracking-wide text-white/55">Ничего не найдено</p>
@@ -538,8 +666,57 @@ const App: React.FC = () => {
     );
   }
 
+  function FavoritesView() {
+    const favoriteProducts = filteredAndSortedProducts.filter((p) =>
+      favorites.includes(String(p.id))
+    );
+
+    return (
+      <div className="animate-in fade-in duration-700 pb-32 pt-24 text-white">
+        <div className="px-8 mb-12">
+          <h2 className="text-5xl font-extrabold tracking-tight">Избранное</h2>
+        </div>
+
+        {favoriteProducts.length === 0 ? (
+          <div className="px-8 py-40 text-center">
+            <p className="text-[13px] font-medium tracking-normal [font-kerning:normal] text-white/55">
+              Пока пусто
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-x-5 gap-y-10 px-6">
+            {favoriteProducts.map((product) => (
+              <div
+                key={product.id}
+                className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]"
+                onClick={() => navigateToProduct(product)}
+              >
+                <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow">
+                  <img src={product.images[0]} alt={product.name} />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+
+                  <div className="premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl">
+                    <Heart size={18} className="fill-red-500 text-red-500" />
+                  </div>
+                </div>
+                <div className="px-2">
+                  <h3 className="line-clamp-2 min-h-[2.6em] text-[13px] font-semibold tracking-tight text-white">
+                    {product.name}
+                  </h3>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function ProductDetailView() {
     if (!selectedProduct) return null;
+
+    const isFavorited = favorites.includes(String(selectedProduct.id));
+    const isBumping = favoriteBumpId === String(selectedProduct.id);
 
     const handleGalleryTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
       touchStartXRef.current = e.touches[0]?.clientX ?? null;
@@ -571,7 +748,7 @@ const App: React.FC = () => {
     };
 
     return (
-      <div className="animate-in slide-in-from-right bg-[#050505] pb-32 pt-16 text-white duration-500">
+      <div className="animate-in slide-in-from-right bg-[#050505] pb-36 pt-16 text-white duration-500">
         {/* Hero Image Section */}
         <div
           className="relative aspect-[4/5] w-full overflow-hidden"
@@ -637,14 +814,6 @@ const App: React.FC = () => {
               <p className="mt-6 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
 ID:{selectedProduct.id}</p>
 
-              <button
-                onClick={() => {
-                  addToCart(selectedProduct);
-                  setCurrentView("cart");
-                }}
-                className="mt-6 w-full rounded-3xl bg-white py-5 text-[14px] font-extrabold uppercase tracking-normal text-black shadow-2xl shadow-black/40 transition-all duration-200 ease-out [font-kerning:normal] hover:bg-white/90 active:scale-[0.98]">
-                В корзину
-              </button>
             </div>
             <div className="text-right">
               {selectedProduct.hasPrice ? (
@@ -684,27 +853,68 @@ ID:{selectedProduct.id}</p>
             </div>
           </div>
         </div>
+
+        <div className="fixed bottom-0 z-[130] w-full max-w-md">
+          <div className="rounded-t-[2.5rem] border-t border-white/10 bg-black/65 px-6 pb-6 pt-4 backdrop-blur-2xl">
+            <div className="flex items-stretch gap-4">
+              <button
+                type="button"
+                onClick={() => addToCart(selectedProduct)}
+                className="flex-1 rounded-2xl bg-white py-4 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
+              >
+                Добавить в корзину
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toggleFavorite(selectedProduct.id)}
+                aria-label={isFavorited ? "Убрать из избранного" : "Добавить в избранное"}
+                className={`flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition-all duration-200 ease-out active:scale-[0.96] ${
+                  isBumping ? "scale-[1.06]" : "scale-100"
+                }`}
+              >
+                <Heart
+                  size={22}
+                  className={
+                    isFavorited
+                      ? "text-red-500 fill-red-500 transition-colors"
+                      : "text-white/80 transition-colors"
+                  }
+                />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   function CartView() {
     return (
-<div className="min-h-screen animate-in fade-in duration-500 px-8 pt-24 pb-32 text-white">
-      <div className="flex justify-between items-end mb-12">
-        <h2 className="text-5xl font-extrabold tracking-tight">Корзина</h2>
-        <span className="text-lg font-semibold text-white/35">{cartCount}</span>
-      </div>
+<div
+        className={`animate-in fade-in duration-500 px-8 pt-24 pb-32 text-white ${
+          cart.length === 0 ? "h-[100dvh] overflow-hidden" : "min-h-screen"
+        }`}
+      >
+        <div className="mb-12">
+          <h2 className="text-5xl font-extrabold tracking-tight">Корзина</h2>
+        </div>
 
       {cart.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-40 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center text-center">
           <div className="mb-10 flex h-32 w-32 items-center justify-center rounded-[3rem] border border-white/10 bg-white/5 premium-shadow">
             <ShoppingBag size={40} className="text-white/25" />
           </div>
-          <p className="mb-12 font-semibold tracking-tight text-white/55">Ваша корзина пуста</p>
+          <p className="mb-12 font-semibold tracking-tight text-white/55">
+            Ваша корзина пуста
+          </p>
           <button
-            onClick={() => setCurrentView('home')}
-            className="rounded-2xl bg-white px-12 py-5 text-[10px] font-extrabold uppercase tracking-[0.34em] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
+            type="button"
+            onClick={() => {
+              setCurrentView("home");
+              restoreHomeScroll();
+            }}
+            className="rounded-2xl bg-white px-12 py-4 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
           >
             В каталог
           </button>
@@ -774,38 +984,56 @@ ID:{selectedProduct.id}</p>
         }`}>
         {currentView !== "home" && (
           <button
+            type="button"
             onClick={() => window.history.back()}
             className="premium-shadow absolute left-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]">
             <ArrowLeft size={18} />
           </button>
         )}
-        <div
+        <button
+          type="button"
           onClick={() => {
             setCurrentView("home");
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            restoreHomeScroll("smooth");
           }}
-          className="cursor-pointer select-none">
+          className="cursor-pointer select-none"
+          aria-label="На главную"
+        >
           <img
             src="/logo.svg"
             alt="Logo"
             className="logo-auto h-7 w-auto opacity-95"
           />
-        </div>
+        </button>
+
+        {currentView === "cart" && cartCount > 0 && (
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center">
+            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-2 text-[11px] font-extrabold text-black">
+              {cartCount}
+            </span>
+            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.22em] text-white/55">
+              Корзина
+            </span>
+          </div>
+        )}
       </nav>
 
       <main>
         {currentView === "home" && HomeView()}
         {currentView === "product-detail" && ProductDetailView()}
         {currentView === "cart" && CartView()}
+        {currentView === "favorites" && FavoritesView()}
       </main>
 
       {/* Stylish Minimal Bottom Nav */}
+      {currentView !== "product-detail" && (
       <div className="fixed bottom-0 z-[110] flex w-full max-w-md justify-center px-12 pb-6 pt-2">
-        <div className="flex items-center gap-16 rounded-[2rem] border border-white/10 bg-black/50 px-12 py-3 shadow-2xl backdrop-blur-2xl">
+        <div className="flex items-center gap-12 rounded-[2rem] border border-white/10 bg-black/50 px-12 py-3 shadow-2xl backdrop-blur-2xl">
           <button
+            type="button"
             onClick={() => {
               setCurrentView("home");
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              restoreHomeScroll("smooth");
             }}
             className={`transition-all ${
               currentView === "home"
@@ -814,7 +1042,26 @@ ID:{selectedProduct.id}</p>
             }`}>
             <Search size={22} strokeWidth={currentView === "home" ? 3 : 2} />
           </button>
+
           <button
+            type="button"
+            onClick={() => setCurrentView("favorites")}
+            className={`transition-all ${
+              currentView === "favorites"
+                ? "scale-125 text-white"
+                : "text-neutral-500 hover:text-white"
+            }`}
+            aria-label="Избранное"
+          >
+            <Heart
+              size={22}
+              strokeWidth={currentView === "favorites" ? 3 : 2}
+              className={favorites.length ? "fill-red-500 text-red-500" : undefined}
+            />
+          </button>
+
+          <button
+            type="button"
             onClick={() => setCurrentView("cart")}
             className={`relative transition-all ${
               currentView === "cart"
@@ -833,6 +1080,7 @@ ID:{selectedProduct.id}</p>
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

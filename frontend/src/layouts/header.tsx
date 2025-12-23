@@ -6,7 +6,7 @@ function AppHeader() {
     <div className="flex w-full items-center justify-between rounded-lg ">
       <Link
         className="flex items-center gap-2 rounded-lg  bg-[var(--tg-theme-secondary-bg-color)]  p-3"
-        to="/cart">
+        to="/">
         <ShoppingCartOutlined style={{ fontSize: "22px" }} />
         <span>Моя корзина</span>
       </Link>

@@ -17,7 +17,6 @@ export { default as BotMasters } from "./bot/masters/list";
 export { default as BotSetting } from "./bot/setting";
 export { default as HomePage } from "./home";
 // User pages
-export { default as UserCart } from "./user/cart/index";
 export { default as Checkout } from "./user/checkout/index";
 export { default as UserProfileAddAddresses } from "./user/profile/addresses/add";
 export { default as UserProfileEditAddresses } from "./user/profile/addresses/edit";

@@ -1,4 +1,3 @@
-
 export type Category = string;
 
 export interface Product {
@@ -17,6 +16,6 @@ export interface CartItem extends Product {
   quantity: number;
 }
 
-export type AppView = 'home' | 'product-detail' | 'cart';
+export type AppView = "home" | "product-detail" | "cart" | "favorites";
 
-export type SortOption = 'newest' | 'price-asc' | 'price-desc' | 'brand-az';
+export type SortOption = "newest" | "price-asc" | "price-desc" | "brand-az";

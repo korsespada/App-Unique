@@ -17,7 +17,6 @@ import {
   CategoriesEdit,
   Checkout,
   HomePage,
-  UserCart,
   UserProfile,
   UserProfileAddAddresses,
   UserProfileAddresses,
@@ -27,7 +26,7 @@ import {
   UserProfileOrder,
   UserProfileOrderSingle
 } from "@pages/index";
-import { createBrowserRouter } from "react-router-dom";
+import { Navigate, createBrowserRouter } from "react-router-dom";
 
 export const routes = createBrowserRouter([
   {
@@ -54,7 +53,7 @@ export const routes = createBrowserRouter([
   },
   {
     path: "/cart",
-    element: <UserCart />
+    element: <Navigate to="/" replace />
   },
   {
     path: "/checkout",
