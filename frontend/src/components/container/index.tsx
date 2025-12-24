@@ -26,7 +26,7 @@ function Container({
   // eslint-disable-next-line operator-linebreak
   const headerStyle =
     titleType === "default"
-      ? "sticky top-1 z-30 flex items-center justify-between gap-1 rounded-lg bg-[var(--tg-theme-secondary-bg-color)] p-3"
+      ? "z-30 flex items-center justify-between gap-1 rounded-lg bg-[var(--tg-theme-secondary-bg-color)] p-3"
       : " z-20 text-sm text-left -mb-2 border-b-[1px] pb-1 ";
 
   return (
@@ -40,7 +40,17 @@ function Container({
           </Button>
         )}
         {backwardUrl && (
-          <Button type="primary" ghost onClick={() => navigate(backwardUrl)}>
+          <Button
+            type="primary"
+            ghost
+            onClick={() => {
+              if (typeof backwardUrl === "number") {
+                navigate(backwardUrl);
+                return;
+              }
+              navigate(String(backwardUrl));
+            }}
+          >
             Назад
           </Button>
         )}
