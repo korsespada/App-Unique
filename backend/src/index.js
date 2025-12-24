@@ -137,6 +137,42 @@ function buildMiniAppLink(botUsername, startParam) {
   return `https://t.me/${safeUsername}?startapp=${encodeURIComponent(String(startParam || ''))}`;
 }
 
+function splitTelegramMessage(text, maxLen = 3500) {
+  const raw = String(text ?? '');
+  if (raw.length <= maxLen) return [raw];
+
+  const lines = raw.split('\n');
+  const parts = [];
+  let current = '';
+
+  const pushCurrent = () => {
+    if (current) parts.push(current);
+    current = '';
+  };
+
+  for (const line of lines) {
+    const chunk = current ? `${current}\n${line}` : line;
+    if (chunk.length <= maxLen) {
+      current = chunk;
+      continue;
+    }
+
+    pushCurrent();
+
+    if (line.length <= maxLen) {
+      current = line;
+      continue;
+    }
+
+    for (let i = 0; i < line.length; i += maxLen) {
+      parts.push(line.slice(i, i + maxLen));
+    }
+  }
+
+  pushCurrent();
+  return parts.length ? parts : [''];
+}
+
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
 
 // In-memory storage for profiles (in production, use a database)
@@ -495,11 +531,16 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
-    await axios.post(url, {
-      chat_id: managerChatId,
-      text: orderText,
-      parse_mode: 'HTML'
-    });
+    const messages = splitTelegramMessage(orderText, 3500);
+    for (let i = 0; i < messages.length; i += 1) {
+      const part = messages[i];
+      await axios.post(url, {
+        chat_id: managerChatId,
+        text: part,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      });
+    }
 
     console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: normalizedItems.length });
 
