@@ -402,10 +402,6 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Некорректные данные заказа' });
     }
 
-    if (items.length > 50) {
-      return res.status(400).json({ error: 'Слишком много позиций в заказе' });
-    }
-
     const normalizedItems = items
       .map((it) => {
         const id = String(it?.id ?? '').trim().slice(0, 80);
