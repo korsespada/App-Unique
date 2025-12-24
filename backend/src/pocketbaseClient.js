@@ -14,7 +14,8 @@ function pbApi() {
 
   const headers = { Accept: 'application/json' };
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    const trimmed = String(token).trim();
+    headers.Authorization = trimmed.includes(' ') ? trimmed : trimmed;
   }
 
   return axios.create({
@@ -101,14 +102,37 @@ async function listActiveProducts(page = 1, perPage = 2000) {
   const safePage = Math.max(1, Number(page) || 1);
   const safePerPage = Math.max(1, Math.min(2000, Number(perPage) || 2000));
 
-  const { data } = await api.get('/api/collections/products/records', {
-    params: {
-      page: safePage,
-      perPage: safePerPage,
-      filter: 'status = "active"',
-      expand: 'brand,category',
-    },
-  });
+  let data;
+  try {
+    const resp = await api.get('/api/collections/products/records', {
+      params: {
+        page: safePage,
+        perPage: safePerPage,
+        filter: 'status = "active"',
+        expand: 'brand,category',
+      },
+    });
+    data = resp?.data;
+  } catch (err) {
+    const status = err?.response?.status;
+    const respData = err?.response?.data;
+    const msg =
+      (typeof respData === 'string' && respData.trim())
+        ? respData
+        : (respData && typeof respData === 'object' && (respData.message || respData.error))
+          ? String(respData.message || respData.error)
+          : (err?.message ? String(err.message) : 'PocketBase request failed');
+
+    console.error('PocketBase request failed', {
+      baseURL: api?.defaults?.baseURL,
+      path: '/api/collections/products/records',
+      status,
+      message: msg,
+    });
+
+    const statusText = Number.isFinite(status) ? String(status) : 'unknown';
+    throw new Error(`PocketBase error ${statusText}: ${msg}`);
+  }
 
   const items = Array.isArray(data?.items) ? data.items : [];
   const mapped = items.map(mapPbProductToExternal).filter((p) => p.id);

@@ -14,6 +14,28 @@ const { listActiveProducts, listAllActiveProducts } = require('../src/pocketbase
 
 const app = express();
 
+function asyncRoute(handler) {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
+}
+
+function extractAxiosStatus(err) {
+  const status = err?.response?.status;
+  return Number.isFinite(status) ? status : null;
+}
+
+function extractAxiosMessage(err) {
+  const data = err?.response?.data;
+  if (typeof data === 'string' && data.trim()) return data;
+  if (data && typeof data === 'object') {
+    const msg = data.message || data.error || data.detail;
+    if (typeof msg === 'string' && msg.trim()) return msg;
+  }
+  if (typeof err?.message === 'string' && err.message.trim()) return err.message;
+  return 'Request failed';
+}
+
 const normalizeDescription = (s) =>
   typeof s === 'string' ? s.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n') : s;
 
@@ -205,24 +227,36 @@ app.get('/health', (req, res) => {
 });
 
 // External products endpoint
-app.get('/api/external-products', async (req, res) => {
-  return handleExternalProducts(req, res);
-});
+app.get(
+  '/api/external-products',
+  asyncRoute(async (req, res) => {
+    return handleExternalProducts(req, res);
+  })
+);
 
 // Versioned external products endpoint (alias for Telegram frontend)
-app.get('/api/:version/:shop/external-products', async (req, res) => {
-  return handleExternalProducts(req, res);
-});
+app.get(
+  '/api/:version/:shop/external-products',
+  asyncRoute(async (req, res) => {
+    return handleExternalProducts(req, res);
+  })
+);
 
 // Catalog filters endpoint (categories, brands, brandsByCategory)
-app.get('/api/catalog-filters', async (req, res) => {
-  return handleCatalogFilters(req, res);
-});
+app.get(
+  '/api/catalog-filters',
+  asyncRoute(async (req, res) => {
+    return handleCatalogFilters(req, res);
+  })
+);
 
 // Versioned catalog filters endpoint (alias for Telegram frontend)
-app.get('/api/:version/:shop/catalog-filters', async (req, res) => {
-  return handleCatalogFilters(req, res);
-});
+app.get(
+  '/api/:version/:shop/catalog-filters',
+  asyncRoute(async (req, res) => {
+    return handleCatalogFilters(req, res);
+  })
+);
 
 app.get('/api/products', async (req, res) => {
   try {
@@ -454,6 +488,34 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
     console.error('Ошибка отправки заказа менеджеру', error?.response?.data || error.message);
     return res.status(500).json({ error: 'Не удалось отправить заказ менеджеру' });
   }
+});
+
+app.use((err, req, res, next) => {
+  try {
+    const status = extractAxiosStatus(err);
+    const message = extractAxiosMessage(err);
+
+    console.error('Unhandled API error', {
+      path: req?.path,
+      method: req?.method,
+      upstreamStatus: status,
+      message,
+    });
+
+    if (!res.headersSent) {
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'Upstream authorization failed', message });
+      }
+      if (status && status >= 400 && status < 600) {
+        return res.status(502).json({ error: 'Upstream request failed', message, upstreamStatus: status });
+      }
+      return res.status(500).json({ error: 'Internal server error', message });
+    }
+  } catch (e) {
+    // fallthrough
+  }
+
+  return next(err);
 });
 
 // Export for Vercel serverless
