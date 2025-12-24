@@ -122,6 +122,30 @@ async function listActiveProducts(page = 1, perPage = 2000) {
   };
 }
 
+async function listAllActiveProducts(perPage = 2000) {
+  const safePerPage = Math.max(1, Math.min(2000, Number(perPage) || 2000));
+
+  const first = await listActiveProducts(1, safePerPage);
+  const all = [...(first.items || [])];
+
+  const totalPages = Math.max(1, Number(first.totalPages) || 1);
+  for (let page = 2; page <= totalPages; page += 1) {
+    const next = await listActiveProducts(page, safePerPage);
+    if (Array.isArray(next?.items) && next.items.length) {
+      all.push(...next.items);
+    }
+  }
+
+  return {
+    items: all,
+    page: 1,
+    perPage: safePerPage,
+    totalPages,
+    totalItems: Number(first.totalItems) || all.length,
+  };
+}
+
 module.exports = {
   listActiveProducts,
+  listAllActiveProducts,
 };

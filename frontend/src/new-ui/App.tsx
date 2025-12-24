@@ -14,6 +14,12 @@ import { AppView, CartItem, Product } from "./types";
 
 
 const App: React.FC = () => {
+  type CatalogFiltersResponse = {
+    categories?: string[];
+    brands?: string[];
+    brandsByCategory?: Record<string, string[]>;
+  };
+
   const [currentView, setCurrentView] = useState<AppView>("home");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -26,6 +32,12 @@ const App: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoriteBumpId, setFavoriteBumpId] = useState<string | null>(null);
   const [orderComment, setOrderComment] = useState<string>("");
+
+  const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
+  const [catalogBrands, setCatalogBrands] = useState<string[]>([]);
+  const [catalogBrandsByCategory, setCatalogBrandsByCategory] = useState<
+    Record<string, string[]>
+  >({});
 
   const homeScrollYRef = useRef(0);
   const shouldRestoreHomeScrollRef = useRef(false);
@@ -212,11 +224,55 @@ const App: React.FC = () => {
     category: activeCategory === "Все" ? "" : activeCategory
   });
 
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data } = await Api.get<CatalogFiltersResponse>(
+          "/catalog-filters"
+        );
+        if (cancelled) return;
+
+        const categories = Array.isArray(data?.categories)
+          ? data.categories.map((x) => String(x).trim()).filter(Boolean)
+          : [];
+        const brands = Array.isArray(data?.brands)
+          ? data.brands.map((x) => String(x).trim()).filter(Boolean)
+          : [];
+        const brandsByCategoryRaw = data?.brandsByCategory;
+        const brandsByCategory = brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
+          ? brandsByCategoryRaw
+          : {};
+
+        const normalizedBrandsByCategory: Record<string, string[]> = Object.fromEntries(
+          Object.entries(brandsByCategory).map(([k, v]) => {
+            const key = String(k).trim();
+            const value = Array.isArray(v)
+              ? v.map((x) => String(x).trim()).filter(Boolean)
+              : [];
+            return [key, value] as const;
+          })
+        );
+
+        setCatalogCategories(categories);
+        setCatalogBrands(brands);
+        setCatalogBrandsByCategory(normalizedBrandsByCategory);
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const el = loadMoreRef.current;
-    if (!el) return;
+    if (!el) return undefined;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -270,16 +326,7 @@ const App: React.FC = () => {
     const pages = (externalData?.pages || []) as ExternalProductsPagedResponse[];
     const first = pages[0];
     const totalItemsRaw = Number((first as any)?.totalItems);
-    const totalPagesRaw = Number((first as any)?.totalPages);
-    const perPageRaw = Number((first as any)?.perPage);
-
-    const totalFromPages =
-      Number.isFinite(totalPagesRaw) && totalPagesRaw > 0 && Number.isFinite(perPageRaw) && perPageRaw > 0
-        ? totalPagesRaw * perPageRaw
-        : 0;
-
-    const totalFromItems = Number.isFinite(totalItemsRaw) && totalItemsRaw >= 0 ? totalItemsRaw : 0;
-    return Math.max(totalFromItems, totalFromPages);
+    return Number.isFinite(totalItemsRaw) && totalItemsRaw >= 0 ? totalItemsRaw : 0;
   }, [externalData]);
 
   const sourceProducts = apiProducts;
@@ -432,25 +479,54 @@ const App: React.FC = () => {
     lastPushedViewRef.current = currentView;
   }, [currentView, selectedProduct?.id]);
 
-  const derivedBrands = useMemo<string[]>(() => {
-    const uniq = Array.from(
-      new Set(
-        sourceProducts.map((p) => String(p.brand || "").trim()).filter(Boolean)
-      )
-    );
-    return ["Все", ...uniq.sort((a, b) => a.localeCompare(b))];
-  }, [sourceProducts]);
-
   const derivedCategories = useMemo<string[]>(() => {
+    if (catalogCategories.length) return ["Все", ...catalogCategories];
+
     const uniq = Array.from(
       new Set(
         sourceProducts
           .map((p) => String(p.category || "").trim())
           .filter(Boolean)
       )
-    );
-    return ["Все", ...uniq.sort((a, b) => a.localeCompare(b))];
-  }, [sourceProducts]);
+    ).sort((a, b) => a.localeCompare(b));
+
+    return ["Все", ...uniq];
+  }, [catalogCategories, sourceProducts]);
+
+  const derivedBrands = useMemo<string[]>(() => {
+    if (activeCategory !== "Все") {
+      const brandsForCategory = catalogBrandsByCategory[activeCategory];
+      if (Array.isArray(brandsForCategory) && brandsForCategory.length) {
+        return ["Все", ...brandsForCategory];
+      }
+
+      const fromProducts = Array.from(
+        new Set(
+          sourceProducts
+            .filter((p) => String(p.category || "").trim() === activeCategory)
+            .map((p) => String(p.brand || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
+
+      return ["Все", ...fromProducts];
+    }
+
+    if (catalogBrands.length) return ["Все", ...catalogBrands];
+
+    const uniq = Array.from(
+      new Set(sourceProducts.map((p) => String(p.brand || "").trim()).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b));
+
+    return ["Все", ...uniq];
+  }, [activeCategory, catalogBrands, catalogBrandsByCategory, sourceProducts]);
+
+  useEffect(() => {
+    if (activeBrand === "Все") return;
+    if (!derivedBrands.includes(activeBrand)) {
+      setActiveBrand("Все");
+    }
+  }, [activeBrand, derivedBrands]);
 
   const filteredAndSortedProducts = useMemo(() => {
     return sourceProducts;

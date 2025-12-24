@@ -10,7 +10,7 @@ const cors = require('cors');
 const axios = require('axios');
 const NodeCache = require('node-cache');
 const { validateTelegramInitData } = require('../src/telegramWebAppAuth');
-const { listActiveProducts } = require('../src/pocketbaseClient');
+const { listActiveProducts, listAllActiveProducts } = require('../src/pocketbaseClient');
 
 const app = express();
 
@@ -94,6 +94,42 @@ app.use(express.json());
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
 
+async function handleCatalogFilters(req, res) {
+  const cacheKey = 'catalog-filters:v1';
+  const cached = externalProductsCache.get(cacheKey);
+  if (cached) return res.json(cached);
+
+  const pbAll = await listAllActiveProducts(2000);
+  const items = Array.isArray(pbAll?.items) ? pbAll.items : [];
+
+  const categoriesSet = new Set();
+  const brandsSet = new Set();
+  const brandsByCategory = {};
+
+  for (const p of items) {
+    const category = String(p?.category || '').trim();
+    const brand = String(p?.brand || '').trim();
+
+    if (category) categoriesSet.add(category);
+    if (brand) brandsSet.add(brand);
+
+    if (category && brand) {
+      if (!brandsByCategory[category]) brandsByCategory[category] = new Set();
+      brandsByCategory[category].add(brand);
+    }
+  }
+
+  const categories = Array.from(categoriesSet).sort((a, b) => a.localeCompare(b));
+  const brands = Array.from(brandsSet).sort((a, b) => a.localeCompare(b));
+  const brandsByCategoryPlain = Object.fromEntries(
+    Object.entries(brandsByCategory).map(([cat, set]) => [cat, Array.from(set).sort((a, b) => a.localeCompare(b))])
+  );
+
+  const payload = { categories, brands, brandsByCategory: brandsByCategoryPlain };
+  externalProductsCache.set(cacheKey, payload);
+  return res.json(payload);
+}
+
 // Legacy name kept, but source is now PocketBase
 async function loadProductsFromSheets() {
   try {
@@ -129,7 +165,7 @@ async function handleExternalProducts(req, res) {
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const pbAll = await listActiveProducts(1, 2000);
+  const pbAll = await listAllActiveProducts(2000);
 
   const q = search.toLowerCase();
   const filtered = pbAll.items.filter((p) => {
@@ -176,6 +212,16 @@ app.get('/api/external-products', async (req, res) => {
 // Versioned external products endpoint (alias for Telegram frontend)
 app.get('/api/:version/:shop/external-products', async (req, res) => {
   return handleExternalProducts(req, res);
+});
+
+// Catalog filters endpoint (categories, brands, brandsByCategory)
+app.get('/api/catalog-filters', async (req, res) => {
+  return handleCatalogFilters(req, res);
+});
+
+// Versioned catalog filters endpoint (alias for Telegram frontend)
+app.get('/api/:version/:shop/catalog-filters', async (req, res) => {
+  return handleCatalogFilters(req, res);
 });
 
 app.get('/api/products', async (req, res) => {
