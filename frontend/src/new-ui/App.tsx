@@ -703,6 +703,8 @@ const App: React.FC = () => {
 
   const homeScrollYRef = useRef(0);
   const shouldRestoreHomeScrollRef = useRef(false);
+  const productsRef = useRef<Product[]>([]);
+  const cartRef = useRef<CartItem[]>([]);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const saveHomeScroll = useCallback(() => {
