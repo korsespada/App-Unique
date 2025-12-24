@@ -269,8 +269,17 @@ const App: React.FC = () => {
   const totalItems = useMemo(() => {
     const pages = (externalData?.pages || []) as ExternalProductsPagedResponse[];
     const first = pages[0];
-    const v = Number((first as any)?.totalItems);
-    return Number.isFinite(v) && v >= 0 ? v : 0;
+    const totalItemsRaw = Number((first as any)?.totalItems);
+    const totalPagesRaw = Number((first as any)?.totalPages);
+    const perPageRaw = Number((first as any)?.perPage);
+
+    const totalFromPages =
+      Number.isFinite(totalPagesRaw) && totalPagesRaw > 0 && Number.isFinite(perPageRaw) && perPageRaw > 0
+        ? totalPagesRaw * perPageRaw
+        : 0;
+
+    const totalFromItems = Number.isFinite(totalItemsRaw) && totalItemsRaw >= 0 ? totalItemsRaw : 0;
+    return Math.max(totalFromItems, totalFromPages);
   }, [externalData]);
 
   const sourceProducts = apiProducts;
