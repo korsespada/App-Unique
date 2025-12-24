@@ -5,17 +5,9 @@ require('dotenv').config({ path: '.env' });
 const checkEnvVars = () => {
   const envVars = {
     // Required for Telegram bot functionality
-    BOTTOKEN: {
-      required: false,
-      message: 'Bot token is missing - Telegram bot features will be disabled'
-    },
     BOT_TOKEN: {
       required: false,
       message: 'Bot token is missing - Telegram bot features will be disabled'
-    },
-    MANAGERCHATID: {
-      required: false,
-      message: 'Manager chat ID is missing - Order notifications will not be sent'
     },
     MANAGER_CHAT_ID: {
       required: false,
@@ -35,13 +27,7 @@ const checkEnvVars = () => {
   let hasCriticalError = false;
   
   Object.entries(envVars).forEach(([key, { required, message }]) => {
-    const isAliasSatisfied =
-      (key === 'BOT_TOKEN' && !!process.env.BOTTOKEN) ||
-      (key === 'BOTTOKEN' && !!process.env.BOT_TOKEN) ||
-      (key === 'MANAGER_CHAT_ID' && !!process.env.MANAGERCHATID) ||
-      (key === 'MANAGERCHATID' && !!process.env.MANAGER_CHAT_ID);
-
-    if (!process.env[key] && !isAliasSatisfied) {
+    if (!process.env[key]) {
       if (required) {
         console.error(`❌ Missing required environment variable: ${key}`);
         hasCriticalError = true;
@@ -51,8 +37,8 @@ const checkEnvVars = () => {
     }
   });
 
-  const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
-  const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
+  const botToken = process.env.BOT_TOKEN;
+  const managerChatId = process.env.MANAGER_CHAT_ID;
 
   return {
     isBotEnabled: !!botToken && !!managerChatId,
@@ -359,8 +345,8 @@ app.post('/profile', (req, res) => {
 
 app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
   try {
-    const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
-    const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
+    const botToken = process.env.BOT_TOKEN;
+    const managerChatId = process.env.MANAGER_CHAT_ID;
 
     if (!botToken || !managerChatId) {
       return res.status(500).json({ error: 'Бот не сконфигурирован' });

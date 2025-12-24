@@ -116,10 +116,17 @@ app.use(express.json());
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
 
+function setCatalogCacheHeaders(res) {
+  res.set('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+}
+
 async function handleCatalogFilters(req, res) {
   const cacheKey = 'catalog-filters:v1';
   const cached = externalProductsCache.get(cacheKey);
-  if (cached) return res.json(cached);
+  if (cached) {
+    setCatalogCacheHeaders(res);
+    return res.json(cached);
+  }
 
   const pbAll = await listAllActiveProducts(2000);
   const items = Array.isArray(pbAll?.items) ? pbAll.items : [];
@@ -149,6 +156,7 @@ async function handleCatalogFilters(req, res) {
 
   const payload = { categories, brands, brandsByCategory: brandsByCategoryPlain };
   externalProductsCache.set(cacheKey, payload);
+  setCatalogCacheHeaders(res);
   return res.json(payload);
 }
 
@@ -184,6 +192,7 @@ async function handleExternalProducts(req, res) {
   const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}`;
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
+    setCatalogCacheHeaders(res);
     return res.json(normalizeProductDescriptions(cached));
   }
 
@@ -218,6 +227,7 @@ async function handleExternalProducts(req, res) {
   };
 
   externalProductsCache.set(cacheKey, payload);
+  setCatalogCacheHeaders(res);
   return res.json(normalizeProductDescriptions(payload));
 }
 
@@ -335,8 +345,8 @@ app.get(['/api/products/:id', '/products/:id'], async (req, res) => {
 
 app.post(['/orders', '/api/orders'], async (req, res) => {
   try {
-    const botToken = process.env.BOTTOKEN || process.env.BOT_TOKEN;
-    const managerChatId = process.env.MANAGERCHATID || process.env.MANAGER_CHAT_ID;
+    const botToken = process.env.BOT_TOKEN;
+    const managerChatId = process.env.MANAGER_CHAT_ID;
 
     // ...
     if (!botToken || !managerChatId) {
