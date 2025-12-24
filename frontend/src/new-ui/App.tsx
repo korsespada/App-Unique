@@ -703,6 +703,7 @@ const App: React.FC = () => {
 
   const homeScrollYRef = useRef(0);
   const shouldRestoreHomeScrollRef = useRef(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const saveHomeScroll = useCallback(() => {
     homeScrollYRef.current = window.scrollY || 0;
