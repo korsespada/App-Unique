@@ -7,7 +7,7 @@ import {
   ArrowLeft, ChevronDown, Heart, Minus, Plus, Search, ShoppingBag, Trash2, X
 } from "lucide-react";
 import React, {
-  useCallback, useEffect, useMemo, useRef, useState
+  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState
 } from "react";
 
 import { AppView, CartItem, Product } from "./types";
@@ -28,6 +28,11 @@ const App: React.FC = () => {
   const [orderComment, setOrderComment] = useState<string>("");
 
   const homeScrollYRef = useRef(0);
+  const shouldRestoreHomeScrollRef = useRef(false);
+
+  const saveHomeScroll = useCallback(() => {
+    homeScrollYRef.current = window.scrollY || 0;
+  }, []);
 
   // Gallery state for ProductDetail
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -83,10 +88,23 @@ const App: React.FC = () => {
     return () => window.removeEventListener("scroll", onScroll);
   }, [currentView]);
 
+  useLayoutEffect(() => {
+    if (currentView !== "home") return;
+    if (!shouldRestoreHomeScrollRef.current) return;
+    shouldRestoreHomeScrollRef.current = false;
+    restoreHomeScroll("auto");
+  }, [currentView]);
+
   const restoreHomeScroll = (behavior: "auto" | "smooth" = "auto") => {
     const y = homeScrollYRef.current || 0;
     requestAnimationFrame(() => {
       window.scrollTo({ top: y, behavior });
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: y, behavior });
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: y, behavior });
+        });
+      });
     });
   };
 
@@ -352,7 +370,7 @@ const App: React.FC = () => {
       if (!view) {
         setSelectedProduct(null);
         setCurrentView("home");
-        scrollHomeToTop();
+        shouldRestoreHomeScrollRef.current = true;
         return;
       }
 
@@ -378,9 +396,7 @@ const App: React.FC = () => {
       setCurrentView(view);
 
       if (view === "home") {
-        const fromView = state?.fromView as AppView | undefined;
-        if (fromView === "product-detail") restoreHomeScroll();
-        else scrollHomeToTop();
+        shouldRestoreHomeScrollRef.current = true;
       }
     };
 
@@ -523,7 +539,7 @@ const App: React.FC = () => {
 
   const navigateToProduct = useCallback(
     (product: Product) => {
-      if (currentView === "home") homeScrollYRef.current = window.scrollY || 0;
+      if (currentView === "home") saveHomeScroll();
       setSelectedProduct(product);
       setCurrentImageIndex(0);
       setDetailImageSrc(product?.images?.[0] || "");
@@ -593,7 +609,7 @@ const App: React.FC = () => {
 
   function HomeView() {
     return (
-<div className="animate-in fade-in duration-700 pb-32 pt-20">
+<div className="animate-in fade-in duration-700 pb-32 pt-6">
       {/* Search Header */}
       <div className="px-4 mb-6">
         <div className="relative">
@@ -711,7 +727,10 @@ const App: React.FC = () => {
             const isBumping = favoriteBumpId === String(product.id);
 
             return (
-            <div key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => navigateToProduct(product)}>
+            <div key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => {
+              saveHomeScroll();
+              navigateToProduct(product);
+            }}>
               <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow transition-all duration-300 ease-out group-hover:border-white/20 group-hover:bg-white/7">
                 <img
                   src={getThumbUrl(product.images[0])}
@@ -820,7 +839,14 @@ const App: React.FC = () => {
               const isBumping = favoriteBumpId === String(product.id);
 
               return (
-                <div key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => navigateToProduct(product)}>
+                <div
+                  key={product.id}
+                  className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]"
+                  onClick={() => {
+                    saveHomeScroll();
+                    navigateToProduct(product);
+                  }}
+                >
                   <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow transition-all duration-300 ease-out group-hover:border-white/20 group-hover:bg-white/7">
                     <img
                       src={getThumbUrl(product.images[0])}
@@ -1161,7 +1187,7 @@ const App: React.FC = () => {
       {/* Dynamic Navbar */}
       {currentView !== "product-detail" && (
         <nav
-          className={`fixed top-0 z-[120] flex h-14 w-full max-w-md items-center justify-center px-6 transition-colors duration-300 ${
+          className={`z-[120] flex h-14 w-full max-w-md items-center justify-center px-6 transition-colors duration-300 ${
             scrolled || currentView !== "home"
               ? "blur-nav border-b border-white/10"
               : "bg-transparent"
@@ -1178,7 +1204,8 @@ const App: React.FC = () => {
             type="button"
             onClick={() => {
               setCurrentView("home");
-              restoreHomeScroll("smooth");
+              shouldRestoreHomeScrollRef.current = true;
+              restoreHomeScroll("auto");
             }}
             className="cursor-pointer select-none"
             aria-label="На главную"
@@ -1201,27 +1228,31 @@ const App: React.FC = () => {
 
       {/* Stylish Minimal Bottom Nav */}
       {currentView !== "product-detail" && (
-      <div className="fixed bottom-0 z-[110] flex w-full max-w-md justify-center px-12 pb-6 pt-2">
-        <div className="flex items-center gap-12 rounded-[2rem] border border-white/10 bg-black/50 px-12 py-3 shadow-2xl backdrop-blur-2xl">
+      <div className="fixed bottom-0 z-[110] flex w-full max-w-md justify-center px-4 pb-6 pt-2">
+        <div className="grid w-full grid-cols-3 items-center rounded-[2rem] border border-white/10 bg-black/50 px-6 py-3 shadow-2xl backdrop-blur-2xl">
           <button
             type="button"
             onClick={() => {
               setCurrentView("home");
-              restoreHomeScroll("smooth");
+              shouldRestoreHomeScrollRef.current = true;
+              restoreHomeScroll("auto");
             }}
-            className={`transition-all ${
+            className={`flex items-center justify-center transition-all ${
               currentView === "home"
                 ? "scale-125 text-white"
                 : "text-neutral-500 hover:text-white"
             }`}
           >
-            <Search size={22} strokeWidth={currentView === "home" ? 3 : 2} className="mx-4" />
+            <Search size={22} strokeWidth={currentView === "home" ? 3 : 2} />
           </button>
 
           <button
             type="button"
-            onClick={() => setCurrentView("favorites")}
-            className={`transition-all ${
+            onClick={() => {
+              saveHomeScroll();
+              setCurrentView("favorites");
+            }}
+            className={`flex items-center justify-center transition-all ${
               currentView === "favorites"
                 ? "scale-125 text-white"
                 : "text-neutral-500 hover:text-white"
@@ -1237,8 +1268,11 @@ const App: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setCurrentView("cart")}
-            className={`relative transition-all ${
+            onClick={() => {
+              saveHomeScroll();
+              setCurrentView("cart");
+            }}
+            className={`relative flex items-center justify-center transition-all ${
               currentView === "cart"
                 ? "scale-125 text-white"
                 : "text-neutral-500 hover:text-white"
