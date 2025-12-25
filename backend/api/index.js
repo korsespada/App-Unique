@@ -68,6 +68,79 @@ function normalizeProductDescriptions(payload) {
   return payload;
 }
 
+function hashStringToUint32(seed) {
+  const str = String(seed ?? '');
+  let x = 2166136261;
+  for (let i = 0; i < str.length; i += 1) {
+    x ^= str.charCodeAt(i);
+    x = Math.imul(x, 16777619);
+  }
+  return x >>> 0;
+}
+
+function shuffleDeterministic(items, seed) {
+  const arr = Array.isArray(items) ? items.slice() : [];
+  let x = hashStringToUint32(seed);
+
+  const rand = () => {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    return (x >>> 0) / 4294967296;
+  };
+
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+
+  return arr;
+}
+
+function mixByBrandRoundRobin(products, seed) {
+  const list = Array.isArray(products) ? products : [];
+  if (list.length <= 1) return list;
+
+  const byBrand = new Map();
+  for (const p of list) {
+    const brand = String(p?.brand ?? '').trim() || '__unknown__';
+    if (!byBrand.has(brand)) byBrand.set(brand, []);
+    byBrand.get(brand).push(p);
+  }
+
+  const brands = Array.from(byBrand.keys());
+  const shuffledBrands = shuffleDeterministic(brands, `brands:${seed}`);
+  for (const b of shuffledBrands) {
+    const items = byBrand.get(b) || [];
+    byBrand.set(b, shuffleDeterministic(items, `brand:${b}:${seed}`));
+  }
+
+  const pointers = new Map(shuffledBrands.map((b) => [b, 0]));
+  const remaining = new Set(shuffledBrands);
+  const out = [];
+
+  while (remaining.size) {
+    let progressed = false;
+    for (const b of shuffledBrands) {
+      if (!remaining.has(b)) continue;
+      const items = byBrand.get(b) || [];
+      const idx = pointers.get(b) || 0;
+      if (idx >= items.length) {
+        remaining.delete(b);
+        continue;
+      }
+      out.push(items[idx]);
+      pointers.set(b, idx + 1);
+      progressed = true;
+    }
+    if (!progressed) break;
+  }
+
+  return out;
+}
+
 let cachedBotUsername = null;
 
 async function getBotUsername(botToken) {
@@ -221,12 +294,13 @@ async function loadProductsFromSheets() {
 async function handleExternalProducts(req, res) {
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.max(1, Math.min(200, Number(req.query.perPage) || 40));
+  const seed = String(req.query.seed || '').trim();
 
   const search = String(req.query.search || '').trim();
   const brand = String(req.query.brand || '').trim();
   const category = String(req.query.category || '').trim();
 
-  const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}`;
+  const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}:${seed}`;
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
     setCatalogCacheHeaders(res);
@@ -247,12 +321,15 @@ async function handleExternalProducts(req, res) {
     return true;
   });
 
-  const totalItems = filtered.length;
+  const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
+  const mixed = mixByBrandRoundRobin(shuffled, seed || '');
+
+  const totalItems = mixed.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * perPage;
   const end = start + perPage;
-  const pageItems = filtered.slice(start, end);
+  const pageItems = mixed.slice(start, end);
 
   const payload = {
     products: pageItems,
@@ -261,6 +338,7 @@ async function handleExternalProducts(req, res) {
     totalPages,
     totalItems,
     hasNextPage: safePage < totalPages,
+    seedEcho: seed,
   };
 
   externalProductsCache.set(cacheKey, payload);
