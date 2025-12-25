@@ -109,6 +109,58 @@ function normalizeProductDescriptions(payload) {
   return payload;
 }
 
+function hashStringToUint32(seed) {
+  const str = String(seed ?? '');
+  let x = 2166136261;
+  for (let i = 0; i < str.length; i += 1) {
+    x ^= str.charCodeAt(i);
+    x = Math.imul(x, 16777619);
+  }
+  return x >>> 0;
+}
+
+function shuffleDeterministic(items, seed) {
+  const arr = Array.isArray(items) ? items.slice() : [];
+  let x = hashStringToUint32(seed);
+
+  const rand = () => {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    return (x >>> 0) / 4294967296;
+  };
+
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+
+  return arr;
+}
+
+function buildPagedExternalProductsResponse(allProducts, { page, perPage }) {
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePerPage = Math.max(1, Math.min(2000, Number(perPage) || 200));
+
+  const totalItems = Array.isArray(allProducts) ? allProducts.length : 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / safePerPage));
+  const normalizedPage = Math.min(safePage, totalPages);
+  const start = (normalizedPage - 1) * safePerPage;
+  const end = start + safePerPage;
+  const products = (Array.isArray(allProducts) ? allProducts : []).slice(start, end);
+
+  return {
+    products,
+    page: normalizedPage,
+    perPage: safePerPage,
+    totalPages,
+    totalItems,
+    hasNextPage: normalizedPage < totalPages,
+  };
+}
+
 let cachedBotUsername = null;
 
 async function getBotUsername(botToken) {
@@ -255,7 +307,14 @@ async function getCachedActiveProducts() {
 // Routes
 app.get('/api/:version/:shop/external-products', async (req, res) => {
   const { version, shop } = req.params;
-  const cacheKey = `external-products:${version}:${shop}`;
+  const search = String(req.query.search || '').trim();
+  const brand = String(req.query.brand || '').trim();
+  const category = String(req.query.category || '').trim();
+  const seed = String(req.query.seed || '').trim();
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const perPage = Math.max(1, Math.min(2000, Number(req.query.perPage) || 200));
+
+  const cacheKey = `external-products:${version}:${shop}:${search}:${brand}:${category}:${seed}:${page}:${perPage}`;
 
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
@@ -264,7 +323,10 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
 
   try {
     const products = await getCachedActiveProducts();
-    const payload = normalizeProductDescriptions({ products });
+    const shuffled = seed ? shuffleDeterministic(products?.items || products, seed) : (products?.items || products);
+    const payload = normalizeProductDescriptions(
+      buildPagedExternalProductsResponse(shuffled, { page, perPage })
+    );
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
   } catch (error) {
@@ -279,7 +341,10 @@ app.get('/api/external-products', async (req, res) => {
   const search = String(req.query.search || '').trim();
   const brand = String(req.query.brand || '').trim();
   const category = String(req.query.category || '').trim();
-  const cacheKey = `external-products:default:${search}:${brand}:${category}`;
+  const seed = String(req.query.seed || '').trim();
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const perPage = Math.max(1, Math.min(2000, Number(req.query.perPage) || 200));
+  const cacheKey = `external-products:default:${search}:${brand}:${category}:${seed}:${page}:${perPage}`;
 
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
@@ -288,7 +353,12 @@ app.get('/api/external-products', async (req, res) => {
 
   try {
     const products = await getCachedActiveProducts();
-    const payload = normalizeProductDescriptions({ products });
+    const shuffled = seed
+      ? shuffleDeterministic(products?.items || products, seed)
+      : (products?.items || products);
+    const payload = normalizeProductDescriptions(
+      buildPagedExternalProductsResponse(shuffled, { page, perPage })
+    );
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
   } catch (error) {

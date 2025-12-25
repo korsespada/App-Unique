@@ -4,14 +4,26 @@ import {
 } from "@framework/api/product/external-get";
 import Api from "@framework/api/utils/api-config";
 import {
-  ArrowLeft, ChevronDown, Heart, Minus, Plus, Search, ShoppingBag, Trash2, X
+  ArrowLeft,
+  ChevronDown,
+  Heart,
+  Minus,
+  Plus,
+  Search,
+  ShoppingBag,
+  Trash2,
+  X
 } from "lucide-react";
 import React, {
-  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
 } from "react";
 
 import { AppView, CartItem, Product } from "./types";
-
 
 const App: React.FC = () => {
   type CatalogFiltersResponse = {
@@ -59,7 +71,7 @@ const App: React.FC = () => {
   const isPopNavRef = useRef(false);
   const lastPushedViewRef = useRef<AppView>("home");
 
-  const getThumbUrl = useCallback((url: string, thumb: string = "400x500") => {
+  const getThumbUrl = useCallback((url: string, thumb = "400x500") => {
     const raw = String(url || "").trim();
     if (!raw) return raw;
 
@@ -179,7 +191,8 @@ const App: React.FC = () => {
       if (!Array.isArray(parsed)) return;
       const restored = parsed
         .filter(
-          (it) => it && typeof it === "object" && (it as any).id && (it as any).name
+          (it) =>
+            it && typeof it === "object" && (it as any).id && (it as any).name
         )
         .map((it) => ({
           ...(it as any),
@@ -211,6 +224,8 @@ const App: React.FC = () => {
     };
   }, [cart.length, currentView]);
 
+  const externalProductsSeed = useMemo(() => String(Date.now()), []);
+
   const {
     data: externalData,
     isLoading: isExternalLoading,
@@ -221,7 +236,8 @@ const App: React.FC = () => {
   } = useGetExternalProducts({
     search: searchQuery,
     brand: activeBrand === "Все" ? undefined : activeBrand,
-    category: activeCategory === "Все" ? undefined : activeCategory
+    category: activeCategory === "Все" ? undefined : activeCategory,
+    seed: externalProductsSeed
   });
 
   useEffect(() => {
@@ -241,11 +257,13 @@ const App: React.FC = () => {
           ? data.brands.map((x) => String(x).trim()).filter(Boolean)
           : [];
         const brandsByCategoryRaw = data?.brandsByCategory;
-        const brandsByCategory = brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
+        const brandsByCategory =
+          brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
           ? brandsByCategoryRaw
           : {};
 
-        const normalizedBrandsByCategory: Record<string, string[]> = Object.fromEntries(
+        const normalizedBrandsByCategory: Record<string, string[]> =
+          Object.fromEntries(
           Object.entries(brandsByCategory).map(([k, v]) => {
             const key = String(k).trim();
             const value = Array.isArray(v)
@@ -290,15 +308,19 @@ const App: React.FC = () => {
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const apiProducts = useMemo<Product[]>(() => {
-    const pages = (externalData?.pages || []) as ExternalProductsPagedResponse[];
-    const raw = pages.flatMap((p) => (Array.isArray(p?.products) ? p.products : []));
+    const pages = (externalData?.pages ||
+      []) as ExternalProductsPagedResponse[];
+    const raw = pages.flatMap((p) =>
+      Array.isArray(p?.products) ? p.products : []
+    );
     return raw
       .map((p) => {
         const id = String((p as any).id || p.product_id || "");
         const name = String(p.title || p.name || p.product_id || "").trim();
         const brand = String(p.brand || p.season_title || "").trim();
         const category = String(p.category || "Все");
-        const images = Array.isArray(p.images) && p.images.length ? p.images : [];
+        const images =
+          Array.isArray(p.images) && p.images.length ? p.images : [];
 
         const rawPrice = Number((p as any).price);
         const hasPrice = Number.isFinite(rawPrice) && rawPrice > 0;
@@ -313,8 +335,8 @@ const App: React.FC = () => {
           images: images.length
             ? images
             : [
-              "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
-            ],
+                "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
+              ],
           description: String(p.description || ""),
           details: Array.isArray((p as any).details) ? (p as any).details : []
         };
@@ -323,10 +345,13 @@ const App: React.FC = () => {
   }, [externalData]);
 
   const totalItems = useMemo(() => {
-    const pages = (externalData?.pages || []) as ExternalProductsPagedResponse[];
+    const pages = (externalData?.pages ||
+      []) as ExternalProductsPagedResponse[];
     const first = pages[0];
     const totalItemsRaw = Number((first as any)?.totalItems);
-    return Number.isFinite(totalItemsRaw) && totalItemsRaw >= 0 ? totalItemsRaw : 0;
+    return Number.isFinite(totalItemsRaw) && totalItemsRaw >= 0
+      ? totalItemsRaw
+      : 0;
   }, [externalData]);
 
   const sourceProducts = apiProducts;
@@ -371,10 +396,10 @@ const App: React.FC = () => {
         const same =
           item.name === nextItem.name &&
           item.brand === nextItem.brand &&
-          item.category === nextItem.category &&
-          Number(item.price) === Number(nextItem.price) &&
-          (item.hasPrice ?? true) === (nextItem.hasPrice ?? true) &&
-          itemFirstImg === freshFirstImg;
+          item.category === nextItem.category;
+        Number(item.price) === Number(nextItem.price)
+          && (item.hasPrice ?? true) === (nextItem.hasPrice ?? true)
+          && itemFirstImg === freshFirstImg;
 
         if (!same) changed = true;
         return same ? item : nextItem;
@@ -470,10 +495,9 @@ const App: React.FC = () => {
     }
 
     const fromView = lastPushedViewRef.current;
-    const state =
-      currentView === "product-detail"
-      ? { view: currentView, productId: selectedProduct?.id || "", fromView }
-      : { view: currentView, fromView };
+    const state =      currentView === "product-detail"
+        ? { view: currentView, productId: selectedProduct?.id || "", fromView }
+        : { view: currentView, fromView };
 
     window.history.pushState(state, "");
     lastPushedViewRef.current = currentView;
@@ -515,7 +539,9 @@ const App: React.FC = () => {
     if (catalogBrands.length) return ["Все", ...catalogBrands];
 
     const uniq = Array.from(
-      new Set(sourceProducts.map((p) => String(p.brand || "").trim()).filter(Boolean))
+      new Set(
+        sourceProducts.map((p) => String(p.brand || "").trim()).filter(Boolean)
+      )
     ).sort((a, b) => a.localeCompare(b));
 
     return ["Все", ...uniq];
@@ -561,8 +587,7 @@ const App: React.FC = () => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        return prev.map((item) =>
-          item.id === product.id
+        return prev.map((item) => (item.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
@@ -572,15 +597,13 @@ const App: React.FC = () => {
   };
 
   const updateQuantity = (id: string, delta: number) => {
-    setCart((prev) =>
-      prev
-      .map((item) => {
-        if (item.id !== id) return item;
-        const newQty = Math.max(0, item.quantity + delta);
-        return { ...item, quantity: newQty };
-      })
-      .filter((item) => item.quantity > 0)
-    );
+    setCart((prev) => prev
+        .map((item) => {
+          if (item.id !== id) return item;
+          const newQty = Math.max(0, item.quantity + delta);
+          return { ...item, quantity: newQty };
+        })
+        .filter((item) => item.quantity > 0));
   };
 
   const cartHasUnknownPrice = cart.some((item) => item.hasPrice === false);
@@ -591,9 +614,8 @@ const App: React.FC = () => {
     if (!Number.isFinite(price) || price <= 0) return sum;
     return sum + price * qty;
   }, 0);
-  const cartTotalText = cartTotal > 0
-    ? `${cartTotal.toLocaleString()} ₽`
-    : "Цена по запросу";
+  const cartTotalText =
+    cartTotal > 0 ? `${cartTotal.toLocaleString()} ₽` : "Цена по запросу";
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const resetFilters = () => {
@@ -638,9 +660,8 @@ const App: React.FC = () => {
       setOrderComment("");
       setCurrentView("home");
     } catch (e: any) {
-      const msg =        e?.response?.data?.error
-        || e?.message
-        || "Не удалось отправить заказ менеджеру";
+      const msg = e?.response?.data?.error;
+      e?.message || "Не удалось отправить заказ менеджеру";
       alert(String(msg));
     } finally {
       setIsSendingOrder(false);
@@ -700,11 +721,15 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!selectedProduct) return;
-    const images = Array.isArray(selectedProduct.images) ? selectedProduct.images : [];
+    const images = Array.isArray(selectedProduct.images)
+      ? selectedProduct.images
+      : [];
     if (images.length < 2) return;
 
-    const nextIndex = currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
-    const prevIndex = currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
+    const nextIndex =
+      currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
+    const prevIndex =
+      currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
     const toPrefetch = [images[nextIndex], images[prevIndex]].filter(Boolean);
 
     toPrefetch.forEach((src) => {
@@ -719,226 +744,245 @@ const App: React.FC = () => {
 
   function HomeView() {
     return (
-<div className="animate-in fade-in duration-700 pb-32 pt-2">
-      {/* Search Header */}
-      <div className="px-4 mb-4">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Что вы ищете?"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="none"
-            enterKeyHint="search"
-            className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 px-6 pr-12 text-[13px] font-medium tracking-normal [font-kerning:normal] text-white placeholder:text-white/40 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
-          />
-          {searchQuery.trim() ? (
-            <button
+      <div className="animate-in fade-in pb-32 pt-2 duration-700">
+        {/* Search Header */}
+        <div className="mb-4 px-4">
+          <div className="relative">
+      <input
+              type="text"
+              placeholder="Что вы ищете?"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              enterKeyHint="search"
+              className="premium-shadow w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 pr-12 text-[13px] font-medium tracking-normal text-white outline-none transition-all duration-200 ease-out [font-kerning:normal] placeholder:text-white/40 focus:border-white/20 focus:ring-2 focus:ring-white/10"
+            />
+      {searchQuery.trim() ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-xl p-2 text-white/40 transition-colors hover:text-white/70"
+                aria-label="Очистить поиск">
+                <X size={18} />
+              </button>
+            ) : (
+              <Search
+                size={18}
+                className="text-white/35 absolute right-5 top-1/2 -translate-y-1/2"
+              />
+            )}
+    </div>
+
+          <div className="-mx-4 mt-6 h-px w-full bg-white/10" />
+
+          {currentView === "product-detail" && (
+    <button
               type="button"
-              onClick={() => setSearchQuery("")}
-              className="absolute right-4 top-1/2 -translate-y-1/2 rounded-xl p-2 text-white/40 transition-colors hover:text-white/70"
-              aria-label="Очистить поиск"
-            >
-              <X size={18} />
+              onClick={() => setCurrentView("cart")}
+              className="premium-shadow absolute right-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]"
+              aria-label="Открыть корзину">
+              <ShoppingBag size={18} />
             </button>
-          ) : (
-            <Search size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/35" />
-          )}
+    )}
         </div>
 
-        <div className="-mx-4 mt-6 h-px w-full bg-white/10" />
-
-        {currentView === "product-detail" && (
-          <button
-            type="button"
-            onClick={() => setCurrentView("cart")}
-            className="premium-shadow absolute right-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]"
-            aria-label="Открыть корзину"
-          >
-            <ShoppingBag size={18} />
-          </button>
-        )}
-      </div>
-
-      {/* Filters */}
-      <div className="px-4 mb-8 space-y-4">
-        {/* Categories tabs */}
-        <div className="w-full overflow-hidden">
-          <div className="no-scrollbar flex max-w-full gap-3 overflow-x-auto pb-1">
-            {derivedCategories.map((category) => {
-              const active = category === activeCategory;
-              return (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setActiveCategory(category)}
-                  className={`shrink-0 rounded-full border px-5 py-2.5 text-[12px] font-semibold tracking-normal transition-all duration-200 ease-out premium-shadow active:scale-[0.98] ${
-                    active
-                      ? "border-white/15 bg-white text-black"
-                      : "border-white/10 bg-white/5 text-white/75 hover:bg-white/10"
-                  }`}
-                >
-                  {category === "Все" ? "Все" : category}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Brand Select */}
-        <div className="relative group">
-          <select
-            value={activeBrand}
-            onChange={(e) => setActiveBrand(e.target.value)}
-            className="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
-          >
-            <option value="Все" className="bg-[#0b0b0b] text-white">Все бренды</option>
-            {derivedBrands.filter((b) => b !== "Все").map((brand) => (
-              <option key={brand} value={brand} className="bg-[#0b0b0b] text-white">{brand}</option>
-            ))}
-          </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition-colors group-hover:text-white/60" />
-        </div>
-
-        {(activeBrand !== "Все" || activeCategory !== "Все" || searchQuery.trim()) && (
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="w-full text-left text-[12px] font-semibold tracking-normal [font-kerning:normal] text-red-400"
-          >
-            Сбросить фильтры
-          </button>
-        )}
-      </div>
-
-      <div className="px-4 mb-4">
-        <p className="text-[12px] font-medium tracking-normal [font-kerning:normal] text-white/55">
-          Товаров: {totalItems}
-        </p>
-      </div>
-
-      {/* Modern Grid */}
-      <div className="grid grid-cols-2 gap-4 px-4">
-        {isProductsLoading && sourceProducts.length === 0 ? (
-          Array.from({ length: 8 }).map((_, idx) => (
-            <div key={idx} className="animate-pulse">
-              <div className="mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5" />
-              <div className="px-2">
-                <div className="mb-2 h-3 w-16 rounded bg-white/10" />
-                <div className="h-4 w-28 rounded bg-white/10" />
-              </div>
+        {/* Filters */}
+        <div className="mb-8 space-y-4 px-4">
+          {/* Categories tabs */}
+          <div className="w-full overflow-hidden">
+      <div className="no-scrollbar flex max-w-full gap-3 overflow-x-auto pb-1">
+              {derivedCategories.map((category) => {
+                const active = category === activeCategory;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setActiveCategory(category)}
+                    className={`premium-shadow shrink-0 rounded-full border px-5 py-2.5 text-[12px] font-semibold tracking-normal transition-all duration-200 ease-out active:scale-[0.98] ${
+                      active
+                        ? "border-white/15 bg-white text-black"
+                        : "border-white/10 bg-white/5 text-white/75 hover:bg-white/10"
+                    }`}>
+                    {category === "Все" ? "Все" : category}
+                  </button>
+                );
+              })}
             </div>
-          ))
-        ) : filteredAndSortedProducts.length > 0 ? (
-          filteredAndSortedProducts.map((product) => {
-            const isFavorited = favorites.includes(String(product.id));
-            const isBumping = favoriteBumpId === String(product.id);
+    </div>
 
-            return (
-            <div key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => {
-              saveHomeScroll();
-              navigateToProduct(product);
-            }}>
-              <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow transition-all duration-300 ease-out group-hover:border-white/20 group-hover:bg-white/7">
-                <img
-                  src={getThumbUrl(product.images[0])}
-                  alt={product.name}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover"
-                />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+          {/* Brand Select */}
+          <div className="group relative">
+      <select
+              value={activeBrand}
+              onChange={(e) => setActiveBrand(e.target.value)}
+              className="premium-shadow w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out focus:border-white/20 focus:ring-2 focus:ring-white/10">
+              <option value="Все" className="bg-[#0b0b0b] text-white">
+                Все бренды
+              </option>
+              {derivedBrands
+                .filter((b) => b !== "Все")
+                .map((brand) => (
+                  <option
+                    key={brand}
+                    value={brand}
+                    className="bg-[#0b0b0b] text-white">
+                    {brand}
+                  </option>
+                ))}
+            </select>
+      <ChevronDown
+              size={14}
+              className="text-white/35 pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 transition-colors group-hover:text-white/60"
+            />
+    </div>
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleFavorite(product.id);
-                  }}
-                  aria-label={
-                    isFavorited ? "Убрать из избранного" : "Добавить в избранное"
-                  }
-                  className={`premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96] ${
-                    isBumping ? "scale-[1.06]" : "scale-100"
-                  }`}
-                >
-                  <Heart
-                    size={18}
-                    className={
-                      isFavorited
-                        ? "fill-red-500 text-red-500 transition-colors"
-                        : "text-white/80 transition-colors"
-                    }
-                  />
-                </button>
-              </div>
-              <div className="px-2 -mt-2 flex flex-col gap-1">
-                <h3 className="line-clamp-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
-                {product.hasPrice ? (
-                  <p className="text-[14px] font-extrabold text-white/85">{product.price.toLocaleString()} ₽</p>
-                ) : (
-                  <p className="text-[13px] font-semibold text-white/45">Цена по запросу</p>
-                )}
-              </div>
-            </div>
-            );
-          })
-        ) : (
-          <div className="col-span-2 py-40 text-center">
-            <p className="text-[13px] font-medium tracking-wide text-white/55">Ничего не найдено</p>
+          {(activeBrand !== "Все"
+            activeCategory !== "Все" ||
+            searchQuery.trim()) && (
             <button
               type="button"
               onClick={resetFilters}
-              className="mt-6 inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.22em] text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-            >
+              className="w-full text-left text-[12px] font-semibold tracking-normal text-red-400 [font-kerning:normal]">
               Сбросить фильтры
             </button>
-          </div>
-        )}
-      </div>
+    )}
+        </div>
 
-      <div className="px-4">
-        {hasNextPage && (
-          <div className="mt-8 flex flex-col items-center gap-4">
-            {(isFetchingNextPage || isExternalFetching) && (
-              <div className="animate-pulse text-[12px] font-semibold text-white/55">
-                Загружаем товары…
+        <div className="mb-4 px-4">
+          <p className="text-white/55 text-[12px] font-medium tracking-normal [font-kerning:normal]">
+      Товаров:
+            {" "}
+      {totalItems}
+    </p>
+        </div>
+
+        {/* Modern Grid */}
+        <div className="grid grid-cols-2 gap-4 px-4">
+          {isProductsLoading && sourceProducts.length === 0 ? (
+      Array.from({ length: 8 }).map((_, idx) => (
+              <div key={idx} className="animate-pulse">
+                <div className="mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5" />
+                <div className="px-2">
+                  <div className="mb-2 h-3 w-16 rounded bg-white/10" />
+                  <div className="h-4 w-28 rounded bg-white/10" />
+                </div>
               </div>
-            )}
-            {!isFetchingNextPage && (
+      ))
+    ) : filteredAndSortedProducts.length > 0 ? (
+      filteredAndSortedProducts.map((product) => {
+        const isFavorited = favorites.includes(String(product.id));
+        const isBumping = favoriteBumpId === String(product.id);
+
+        return (
+                <div
+                  key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => {
+                  saveHomeScroll();
+                  navigateToProduct(product);
+                  }}>
+                  <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 transition-all duration-300 ease-out group-hover:border-white/20">
+                  <img
+                      src={getThumbUrl(product.images[0])}
+                      alt={product.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+
+                  <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(product.id);
+                      }}
+                      aria-label={
+                        isFavorited
+                          ? "Убрать из избранного"
+                          : "Добавить в избранное"
+                      }
+                      className={`premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96] ${
+                        isBumping ? "scale-[1.06]" : "scale-100"
+                      }`}>
+                      <Heart
+                        size={18}
+                        className={
+                          isFavorited
+                            ? "fill-red-500 text-red-500 transition-colors"
+                            : "text-white/80 transition-colors"
+                        }
+                      />
+                    </button>
+                </div>
+                  <div className="-mt-2 flex flex-col gap-1 px-2">
+                  <h3 className="line-clamp-2 text-[13px] font-semibold tracking-tight text-white">
+                      {product.name}
+                    </h3>
+                  {product.hasPrice ? (
+                      <p className="text-white/85 text-[14px] font-extrabold">
+                        {product.price.toLocaleString()} ₽
+                      </p>
+                    ) : (
+                      <p className="text-white/45 text-[13px] font-semibold">
+                        Цена по запросу
+                      </p>
+                    )}
+                </div>
+                </div>
+        );
+      })
+    ) : (
+            <div className="col-span-2 py-40 text-center">
+              <p className="text-white/55 text-[13px] font-medium tracking-wide">
+                Ничего не найдено
+              </p>
               <button
                 type="button"
-                onClick={() => fetchNextPage()}
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-[12px] font-semibold text-white/80 transition-colors hover:bg-white/10"
-              >
-                Загрузить ещё
+                onClick={resetFilters}
+                className="mt-6 inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.22em] text-white/70 transition-colors hover:bg-white/10 hover:text-white">
+                Сбросить фильтры
               </button>
-            )}
-          </div>
-        )}
-        <div ref={loadMoreRef} className="h-12" />
-      </div>
+            </div>
+    )}
+        </div>
 
-    </div>
+        <div className="px-4">
+          {hasNextPage && (
+            <div className="mt-8 flex flex-col items-center gap-4">
+              {(isFetchingNextPage || isExternalFetching) && (
+                <div className="text-white/55 animate-pulse text-[12px] font-semibold">
+                  Загружаем товары…
+                </div>
+              )}
+              {!isFetchingNextPage && (
+                <button
+                  type="button"
+                  onClick={() => fetchNextPage()}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-[12px] font-semibold text-white/80 transition-colors hover:bg-white/10">
+                  Загрузить ещё
+                </button>
+              )}
+            </div>
+          )}
+          <div ref={loadMoreRef} className="h-12" />
+        </div>
+      </div>
     );
   }
 
   function FavoritesView() {
-    const favoriteProducts = filteredAndSortedProducts.filter((p) =>
-      favorites.includes(String(p.id))
-    );
+    const favoriteProducts = filteredAndSortedProducts.filter((p) => favorites.includes(String(p.id)));
 
     return (
-      <div className="animate-in fade-in duration-700 pb-32 pt-24 text-white">
-        <div className="px-4 mb-12">
+      <div className="animate-in fade-in pb-32 pt-24 text-white duration-700">
+        <div className="mb-12 px-4">
           <h2 className="text-5xl font-extrabold tracking-tight">Избранное</h2>
         </div>
 
         {favoriteProducts.length === 0 ? (
           <div className="px-8 py-40 text-center">
-            <p className="text-[13px] font-medium tracking-normal [font-kerning:normal] text-white/55">
+            <p className="text-white/55 text-[13px] font-medium tracking-normal [font-kerning:normal]">
               Пока пусто
             </p>
           </div>
@@ -955,9 +999,8 @@ const App: React.FC = () => {
                   onClick={() => {
                     saveHomeScroll();
                     navigateToProduct(product);
-                  }}
-                >
-                  <div className="relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 premium-shadow transition-all duration-300 ease-out group-hover:border-white/20 group-hover:bg-white/7">
+                  }}>
+                  <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 transition-all duration-300 ease-out group-hover:border-white/20">
                     <img
                       src={getThumbUrl(product.images[0])}
                       alt={product.name}
@@ -974,12 +1017,13 @@ const App: React.FC = () => {
                         toggleFavorite(product.id);
                       }}
                       aria-label={
-                        isFavorited ? "Убрать из избранного" : "Добавить в избранное"
+                        isFavorited
+                          ? "Убрать из избранного"
+                          : "Добавить в избранное"
                       }
                       className={`premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96] ${
                         isBumping ? "scale-[1.06]" : "scale-100"
-                      }`}
-                    >
+                      }`}>
                       <Heart
                         size={18}
                         className={
@@ -991,11 +1035,17 @@ const App: React.FC = () => {
                     </button>
                   </div>
                   <div className="px-2">
-                    <h3 className="line-clamp-2 min-h-[2.6em] -mt-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
+                    <h3 className="-mt-2 line-clamp-2 min-h-[2.6em] text-[13px] font-semibold tracking-tight text-white">
+                      {product.name}
+                    </h3>
                     {product.hasPrice ? (
-                      <p className="mt-0.5 text-[14px] font-extrabold text-white/85">{product.price.toLocaleString()} ₽</p>
+                      <p className="text-white/85 mt-0.5 text-[14px] font-extrabold">
+                        {product.price.toLocaleString()} ₽
+                      </p>
                     ) : (
-                      <p className="mt-0.5 text-[13px] font-semibold text-white/45">Цена по запросу</p>
+                      <p className="text-white/45 mt-0.5 text-[13px] font-semibold">
+                        Цена по запросу
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1010,12 +1060,17 @@ const App: React.FC = () => {
   function ProductDetailView() {
     if (!selectedProduct) return null;
 
-    const rawDetailSrc = detailImageSrc || selectedProduct.images?.[currentImageIndex] || "";
-    const resolvedDetailSrc = rawDetailSrc ? getDetailImageUrl(rawDetailSrc) : "";
+    const rawDetailSrc =
+      detailImageSrc || selectedProduct.images?.[currentImageIndex] || "";
+    const resolvedDetailSrc = rawDetailSrc
+      ? getDetailImageUrl(rawDetailSrc)
+      : "";
 
     const isFavorited = favorites.includes(String(selectedProduct.id));
     const isBumping = favoriteBumpId === String(selectedProduct.id);
-    const isInCart = cart.some((it) => String(it.id) === String(selectedProduct.id));
+    const isInCart = cart.some(
+      (it) => String(it.id) === String(selectedProduct.id)
+    );
 
     const handleGalleryTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
       touchStartXRef.current = e.touches[0]?.clientX ?? null;
@@ -1036,13 +1091,9 @@ const App: React.FC = () => {
       if (Math.abs(delta) < 40) return;
       if (selectedProduct.images.length < 2) return;
       if (delta > 0) {
-        setCurrentImageIndex((prev) =>
-          prev === selectedProduct.images.length - 1 ? 0 : prev + 1
-        );
+        setCurrentImageIndex((prev) => prev === selectedProduct.images.length - 1 ? 0 : prev + 1);
       } else {
-        setCurrentImageIndex((prev) =>
-          prev === 0 ? selectedProduct.images.length - 1 : prev - 1
-        );
+        setCurrentImageIndex((prev) => prev === 0 ? selectedProduct.images.length - 1 : prev - 1);
       }
     };
 
@@ -1058,8 +1109,7 @@ const App: React.FC = () => {
             type="button"
             onClick={() => window.history.back()}
             className="premium-shadow absolute left-4 top-4 z-20 rounded-2xl border border-white/10 bg-black/40 p-2.5 text-white/90 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.98]"
-            aria-label="Назад"
-          >
+            aria-label="Назад">
             <ArrowLeft size={18} />
           </button>
 
@@ -1104,8 +1154,10 @@ const App: React.FC = () => {
 
               {selectedProduct.hasPrice ? (
                 <p className="mt-3 text-[16px] font-extrabold text-white">
-                  {selectedProduct.price.toLocaleString()} ₽
-                </p>
+                  {selectedProduct.price.toLocaleString()}
+{' '}
+₽
+</p>
               ) : (
                 <p className="mt-3 text-[13px] font-semibold tracking-normal text-white/60">
                   Цена по запросу
@@ -1117,8 +1169,7 @@ const App: React.FC = () => {
 
           <p
             className="mb-12 text-[15px] font-medium leading-relaxed text-white/70"
-            style={{ whiteSpace: "pre-line" }}
-          >
+            style={{ whiteSpace: "pre-line" }}>
             {selectedProduct.description}
           </p>
 
@@ -1129,7 +1180,8 @@ const App: React.FC = () => {
                   key={i}
                   className="hover:bg-white/7 flex items-center gap-5 rounded-[2rem] border border-white/10 bg-white/5 p-6 transition-all duration-300 ease-out hover:translate-x-1 hover:border-white/20">
                   <div className="premium-shadow flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-xs font-semibold text-white/50">
-                    0{i + 1}
+                    0
+{i + 1}
                   </div>
                   <span className="text-white/85 text-[13px] font-semibold">
                     {detail}
@@ -1141,7 +1193,7 @@ const App: React.FC = () => {
         </div>
 
         <div className="fixed bottom-0 z-[130] w-full max-w-md">
-          <div className="rounded-t-[2.5rem] border-t border-white/10 bg-black/65 px-6 pb-6 pt-4 backdrop-blur-2xl">
+          <div className="bg-black/65 rounded-t-[2.5rem] border-t border-white/10 px-6 pb-6 pt-4 backdrop-blur-2xl">
             <div className="flex items-stretch gap-4">
               <button
                 type="button"
@@ -1152,28 +1204,28 @@ const App: React.FC = () => {
                   }
                   addToCart(selectedProduct);
                 }}
-                className={`flex-1 rounded-2xl py-4 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] shadow-xl transition-all duration-200 ease-out active:scale-[0.98] ${
+                className={`flex-1 rounded-2xl py-4 text-[14px] font-extrabold uppercase tracking-normal shadow-xl transition-all duration-200 ease-out [font-kerning:normal] active:scale-[0.98] ${
                   isInCart
                     ? "border border-white/10 bg-white/5 text-white hover:bg-white/10"
                     : "bg-white text-black hover:bg-white/90"
-                }`}
-              >
+                }`}>
                 {isInCart ? "Перейти в корзину →" : "Добавить в корзину"}
               </button>
 
               <button
                 type="button"
                 onClick={() => toggleFavorite(selectedProduct.id)}
-                aria-label={isFavorited ? "Убрать из избранного" : "Добавить в избранное"}
+                aria-label={
+                  isFavorited ? "Убрать из избранного" : "Добавить в избранное"
+                }
                 className={`flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition-all duration-200 ease-out active:scale-[0.96] ${
                   isBumping ? "scale-[1.06]" : "scale-100"
-                }`}
-              >
+                }`}>
                 <Heart
                   size={22}
                   className={
                     isFavorited
-                      ? "text-red-500 fill-red-500 transition-colors"
+                      ? "fill-red-500 text-red-500 transition-colors"
                       : "text-white/80 transition-colors"
                   }
                 />
@@ -1187,110 +1239,137 @@ const App: React.FC = () => {
 
   function CartView() {
     return (
-<div
-        className={`animate-in fade-in duration-500 px-4 pt-24 pb-32 text-white ${
+      <div
+        className={`animate-in fade-in px-4 pb-32 pt-24 text-white duration-500 ${
           cart.length === 0 ? "h-[100dvh] overflow-hidden" : "min-h-screen"
-        }`}
-      >
+        }`}>
         <div className="mb-12 flex items-baseline justify-between gap-6">
           <h2 className="text-5xl font-extrabold tracking-tight">Корзина</h2>
         </div>
 
-      {cart.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <div className="mb-10 flex h-32 w-32 items-center justify-center rounded-[3rem] border border-white/10 bg-white/5 premium-shadow">
-            <ShoppingBag size={40} className="text-white/25" />
-          </div>
-          <p className="mb-12 font-semibold tracking-tight text-white/55">
-            Ваша корзина пуста
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentView("home");
-              restoreHomeScroll();
-            }}
-            className="rounded-2xl bg-white px-12 py-4 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98]"
-          >
-            В каталог
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="space-y-8 mb-16">
-            {cart.map(item => (
-              <div
-                key={item.id}
-                className="flex gap-8 items-center group cursor-pointer"
-                onClick={() => navigateToProduct(item)}
-              >
-                <div className="h-32 w-28 flex-shrink-0 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 premium-shadow transition-transform duration-500 ease-out group-hover:scale-[1.03]">
-                  <img
-                    src={getThumbUrl(item.images[0], "240x320")}
-                    alt={item.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="flex-1 flex flex-col gap-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="mb-1 text-[9px] font-light uppercase tracking-[0.34em] text-white/40">{item.brand}</p>
-                      <h4 className="mb-1 text-[15px] font-semibold leading-tight text-white">{item.name}</h4>
-                      {item.hasPrice !== false && Number(item.price) > 0 ? (
-                        <p className="text-sm font-bold text-white/80">{Number(item.price).toLocaleString()} ₽</p>
-                      ) : (
-                        <p className="text-[12px] font-semibold text-white/55">Цена по запросу</p>
-                      )}
-                    </div>
-                    <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -item.quantity); }} className="p-2 text-white/25 transition-colors hover:text-red-400">
-                      <Trash2 size={20} />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-4 self-start rounded-2xl border border-white/10 bg-white/5 px-2 py-1.5">
-                    <button onClick={(e) => { e.stopPropagation(); if (item.quantity > 1) updateQuantity(item.id, -1); }} className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"><Minus size={14} /></button>
-                    <span className="min-w-[20px] text-center text-xs font-semibold text-white/80">{item.quantity}</span>
-                    <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, 1); }} className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"><Plus size={14} /></button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mb-10 w-full rounded-[3.5rem] border border-white/10 bg-white/5 p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-[10px] font-light uppercase tracking-[0.42em] text-white/40">Сумма заказа</span>
-              <span className="text-right text-[15px] font-semibold leading-tight tracking-tight text-white">
-                {cartTotalText}
-              </span>
+        {cart.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center text-center">
+      <div className="premium-shadow mb-10 flex h-32 w-32 items-center justify-center rounded-[3rem] border border-white/10 bg-white/5">
+              <ShoppingBag size={40} className="text-white/25" />
             </div>
-            <div className="mt-8">
-              <label className="mb-3 block text-[10px] font-light uppercase tracking-[0.42em] text-white/40">
-                Комментарий
-              </label>
-              <textarea
-                value={orderComment}
-                onChange={(e) => setOrderComment(e.target.value)}
-                rows={3}
-                placeholder="Комментарий к заказу"
-                className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-[13px] font-medium text-white/80 outline-none transition-all duration-200 ease-out premium-shadow placeholder:text-white/35 focus:border-white/20 focus:ring-2 focus:ring-white/10"
-              />
-            </div>
-
-            <button
-              onClick={sendOrderToManager}
-              disabled={isSendingOrder}
-              className="mt-6 w-full rounded-2xl bg-white py-6 text-[14px] font-extrabold uppercase tracking-normal [font-kerning:normal] text-black shadow-xl transition-all duration-200 ease-out hover:bg-white/90 active:scale-[0.98] disabled:opacity-60"
-            >
-              {isSendingOrder ? 'Отправляем…' : 'Отправить менеджеру'}
+      <p className="text-white/55 mb-12 font-semibold tracking-tight">
+              Ваша корзина пуста
+            </p>
+      <button
+              type="button"
+              onClick={() => {
+                setCurrentView("home");
+                restoreHomeScroll();
+              }}
+              className="rounded-2xl bg-white px-12 py-4 text-[14px] font-extrabold uppercase tracking-normal text-black shadow-xl transition-all duration-200 ease-out [font-kerning:normal] hover:bg-white/90 active:scale-[0.98]">
+              В каталог
             </button>
-          </div>
-        </>
-      )}
     </div>
-  );
-}
+        ) : (
+    <>
+            <div className="mb-16 space-y-8">
+              {cart.map((item) => (
+                <div
+                  key={item.id}
+                  className="group flex cursor-pointer items-center gap-8"
+                  onClick={() => navigateToProduct(item)}>
+                  <div className="premium-shadow h-32 w-28 flex-shrink-0 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 transition-transform duration-500 ease-out group-hover:scale-[1.03]">
+                    <img
+                      src={getThumbUrl(item.images[0], "240x320")}
+                      alt={item.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="mb-1 text-[9px] font-light uppercase tracking-[0.34em] text-white/40">
+                          {item.brand}
+                        </p>
+                        <h4 className="mb-1 text-[15px] font-semibold leading-tight text-white">
+                          {item.name}
+                        </h4>
+                        {item.hasPrice !== false && Number(item.price) > 0 ? (
+                          <p className="text-sm font-bold text-white/80">
+                            {Number(item.price).toLocaleString()} ₽
+                          </p>
+                        ) : (
+                          <p className="text-white/55 text-[12px] font-semibold">
+                            Цена по запросу
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateQuantity(item.id, -item.quantity);
+                        }}
+                        className="p-2 text-white/25 transition-colors hover:text-red-400">
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-4 self-start rounded-2xl border border-white/10 bg-white/5 px-2 py-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (item.quantity > 1) updateQuantity(item.id, -1);
+                        }}
+                        className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]">
+                        <Minus size={14} />
+                      </button>
+                      <span className="min-w-[20px] text-center text-xs font-semibold text-white/80">
+                        {item.quantity}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateQuantity(item.id, 1);
+                        }}
+                        className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]">
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-10 w-full rounded-[3.5rem] border border-white/10 bg-white/5 p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[10px] font-light uppercase tracking-[0.42em] text-white/40">
+                  Сумма заказа
+                </span>
+                <span className="text-right text-[15px] font-semibold leading-tight tracking-tight text-white">
+                  {cartTotalText}
+                </span>
+              </div>
+              <div className="mt-8">
+                <label className="mb-3 block text-[10px] font-light uppercase tracking-[0.42em] text-white/40">
+                  Комментарий
+                </label>
+                <textarea
+                  value={orderComment}
+                  onChange={(e) => setOrderComment(e.target.value)}
+                  rows={3}
+                  placeholder="Комментарий к заказу"
+                  className="premium-shadow placeholder:text-white/35 w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-[13px] font-medium text-white/80 outline-none transition-all duration-200 ease-out focus:border-white/20 focus:ring-2 focus:ring-white/10"
+                />
+              </div>
+
+              <button
+                onClick={sendOrderToManager}
+                disabled={isSendingOrder}
+                className="mt-6 w-full rounded-2xl bg-white py-6 text-[14px] font-extrabold uppercase tracking-normal text-black shadow-xl transition-all duration-200 ease-out [font-kerning:normal] hover:bg-white/90 active:scale-[0.98] disabled:opacity-60">
+                {isSendingOrder ? "Отправляем…" : "Отправить менеджеру"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="relative mx-auto min-h-screen max-w-md overflow-x-hidden bg-gradient-to-b from-black via-[#070707] to-[#050505] text-white">
@@ -1318,8 +1397,7 @@ const App: React.FC = () => {
               restoreHomeScroll("auto");
             }}
             className="cursor-pointer select-none"
-            aria-label="На главную"
-          >
+            aria-label="На главную">
             <img
               src="/logo.svg"
               alt="Logo"
@@ -1338,67 +1416,67 @@ const App: React.FC = () => {
 
       {/* Stylish Minimal Bottom Nav */}
       {currentView !== "product-detail" && (
-      <div className="fixed bottom-0 z-[110] flex w-full max-w-md justify-center px-4 pb-6 pt-2">
-        <div className="grid w-full grid-cols-3 items-center rounded-[2rem] border border-white/10 bg-black/50 px-6 py-3 shadow-2xl backdrop-blur-2xl">
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentView("home");
-              shouldRestoreHomeScrollRef.current = true;
-              restoreHomeScroll("auto");
-            }}
-            className={`flex items-center justify-center transition-all ${
-              currentView === "home"
-                ? "scale-125 text-white"
-                : "text-neutral-500 hover:text-white"
-            }`}
-          >
-            <Search size={22} strokeWidth={currentView === "home" ? 3 : 2} />
-          </button>
+        <div className="fixed bottom-0 z-[110] flex w-full max-w-md justify-center px-4 pb-6 pt-2">
+          <div className="grid w-full grid-cols-3 items-center rounded-[2rem] border border-white/10 bg-black/50 px-6 py-3 shadow-2xl backdrop-blur-2xl">
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentView("home");
+                shouldRestoreHomeScrollRef.current = true;
+                restoreHomeScroll("auto");
+              }}
+              className={`flex items-center justify-center transition-all ${
+                currentView === "home"
+                  ? "scale-125 text-white"
+                  : "text-neutral-500 hover:text-white"
+              }`}>
+              <Search size={22} strokeWidth={currentView === "home" ? 3 : 2} />
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              saveHomeScroll();
-              setCurrentView("favorites");
-            }}
-            className={`flex items-center justify-center transition-all ${
-              currentView === "favorites"
-                ? "scale-125 text-white"
-                : "text-neutral-500 hover:text-white"
-            }`}
-            aria-label="Избранное"
-          >
-            <Heart
-              size={22}
-              strokeWidth={currentView === "favorites" ? 3 : 2}
-              className={currentView === "favorites" ? "text-white" : undefined}
-            />
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                saveHomeScroll();
+                setCurrentView("favorites");
+              }}
+              className={`flex items-center justify-center transition-all ${
+                currentView === "favorites"
+                  ? "scale-125 text-white"
+                  : "text-neutral-500 hover:text-white"
+              }`}
+              aria-label="Избранное">
+              <Heart
+                size={22}
+                strokeWidth={currentView === "favorites" ? 3 : 2}
+                className={
+                  currentView === "favorites" ? "text-white" : undefined
+                }
+              />
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              saveHomeScroll();
-              setCurrentView("cart");
-            }}
-            className={`relative flex items-center justify-center transition-all ${
-              currentView === "cart"
-                ? "scale-125 text-white"
-                : "text-neutral-500 hover:text-white"
-            }`}>
-            <ShoppingBag
-              size={22}
-              strokeWidth={currentView === "cart" ? 3 : 2}
-            />
-            {cartCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white text-[6px] font-extrabold text-black">
-                {cartCount}
-              </span>
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                saveHomeScroll();
+                setCurrentView("cart");
+              }}
+              className={`relative flex items-center justify-center transition-all ${
+                currentView === "cart"
+                  ? "scale-125 text-white"
+                  : "text-neutral-500 hover:text-white"
+              }`}>
+              <ShoppingBag
+                size={22}
+                strokeWidth={currentView === "cart" ? 3 : 2}
+              />
+              {cartCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white text-[6px] font-extrabold text-black">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
       )}
     </div>
   );

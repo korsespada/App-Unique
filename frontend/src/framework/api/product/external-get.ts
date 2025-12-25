@@ -15,6 +15,7 @@ export type ExternalProductsQuery = {
   search?: string;
   brand?: string;
   category?: string;
+  seed?: string;
 };
 
 async function fetchExternalProductsPage(
@@ -22,9 +23,10 @@ async function fetchExternalProductsPage(
   query?: ExternalProductsQuery
 ): Promise<ExternalProductsPagedResponse> {
   try {
-    const search = String(query?.search || '').trim();
-    const brand = String(query?.brand || '').trim();
-    const category = String(query?.category || '').trim();
+    const search = String(query?.search || "").trim();
+    const brand = String(query?.brand || "").trim();
+    const category = String(query?.category || "").trim();
+    const seed = String(query?.seed || "").trim();
 
     const { data } = await Api.get<ExternalProductsPagedResponse>(
       "/external-products",
@@ -32,6 +34,7 @@ async function fetchExternalProductsPage(
         params: {
           page,
           perPage: 200,
+          ...(seed ? { seed } : {}),
           ...(search ? { search } : {}),
           ...(brand ? { brand } : {}),
           ...(category ? { category } : {})
@@ -62,16 +65,34 @@ async function fetchExternalProductsPage(
 }
 
 export function useGetExternalProducts(query?: ExternalProductsQuery) {
-  const search = String(query?.search || '').trim();
-  const brand = String(query?.brand || '').trim();
-  const category = String(query?.category || '').trim();
+  const search = String(query?.search || "").trim();
+  const brand = String(query?.brand || "").trim();
+  const category = String(query?.category || "").trim();
+  const seed = String(query?.seed || "").trim();
 
   return useInfiniteQuery<ExternalProductsPagedResponse, Error>(
-    ["external-products", { search, brand, category }],
-    ({ pageParam = 1 }) => fetchExternalProductsPage(Number(pageParam), { search, brand, category }),
+    [
+      "external-products",
+      {
+        search,
+        brand,
+        category,
+        seed
+      }
+    ],
+    // eslint-disable-next-line implicit-arrow-linebreak
+    ({ pageParam = 1 }) =>
+      // eslint-disable-next-line object-curly-newline
+      fetchExternalProductsPage(Number(pageParam), {
+        search,
+        brand,
+        category,
+        seed
+      }),
     {
+      // eslint-disable-next-line implicit-arrow-linebreak
       getNextPageParam: (lastPage) =>
-        lastPage.hasNextPage ? lastPage.page + 1 : undefined,
+        (lastPage.hasNextPage ? lastPage.page + 1 : undefined),
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
