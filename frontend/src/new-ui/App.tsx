@@ -63,8 +63,10 @@ const App: React.FC = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const touchStartXRef = useRef<number | null>(null);
   const touchLastXRef = useRef<number | null>(null);
-  const [detailImageSrc, setDetailImageSrc] = useState<string>("");
-  const [isDetailImageLoading, setIsDetailImageLoading] = useState(false);
+  const [detailLayerASrc, setDetailLayerASrc] = useState<string>("");
+  const [detailLayerBSrc, setDetailLayerBSrc] = useState<string>("");
+  const [activeDetailLayer, setActiveDetailLayer] = useState<"A" | "B">("A");
+  const [isDetailImageCrossfading, setIsDetailImageCrossfading] = useState(false);
 
   const productsRef = useRef<Product[]>([]);
   const cartRef = useRef<CartItem[]>([]);
@@ -672,12 +674,16 @@ const App: React.FC = () => {
       if (currentView === "home") saveHomeScroll();
       setSelectedProduct(product);
       setCurrentImageIndex(0);
-      setDetailImageSrc(product?.images?.[0] || "");
-      setIsDetailImageLoading(false);
+      const first = product?.images?.[0] || "";
+      const firstResolved = first ? getDetailImageUrl(first) : "";
+      setDetailLayerASrc(firstResolved);
+      setDetailLayerBSrc("");
+      setActiveDetailLayer("A");
+      setIsDetailImageCrossfading(false);
       setCurrentView("product-detail");
       window.scrollTo(0, 0);
     },
-    [currentView]
+    [currentView, getDetailImageUrl]
   );
 
   useEffect(() => {
@@ -696,27 +702,45 @@ const App: React.FC = () => {
   useEffect(() => {
     const nextSrc = selectedProduct?.images?.[currentImageIndex] || "";
     if (!selectedProduct || !nextSrc) return;
-    if (nextSrc === detailImageSrc) return;
+    const nextResolved = getDetailImageUrl(nextSrc);
+    const currentResolved = activeDetailLayer === "A" ? detailLayerASrc : detailLayerBSrc;
+    if (nextResolved === currentResolved) return;
 
     let cancelled = false;
-    setIsDetailImageLoading(true);
+    setIsDetailImageCrossfading(false);
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
-      setDetailImageSrc(nextSrc);
-      setIsDetailImageLoading(false);
+      const nextLayer = activeDetailLayer === "A" ? "B" : "A";
+      if (nextLayer === "A") setDetailLayerASrc(nextResolved);
+      else setDetailLayerBSrc(nextResolved);
+
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        setIsDetailImageCrossfading(true);
+        setActiveDetailLayer(nextLayer);
+      });
+
+      window.setTimeout(() => {
+        if (cancelled) return;
+        setIsDetailImageCrossfading(false);
+      }, 260);
     };
     img.onerror = () => {
       if (cancelled) return;
-      setDetailImageSrc(nextSrc);
-      setIsDetailImageLoading(false);
+      // если не загрузилось корректно, всё равно переключаемся на следующий слой
+      const nextLayer = activeDetailLayer === "A" ? "B" : "A";
+      if (nextLayer === "A") setDetailLayerASrc(nextResolved);
+      else setDetailLayerBSrc(nextResolved);
+      setActiveDetailLayer(nextLayer);
+      setIsDetailImageCrossfading(false);
     };
-    img.src = getDetailImageUrl(nextSrc);
+    img.src = nextResolved;
 
     return () => {
       cancelled = true;
     };
-  }, [currentImageIndex, detailImageSrc, getDetailImageUrl, selectedProduct]);
+  }, [activeDetailLayer, currentImageIndex, detailLayerASrc, detailLayerBSrc, getDetailImageUrl, selectedProduct]);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -740,6 +764,65 @@ const App: React.FC = () => {
       }
     });
   }, [currentImageIndex, getDetailImageUrl, selectedProduct]);
+
+  useEffect(() => {
+    if (currentView !== "product-detail") return;
+    if (!selectedProduct) return;
+
+    const images = Array.isArray(selectedProduct.images) ? selectedProduct.images : [];
+    if (images.length < 2) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+
+      const currentRaw = String(selectedProduct.images?.[currentImageIndex] || "");
+      const currentResolved = currentRaw ? getDetailImageUrl(currentRaw) : "";
+
+      const resolved = images
+        .map((src) => {
+          try {
+            return getDetailImageUrl(String(src));
+          } catch {
+            return "";
+          }
+        })
+        .filter(Boolean)
+        .filter((src) => src !== currentResolved);
+
+      const uniq = Array.from(new Set(resolved));
+      const concurrency = 3;
+      let idx = 0;
+
+      const pump = () => {
+        if (cancelled) return;
+        while (idx < uniq.length && idx < 1000) {
+          const batchStart = idx;
+          const batch = uniq.slice(batchStart, batchStart + concurrency);
+          idx += batch.length;
+          batch.forEach((src) => {
+            try {
+              const img = new Image();
+              img.src = src;
+            } catch {
+              // ignore
+            }
+          });
+
+          // отдаем управление UI
+          window.setTimeout(() => pump(), 0);
+          return;
+        }
+      };
+
+      pump();
+    }, 550);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [currentImageIndex, currentView, getDetailImageUrl, selectedProduct]);
 
   function HomeView() {
     return (
@@ -1059,11 +1142,8 @@ const App: React.FC = () => {
   function ProductDetailView() {
     if (!selectedProduct) return null;
 
-    const rawDetailSrc =
-      detailImageSrc || selectedProduct.images?.[currentImageIndex] || "";
-    const resolvedDetailSrc = rawDetailSrc
-      ? getDetailImageUrl(rawDetailSrc)
-      : "";
+    const showA = activeDetailLayer === "A";
+    const showB = !showA;
 
     const isFavorited = favorites.includes(String(selectedProduct.id));
     const isBumping = favoriteBumpId === String(selectedProduct.id);
@@ -1113,11 +1193,20 @@ const App: React.FC = () => {
           </button>
 
           <img
-            src={resolvedDetailSrc}
+            src={detailLayerASrc}
             alt={selectedProduct.name}
-            className={`h-full w-full object-cover transition-opacity duration-500 ease-in-out ${
-              isDetailImageLoading ? "opacity-95" : "opacity-100"
-            }`}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
+              showA ? "opacity-100" : "opacity-0"
+            } ${isDetailImageCrossfading ? "" : ""}`}
+            decoding="async"
+          />
+
+          <img
+            src={detailLayerBSrc}
+            alt={selectedProduct.name}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
+              showB ? "opacity-100" : "opacity-0"
+            } ${isDetailImageCrossfading ? "" : ""}`}
             decoding="async"
           />
 
