@@ -99,40 +99,40 @@ function shuffleDeterministic(items, seed) {
   return arr;
 }
 
-function mixByBrandRoundRobin(products, seed) {
+function mixByCategoryRoundRobin(products, seed) {
   const list = Array.isArray(products) ? products : [];
   if (list.length <= 1) return list;
 
-  const byBrand = new Map();
+  const byCategory = new Map();
   for (const p of list) {
-    const brand = String(p?.brand ?? '').trim() || '__unknown__';
-    if (!byBrand.has(brand)) byBrand.set(brand, []);
-    byBrand.get(brand).push(p);
+    const category = String(p?.category ?? '').trim() || '__unknown__';
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    byCategory.get(category).push(p);
   }
 
-  const brands = Array.from(byBrand.keys());
-  const shuffledBrands = shuffleDeterministic(brands, `brands:${seed}`);
-  for (const b of shuffledBrands) {
-    const items = byBrand.get(b) || [];
-    byBrand.set(b, shuffleDeterministic(items, `brand:${b}:${seed}`));
+  const categories = Array.from(byCategory.keys());
+  const shuffledCategories = shuffleDeterministic(categories, `categories:${seed}`);
+  for (const c of shuffledCategories) {
+    const items = byCategory.get(c) || [];
+    byCategory.set(c, shuffleDeterministic(items, `category:${c}:${seed}`));
   }
 
-  const pointers = new Map(shuffledBrands.map((b) => [b, 0]));
-  const remaining = new Set(shuffledBrands);
+  const pointers = new Map(shuffledCategories.map((c) => [c, 0]));
+  const remaining = new Set(shuffledCategories);
   const out = [];
 
   while (remaining.size) {
     let progressed = false;
-    for (const b of shuffledBrands) {
-      if (!remaining.has(b)) continue;
-      const items = byBrand.get(b) || [];
-      const idx = pointers.get(b) || 0;
+    for (const c of shuffledCategories) {
+      if (!remaining.has(c)) continue;
+      const items = byCategory.get(c) || [];
+      const idx = pointers.get(c) || 0;
       if (idx >= items.length) {
-        remaining.delete(b);
+        remaining.delete(c);
         continue;
       }
       out.push(items[idx]);
-      pointers.set(b, idx + 1);
+      pointers.set(c, idx + 1);
       progressed = true;
     }
     if (!progressed) break;
@@ -322,7 +322,7 @@ async function handleExternalProducts(req, res) {
   });
 
   const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
-  const mixed = mixByBrandRoundRobin(shuffled, seed || '');
+  const mixed = mixByCategoryRoundRobin(shuffled, seed || '');
 
   const totalItems = mixed.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
