@@ -226,15 +226,24 @@ app.use(express.json());
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
 let lastGoodAllActiveProducts = null;
+const pbSnapshotCache = new NodeCache({ stdTTL: 5 * 60 });
 
 function setCatalogCacheHeaders(res) {
   res.set('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
 }
 
 async function getAllActiveProductsSafe(perPage) {
+  const snapshotCacheKey = `pb:all-active:${Number(perPage) || 2000}`;
+  const cached = pbSnapshotCache.get(snapshotCacheKey);
+  if (cached) {
+    lastGoodAllActiveProducts = cached;
+    return cached;
+  }
+
   try {
     const pbAll = await listAllActiveProducts(perPage);
     lastGoodAllActiveProducts = pbAll;
+    pbSnapshotCache.set(snapshotCacheKey, pbAll);
     return pbAll;
   } catch (err) {
     if (lastGoodAllActiveProducts) {
