@@ -220,8 +220,8 @@ const App: React.FC = () => {
     isFetchingNextPage
   } = useGetExternalProducts({
     search: searchQuery,
-    brand: activeBrand === "Все" ? "" : activeBrand,
-    category: activeCategory === "Все" ? "" : activeCategory
+    brand: activeBrand === "Все" ? undefined : activeBrand,
+    category: activeCategory === "Все" ? undefined : activeCategory
   });
 
   useEffect(() => {
@@ -528,9 +528,34 @@ const App: React.FC = () => {
     }
   }, [activeBrand, derivedBrands]);
 
+  const shuffleSeed = useMemo(() => String(Date.now()), []);
+
   const filteredAndSortedProducts = useMemo(() => {
-    return sourceProducts;
-  }, [sourceProducts]);
+    if (!sourceProducts.length) return sourceProducts;
+
+    const arr = [...sourceProducts];
+
+    let x = 0;
+    for (let i = 0; i < shuffleSeed.length; i += 1) {
+      x = (x * 31 + shuffleSeed.charCodeAt(i)) >>> 0;
+    }
+
+    const rand = () => {
+      x ^= x << 13;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      return (x >>> 0) / 4294967296;
+    };
+
+    for (let i = arr.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(rand() * (i + 1));
+      const tmp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = tmp;
+    }
+
+    return arr;
+  }, [shuffleSeed, sourceProducts]);
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
@@ -694,9 +719,9 @@ const App: React.FC = () => {
 
   function HomeView() {
     return (
-<div className="animate-in fade-in duration-700 pb-32 pt-6">
+<div className="animate-in fade-in duration-700 pb-32 pt-2">
       {/* Search Header */}
-      <div className="px-4 mb-6">
+      <div className="px-4 mb-4">
         <div className="relative">
           <input
             type="text"
@@ -738,7 +763,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="px-4 mb-12 space-y-4">
+      <div className="px-4 mb-8 space-y-4">
         {/* Categories tabs */}
         <div className="w-full overflow-hidden">
           <div className="no-scrollbar flex max-w-full gap-3 overflow-x-auto pb-1">
@@ -769,9 +794,9 @@ const App: React.FC = () => {
             onChange={(e) => setActiveBrand(e.target.value)}
             className="w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out premium-shadow focus:border-white/20 focus:ring-2 focus:ring-white/10"
           >
-            <option value="Все">Все бренды</option>
+            <option value="Все" className="bg-[#0b0b0b] text-white">Все бренды</option>
             {derivedBrands.filter((b) => b !== "Все").map((brand) => (
-              <option key={brand} value={brand}>{brand}</option>
+              <option key={brand} value={brand} className="bg-[#0b0b0b] text-white">{brand}</option>
             ))}
           </select>
           <ChevronDown size={14} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/35 transition-colors group-hover:text-white/60" />
@@ -788,7 +813,7 @@ const App: React.FC = () => {
         )}
       </div>
 
-      <div className="px-4 mb-6">
+      <div className="px-4 mb-4">
         <p className="text-[12px] font-medium tracking-normal [font-kerning:normal] text-white/55">
           Товаров: {totalItems}
         </p>
@@ -849,12 +874,12 @@ const App: React.FC = () => {
                   />
                 </button>
               </div>
-              <div className="px-2">
-                <h3 className="line-clamp-2 min-h-[2.6em] -mt-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
+              <div className="px-2 -mt-2 flex flex-col gap-1">
+                <h3 className="line-clamp-2 text-[13px] font-semibold tracking-tight text-white">{product.name}</h3>
                 {product.hasPrice ? (
-                  <p className="mt-0 text-[14px] font-extrabold text-white/85">{product.price.toLocaleString()} ₽</p>
+                  <p className="text-[14px] font-extrabold text-white/85">{product.price.toLocaleString()} ₽</p>
                 ) : (
-                  <p className="mt-0 text-[13px] font-semibold text-white/45">Цена по запросу</p>
+                  <p className="text-[13px] font-semibold text-white/45">Цена по запросу</p>
                 )}
               </div>
             </div>

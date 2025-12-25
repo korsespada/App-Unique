@@ -8,7 +8,9 @@ export default defineConfig({
   plugins: [react(), tsconfigPaths()],
   server: {
     open: false,
-    port: 3000
+    host: true,
+    port: 5173,
+    strictPort: true
   },
   build: {
     minify: "terser"

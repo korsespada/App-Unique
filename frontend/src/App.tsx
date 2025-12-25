@@ -2,7 +2,7 @@
 import "@style/app.scss";
 import "antd/dist/reset.css";
 
-import useTelegramUser from "@hooks/useTelegramUser";
+import { getTelegramWebApp } from "@helpers/telegram";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 
@@ -10,19 +10,17 @@ import Main from "./layouts/main";
 import Router from "./router";
 
 function App() {
-  const isTG = useTelegramUser();
+  const tg = getTelegramWebApp();
 
   useEffect(() => {
     try {
-      const webApp = window?.Telegram?.WebApp;
-      if (webApp) {
-        webApp.ready();
-        webApp.expand();
-      }
+      if (!tg) return;
+      tg.ready();
+      tg.expand();
     } catch (e) {
       // ignore
     }
-  }, []);
+  }, [tg]);
 
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -36,7 +34,6 @@ function App() {
     }
   });
 
-  if (!isTG) return <>open in telegram app </>;
   return (
     <QueryClientProvider client={queryClient}>
       <Main>

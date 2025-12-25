@@ -216,6 +216,17 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Backend is running',
+    endpoints: {
+      health: '/health',
+      api: '/api'
+    }
+  });
+});
+
 // Middleware to load products and photos for each request
 async function loadData() {
   try {
@@ -265,7 +276,10 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
 });
 
 app.get('/api/external-products', async (req, res) => {
-  const cacheKey = 'external-products:default';
+  const search = String(req.query.search || '').trim();
+  const brand = String(req.query.brand || '').trim();
+  const category = String(req.query.category || '').trim();
+  const cacheKey = `external-products:default:${search}:${brand}:${category}`;
 
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
