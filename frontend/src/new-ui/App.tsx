@@ -43,6 +43,7 @@ const App: React.FC = () => {
   const [startProductId, setStartProductId] = useState<string | null>(null);
   const [shuffleSeed, setShuffleSeed] = useState(() => String(Date.now()));
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [favoriteItemsById, setFavoriteItemsById] = useState<Record<string, Product>>({});
   const [favoriteBumpId, setFavoriteBumpId] = useState<string | null>(null);
   const [orderComment, setOrderComment] = useState<string>("");
 
@@ -167,23 +168,83 @@ const App: React.FC = () => {
 
   useEffect(() => {
     try {
+      const raw = localStorage.getItem("tg_favorite_items");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+      const next: Record<string, Product> = {};
+      Object.entries(parsed as Record<string, any>).forEach(([k, v]) => {
+        const id = String(k);
+        if (!v || typeof v !== "object") return;
+        const images = Array.isArray((v as any).images) ? (v as any).images : [];
+        next[id] = {
+          id,
+          name: String((v as any).name || ""),
+          brand: String((v as any).brand || " "),
+          category: String((v as any).category || "Все"),
+          price: Number((v as any).price) || 0,
+          hasPrice: (v as any).hasPrice !== false,
+          images: images.length ? images : ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"],
+          description: String((v as any).description || ""),
+          details: Array.isArray((v as any).details) ? (v as any).details : []
+        };
+      });
+      setFavoriteItemsById(next);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
       localStorage.setItem("tg_favorites", JSON.stringify(favorites));
     } catch {
       // ignore
     }
   }, [favorites]);
 
-  const toggleFavorite = useCallback((productId: string) => {
+  useEffect(() => {
+    try {
+      localStorage.setItem("tg_favorite_items", JSON.stringify(favoriteItemsById));
+    } catch {
+      // ignore
+    }
+  }, [favoriteItemsById]);
+
+  const toggleFavorite = useCallback((productId: string, product?: Product) => {
     const id = String(productId);
+
     setFavorites((prev) => {
       const has = prev.includes(id);
-      const next = has ? prev.filter((x) => x !== id) : [...prev, id];
-      return next;
+
+      setFavoriteItemsById((prevItems) => {
+        const next = { ...prevItems };
+
+        if (has) {
+          delete next[id];
+          return next;
+        }
+
+        if (product) {
+          next[id] = product;
+          return next;
+        }
+
+        if (!next[id]) {
+          const fromProducts = productsRef.current.find((p) => String(p.id) === id);
+          const fromCart = cartRef.current.find((p) => String(p.id) === id);
+          const fallback = fromProducts || fromCart;
+          if (fallback) next[id] = fallback as any;
+        }
+
+        return next;
+      });
+
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
     });
+
     setFavoriteBumpId(id);
-    window.setTimeout(() => {
-      setFavoriteBumpId((curr) => (curr === id ? null : curr));
-    }, 180);
+    window.setTimeout(() => setFavoriteBumpId(null), 250);
   }, []);
 
   useEffect(() => {
@@ -357,6 +418,24 @@ const App: React.FC = () => {
 
   const sourceProducts = apiProducts;
   const isProductsLoading = isExternalLoading || isExternalFetching;
+
+  useEffect(() => {
+    if (!favorites.length) return;
+    if (!sourceProducts.length) return;
+    const byId = new Map(sourceProducts.map((p) => [String(p.id), p] as const));
+    setFavoriteItemsById((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      favorites.forEach((id) => {
+        const fresh = byId.get(String(id));
+        if (fresh) {
+          next[String(id)] = fresh;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [favorites, sourceProducts]);
 
   useEffect(() => {
     productsRef.current = sourceProducts;
@@ -977,7 +1056,7 @@ const App: React.FC = () => {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleFavorite(product.id);
+                        toggleFavorite(product.id, product);
                       }}
                       aria-label={
                         isFavorited
@@ -1054,7 +1133,9 @@ const App: React.FC = () => {
   }
 
   function FavoritesView() {
-    const favoriteProducts = filteredAndSortedProducts.filter((p) => favorites.includes(String(p.id)));
+    const favoriteProducts = favorites
+      .map((id) => favoriteItemsById[String(id)])
+      .filter(Boolean);
 
     return (
       <div className="animate-in fade-in pb-32 pt-24 text-white duration-700">
@@ -1096,7 +1177,7 @@ const App: React.FC = () => {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleFavorite(product.id);
+                        toggleFavorite(product.id, product);
                       }}
                       aria-label={
                         isFavorited
@@ -1302,7 +1383,7 @@ const App: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => toggleFavorite(selectedProduct.id)}
+                onClick={() => toggleFavorite(selectedProduct.id, selectedProduct)}
                 aria-label={
                   isFavorited ? "Убрать из избранного" : "Добавить в избранное"
                 }
