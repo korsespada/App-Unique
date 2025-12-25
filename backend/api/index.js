@@ -338,7 +338,6 @@ async function handleExternalProducts(req, res) {
     totalPages,
     totalItems,
     hasNextPage: safePage < totalPages,
-    seedEcho: seed,
   };
 
   externalProductsCache.set(cacheKey, payload);

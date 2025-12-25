@@ -418,7 +418,6 @@ app.get('/api/external-products', async (req, res) => {
     const mixed = seed ? mixByBrandRoundRobin(shuffled, seed) : mixByBrandRoundRobin(shuffled, '');
     const payload = normalizeProductDescriptions({
       ...buildPagedExternalProductsResponse(mixed, { page, perPage }),
-      seedEcho: seed,
     });
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
