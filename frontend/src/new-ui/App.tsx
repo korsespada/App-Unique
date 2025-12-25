@@ -76,20 +76,29 @@ const App: React.FC = () => {
     const raw = String(url || "").trim();
     if (!raw) return raw;
 
+    const apiRootRaw = (import.meta.env as Record<string, string | undefined>)
+      ?.VITE_API_URL;
+    const apiRoot = (apiRootRaw && String(apiRootRaw).trim())
+      ? String(apiRootRaw).trim().replace(/\/+$/, "")
+      : "https://app-unique.vercel.app";
+
     try {
       const u = new URL(raw);
 
       if (!u.searchParams.has("thumb") && u.pathname.includes("/api/files/")) {
         u.searchParams.set("thumb", thumb);
+        return u.toString();
       }
 
-      if (u.searchParams.has("w")) {
-        u.searchParams.set("w", "600");
-      }
-
-      return u.toString();
+      const [w, h] = String(thumb).split("x");
+      const ww = Number(w) || 400;
+      const hh = Number(h) || 500;
+      return `${apiRoot}/api/image?url=${encodeURIComponent(raw)}&w=${ww}&h=${hh}`;
     } catch {
-      return raw;
+      const [w, h] = String(thumb).split("x");
+      const ww = Number(w) || 400;
+      const hh = Number(h) || 500;
+      return `${apiRoot}/api/image?url=${encodeURIComponent(raw)}&w=${ww}&h=${hh}`;
     }
   }, []);
 

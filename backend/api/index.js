@@ -9,6 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const NodeCache = require('node-cache');
+const sharp = require('sharp');
 const { validateTelegramInitData } = require('../src/telegramWebAppAuth');
 const { listActiveProducts, listAllActiveProducts } = require('../src/pocketbaseClient');
 
@@ -225,9 +226,107 @@ app.use(
 app.use(express.json());
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
+const imageProxyCache = new NodeCache({ stdTTL: 24 * 60 * 60, useClones: false });
 
 function setCatalogCacheHeaders(res) {
   res.set('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+}
+
+function setImageCacheHeaders(res) {
+  res.set('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=86400');
+}
+
+function getAllowedImageHosts() {
+  const raw = String(process.env.IMAGE_PROXY_ALLOW_HOSTS || '').trim();
+  const list = raw
+    ? raw
+        .split(',')
+        .map((x) => x.trim().toLowerCase())
+        .filter(Boolean)
+    : ['ximg.szwego.com'];
+  return new Set(list);
+}
+
+function isPrivateIpHost(hostname) {
+  const h = String(hostname || '').trim().toLowerCase();
+  if (!h) return true;
+  if (h === 'localhost') return true;
+  if (h === '0.0.0.0') return true;
+  if (h === '127.0.0.1') return true;
+  if (h === '::1') return true;
+
+  // IPv4 blocks
+  const m = h.match(/^\d{1,3}(?:\.\d{1,3}){3}$/);
+  if (m) {
+    const parts = h.split('.').map((x) => Number(x));
+    if (parts.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) return true;
+    const [a, b] = parts;
+    if (a === 10) return true;
+    if (a === 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+  }
+
+  return false;
+}
+
+async function handleImageProxy(req, res) {
+  const rawUrl = String(req.query.url || '').trim();
+  const w = Math.max(16, Math.min(2000, Number(req.query.w) || 0));
+  const h = Math.max(16, Math.min(2000, Number(req.query.h) || 0));
+  const fit = String(req.query.fit || 'cover').trim().toLowerCase();
+  const quality = Math.max(30, Math.min(90, Number(req.query.q) || 72));
+
+  if (!rawUrl) {
+    return res.status(400).json({ error: 'url is required' });
+  }
+
+  let urlObj;
+  try {
+    urlObj = new URL(rawUrl);
+  } catch {
+    return res.status(400).json({ error: 'invalid url' });
+  }
+
+  if (!['http:', 'https:'].includes(urlObj.protocol)) {
+    return res.status(400).json({ error: 'unsupported protocol' });
+  }
+
+  const allowedHosts = getAllowedImageHosts();
+  const hostname = String(urlObj.hostname || '').toLowerCase();
+  if (isPrivateIpHost(hostname) || !allowedHosts.has(hostname)) {
+    return res.status(403).json({ error: 'host not allowed' });
+  }
+
+  const cacheKey = `img:${hostname}:${urlObj.pathname}:${urlObj.search}:${w}:${h}:${fit}:${quality}`;
+  const cached = imageProxyCache.get(cacheKey);
+  if (cached) {
+    setImageCacheHeaders(res);
+    res.set('Content-Type', 'image/webp');
+    return res.send(cached);
+  }
+
+  const imgResp = await axios.get(urlObj.toString(), {
+    responseType: 'arraybuffer',
+    timeout: 15000,
+    maxContentLength: 15 * 1024 * 1024,
+  });
+
+  const inputBuf = Buffer.from(imgResp.data);
+  let pipeline = sharp(inputBuf, { failOn: 'none' }).rotate();
+  if (w || h) {
+    pipeline = pipeline.resize(w || null, h || null, {
+      fit: fit === 'contain' ? 'contain' : 'cover',
+      withoutEnlargement: true,
+    });
+  }
+  const outBuf = await pipeline.webp({ quality }).toBuffer();
+
+  imageProxyCache.set(cacheKey, outBuf);
+  setImageCacheHeaders(res);
+  res.set('Content-Type', 'image/webp');
+  return res.send(outBuf);
 }
 
 async function handleCatalogFilters(req, res) {
@@ -349,6 +448,14 @@ async function handleExternalProducts(req, res) {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Image proxy (resize/compress external images)
+app.get(
+  '/api/image',
+  asyncRoute(async (req, res) => {
+    return handleImageProxy(req, res);
+  })
+);
 
 // External products endpoint
 app.get(
