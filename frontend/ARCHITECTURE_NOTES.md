@@ -43,6 +43,8 @@
   - Add category and brand filters
   - Implement responsive grid layout
 
+**Status (implemented):** основной каталог/главный экран реализован в `src/new-ui/App.tsx`.
+
 ### 2. Product Detail Page
 
 - **Current**: Basic product details
@@ -51,6 +53,11 @@
   - Add fullscreen image viewer
   - Add "Similar Products" section
   - Sticky add-to-cart button
+
+**Status (implemented):** галерея изображений сделана без `swiper` в `src/new-ui/App.tsx`.
+
+- Double-buffer (A/B) слои для устранения моргания при перелистывании
+- Preload следующего кадра + фоновая предзагрузка всех фото после открытия карточки
 
 ### 3. Cart & Checkout
 
@@ -144,7 +151,17 @@
 
 ## Dependencies to Add
 
-- `swiper` - For image galleries
+- `swiper` - For image galleries (optional; текущая реализация галереи уже есть без swiper)
 - `react-hook-form` - For form handling
 - `zod` - For form validation
 - `@tanstack/react-query` - For data fetching (already in use)
+
+## Backend notes (Vercel)
+
+- `backend/api/index.js` is the Vercel entrypoint.
+- `/api/external-products`:
+  - Deterministic shuffle by `seed`
+  - Round-robin mix by **category**
+  - PocketBase snapshot cache (5 min) to reduce TTFB
+  - Fallback to last known products snapshot on PocketBase downtime
+  - `seedEcho` debug field removed
