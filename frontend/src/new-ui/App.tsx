@@ -587,7 +587,8 @@ const App: React.FC = () => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        return prev.map((item) => (item.id === product.id
+        return prev.map((item) =>
+          item.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
@@ -832,13 +833,13 @@ const App: React.FC = () => {
                   </option>
                 ))}
             </select>
-      <ChevronDown
+            <ChevronDown
               size={14}
               className="text-white/35 pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 transition-colors group-hover:text-white/60"
             />
-    </div>
+          </div>
 
-          {(activeBrand !== "Все"
+          {(activeBrand !== "Все" ||
             activeCategory !== "Все" ||
             searchQuery.trim()) && (
             <button
@@ -847,7 +848,7 @@ const App: React.FC = () => {
               className="w-full text-left text-[12px] font-semibold tracking-normal text-red-400 [font-kerning:normal]">
               Сбросить фильтры
             </button>
-    )}
+          )}
         </div>
 
         <div className="mb-4 px-4">
