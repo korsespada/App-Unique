@@ -276,6 +276,7 @@ function splitTelegramMessage(text, maxLen = 3500) {
 }
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
+let lastGoodActiveProducts = null;
 
 // In-memory storage for profiles (in production, use a database)
 const profiles = new Map();
@@ -357,9 +358,18 @@ async function getCachedActiveProducts() {
     process.env.PB_URL = pbUrlRaw.trim();
   }
 
-  const products = await listActiveProducts();
-  externalProductsCache.set(cacheKey, products);
-  return products;
+  try {
+    const products = await listActiveProducts();
+    lastGoodActiveProducts = products;
+    externalProductsCache.set(cacheKey, products);
+    return products;
+  } catch (err) {
+    if (lastGoodActiveProducts) {
+      console.warn('PocketBase unavailable, serving last known products snapshot');
+      return lastGoodActiveProducts;
+    }
+    throw err;
+  }
 }
 
 // Routes

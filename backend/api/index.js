@@ -225,9 +225,24 @@ app.use(
 app.use(express.json());
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
+let lastGoodAllActiveProducts = null;
 
 function setCatalogCacheHeaders(res) {
   res.set('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+}
+
+async function getAllActiveProductsSafe(perPage) {
+  try {
+    const pbAll = await listAllActiveProducts(perPage);
+    lastGoodAllActiveProducts = pbAll;
+    return pbAll;
+  } catch (err) {
+    if (lastGoodAllActiveProducts) {
+      console.warn('PocketBase unavailable, serving last known products snapshot');
+      return lastGoodAllActiveProducts;
+    }
+    throw err;
+  }
 }
 
 async function handleCatalogFilters(req, res) {
@@ -238,7 +253,7 @@ async function handleCatalogFilters(req, res) {
     return res.json(cached);
   }
 
-  const pbAll = await listAllActiveProducts(2000);
+  const pbAll = await getAllActiveProductsSafe(2000);
   const items = Array.isArray(pbAll?.items) ? pbAll.items : [];
 
   const categoriesSet = new Set();
@@ -307,10 +322,11 @@ async function handleExternalProducts(req, res) {
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const pbAll = await listAllActiveProducts(2000);
+  const pbAll = await getAllActiveProductsSafe(2000);
 
   const q = search.toLowerCase();
-  const filtered = pbAll.items.filter((p) => {
+  const items = Array.isArray(pbAll?.items) ? pbAll.items : [];
+  const filtered = items.filter((p) => {
     if (brand && String(p.brand || '') !== brand) return false;
     if (category && String(p.category || '') !== category) return false;
     if (q) {
