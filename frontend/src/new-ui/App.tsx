@@ -41,6 +41,7 @@ const App: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [startProductId, setStartProductId] = useState<string | null>(null);
+  const [shuffleSeed, setShuffleSeed] = useState(() => String(Date.now()));
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoriteBumpId, setFavoriteBumpId] = useState<string | null>(null);
   const [orderComment, setOrderComment] = useState<string>("");
@@ -224,8 +225,6 @@ const App: React.FC = () => {
     };
   }, [cart.length, currentView]);
 
-  const externalProductsSeed = useMemo(() => String(Date.now()), []);
-
   const {
     data: externalData,
     isLoading: isExternalLoading,
@@ -237,7 +236,7 @@ const App: React.FC = () => {
     search: searchQuery,
     brand: activeBrand === "Все" ? undefined : activeBrand,
     category: activeCategory === "Все" ? undefined : activeCategory,
-    seed: externalProductsSeed
+    seed: shuffleSeed
   });
 
   useEffect(() => {
@@ -554,8 +553,6 @@ const App: React.FC = () => {
     }
   }, [activeBrand, derivedBrands]);
 
-  const shuffleSeed = useMemo(() => String(Date.now()), []);
-
   const filteredAndSortedProducts = useMemo(() => {
     if (!sourceProducts.length) return sourceProducts;
 
@@ -623,6 +620,7 @@ const App: React.FC = () => {
     setActiveBrand("Все");
     setActiveCategory("Все");
     setSearchQuery("");
+    setShuffleSeed(String(Date.now()));
   };
 
   const sendOrderToManager = async () => {

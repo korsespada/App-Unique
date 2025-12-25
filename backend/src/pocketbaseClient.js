@@ -15,7 +15,7 @@ function pbApi() {
   const headers = { Accept: 'application/json' };
   if (token) {
     const trimmed = String(token).trim();
-    headers.Authorization = trimmed.includes(' ') ? trimmed : trimmed;
+    headers.Authorization = trimmed.includes(' ') ? trimmed : `Bearer ${trimmed}`;
   }
 
   return axios.create({
