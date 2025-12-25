@@ -140,6 +140,48 @@ function shuffleDeterministic(items, seed) {
   return arr;
 }
 
+function mixByBrandRoundRobin(products, seed) {
+  const list = Array.isArray(products) ? products : [];
+  if (list.length <= 1) return list;
+
+  const byBrand = new Map();
+  for (const p of list) {
+    const brand = String(p?.brand ?? '').trim() || '__unknown__';
+    if (!byBrand.has(brand)) byBrand.set(brand, []);
+    byBrand.get(brand).push(p);
+  }
+
+  const brands = Array.from(byBrand.keys());
+  const shuffledBrands = shuffleDeterministic(brands, `brands:${seed}`);
+  for (const b of shuffledBrands) {
+    const items = byBrand.get(b) || [];
+    byBrand.set(b, shuffleDeterministic(items, `brand:${b}:${seed}`));
+  }
+
+  const pointers = new Map(shuffledBrands.map((b) => [b, 0]));
+  const remaining = new Set(shuffledBrands);
+  const out = [];
+
+  while (remaining.size) {
+    let progressed = false;
+    for (const b of shuffledBrands) {
+      if (!remaining.has(b)) continue;
+      const items = byBrand.get(b) || [];
+      const idx = pointers.get(b) || 0;
+      if (idx >= items.length) {
+        remaining.delete(b);
+        continue;
+      }
+      out.push(items[idx]);
+      pointers.set(b, idx + 1);
+      progressed = true;
+    }
+    if (!progressed) break;
+  }
+
+  return out;
+}
+
 function buildPagedExternalProductsResponse(allProducts, { page, perPage }) {
   const safePage = Math.max(1, Number(page) || 1);
   const safePerPage = Math.max(1, Math.min(2000, Number(perPage) || 200));
@@ -159,6 +201,14 @@ function buildPagedExternalProductsResponse(allProducts, { page, perPage }) {
     totalItems,
     hasNextPage: normalizedPage < totalPages,
   };
+}
+
+function toProductArray(productsLike) {
+  if (Array.isArray(productsLike)) return productsLike;
+  if (productsLike && typeof productsLike === 'object' && Array.isArray(productsLike.items)) {
+    return productsLike.items;
+  }
+  return [];
 }
 
 let cachedBotUsername = null;
@@ -299,6 +349,14 @@ async function getCachedActiveProducts() {
     return cached;
   }
 
+  const pbUrlRaw = process.env.PB_URL;
+  if (typeof pbUrlRaw === 'string' && /\s/.test(pbUrlRaw)) {
+    console.warn('PB_URL contains whitespace. Please remove spaces/newlines in .env', {
+      pbUrlPreview: pbUrlRaw.slice(0, 80),
+    });
+    process.env.PB_URL = pbUrlRaw.trim();
+  }
+
   const products = await listActiveProducts();
   externalProductsCache.set(cacheKey, products);
   return products;
@@ -323,9 +381,11 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
 
   try {
     const products = await getCachedActiveProducts();
-    const shuffled = seed ? shuffleDeterministic(products?.items || products, seed) : (products?.items || products);
+    const baseList = toProductArray(products);
+    const shuffled = seed ? shuffleDeterministic(baseList, seed) : baseList;
+    const mixed = seed ? mixByBrandRoundRobin(shuffled, seed) : mixByBrandRoundRobin(shuffled, '');
     const payload = normalizeProductDescriptions(
-      buildPagedExternalProductsResponse(shuffled, { page, perPage })
+      buildPagedExternalProductsResponse(mixed, { page, perPage })
     );
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
@@ -353,12 +413,13 @@ app.get('/api/external-products', async (req, res) => {
 
   try {
     const products = await getCachedActiveProducts();
-    const shuffled = seed
-      ? shuffleDeterministic(products?.items || products, seed)
-      : (products?.items || products);
-    const payload = normalizeProductDescriptions(
-      buildPagedExternalProductsResponse(shuffled, { page, perPage })
-    );
+    const baseList = toProductArray(products);
+    const shuffled = seed ? shuffleDeterministic(baseList, seed) : baseList;
+    const mixed = seed ? mixByBrandRoundRobin(shuffled, seed) : mixByBrandRoundRobin(shuffled, '');
+    const payload = normalizeProductDescriptions({
+      ...buildPagedExternalProductsResponse(mixed, { page, perPage }),
+      seedEcho: seed,
+    });
     externalProductsCache.set(cacheKey, payload);
     return res.json(payload);
   } catch (error) {
