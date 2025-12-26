@@ -75,12 +75,39 @@ const App: React.FC = () => {
   const isPopNavRef = useRef(false);
   const lastPushedViewRef = useRef<AppView>("home");
 
+  const VKCLOUD_HOST = "hb.ru-msk.vkcloud-storage.ru";
+  const VKCLOUD_ORIG_BUCKET = "yeezy-app";
+  const VKCLOUD_THUMBS_BUCKET = "yeezy-app-thumbs";
+
   const getThumbUrl = useCallback((url: string, thumb = "400x500") => {
     const raw = String(url || "").trim();
     if (!raw) return raw;
 
     try {
       const u = new URL(raw);
+
+      if (
+        u.hostname === VKCLOUD_HOST &&
+        (u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`) ||
+          u.pathname.startsWith(`/${VKCLOUD_THUMBS_BUCKET}/`))
+      ) {
+        const fromOrig = u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`);
+        const rest = fromOrig
+          ? u.pathname.slice(`/${VKCLOUD_ORIG_BUCKET}/`.length)
+          : u.pathname.slice(`/${VKCLOUD_THUMBS_BUCKET}/`.length);
+
+        const key = fromOrig
+          ? rest
+          : (() => {
+              const parts = rest.split("/").filter(Boolean);
+              if (parts.length >= 2) return parts.slice(1).join("/");
+              return rest.replace(/^\/+/, "");
+            })();
+
+        u.pathname = `/${VKCLOUD_THUMBS_BUCKET}/${thumb}/${key}`;
+        u.search = "";
+        return u.toString();
+      }
 
       if (!u.searchParams.has("thumb") && u.pathname.includes("/api/files/")) {
         u.searchParams.set("thumb", thumb);
@@ -97,7 +124,24 @@ const App: React.FC = () => {
   }, []);
 
   const getDetailImageUrl = useCallback(
-    (url: string) => getThumbUrl(url, "1000x1250"),
+    (url: string) => {
+      const raw = String(url || "").trim();
+      if (!raw) return raw;
+
+      try {
+        const u = new URL(raw);
+        if (
+          u.hostname === VKCLOUD_HOST &&
+          u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`)
+        ) {
+          return u.toString();
+        }
+      } catch {
+        // ignore
+      }
+
+      return getThumbUrl(raw, "1000x1250");
+    },
     [getThumbUrl]
   );
 
@@ -1049,6 +1093,7 @@ const App: React.FC = () => {
                       loading="lazy"
                       decoding="async"
                       className="h-full w-full object-cover"
+                      onError={(e) => { e.currentTarget.src = product.images[0]; }}
                     />
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
 
@@ -1170,6 +1215,7 @@ const App: React.FC = () => {
                       loading="lazy"
                       decoding="async"
                       className="h-full w-full object-cover"
+                      onError={(e) => { e.currentTarget.src = product.images[0]; }}
                     />
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
 
@@ -1449,6 +1495,7 @@ const App: React.FC = () => {
                       loading="lazy"
                       decoding="async"
                       className="h-full w-full object-cover"
+                      onError={(e) => { e.currentTarget.src = item.images[0]; }}
                     />
                   </div>
                   <div className="flex flex-1 flex-col gap-3">
