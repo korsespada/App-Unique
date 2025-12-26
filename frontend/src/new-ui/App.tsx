@@ -1120,6 +1120,17 @@ const App: React.FC = () => {
                         }
                       />
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addToCart(product);
+                      }}
+                      aria-label="Добавить в корзину"
+                      className="premium-shadow absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96]">
+                      <ShoppingBag size={18} className="text-white/80 transition-colors" />
+                    </button>
                 </div>
                   <div className="-mt-2 flex flex-col gap-1 px-2">
                   <h3 className="line-clamp-2 text-[13px] font-semibold tracking-tight text-white">
@@ -1241,6 +1252,17 @@ const App: React.FC = () => {
                             : "text-white/80 transition-colors"
                         }
                       />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addToCart(product);
+                      }}
+                      aria-label="Добавить в корзину"
+                      className="premium-shadow absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96]">
+                      <ShoppingBag size={18} className="text-white/80 transition-colors" />
                     </button>
                   </div>
                   <div className="px-2">
@@ -1414,7 +1436,7 @@ const App: React.FC = () => {
                 type="button"
                 onClick={() => {
                   if (isInCart) {
-                    setCurrentView("cart");
+                    updateQuantity(selectedProduct.id, -1);
                     return;
                   }
                   addToCart(selectedProduct);
@@ -1424,7 +1446,7 @@ const App: React.FC = () => {
                     ? "border border-white/10 bg-white/5 text-white hover:bg-white/10"
                     : "bg-white text-black hover:bg-white/90"
                 }`}>
-                {isInCart ? "Перейти в корзину →" : "Добавить в корзину"}
+                {isInCart ? "Убрать из корзины" : "Добавить в корзину"}
               </button>
 
               <button
