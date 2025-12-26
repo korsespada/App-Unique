@@ -41,7 +41,6 @@ const App: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [startProductId, setStartProductId] = useState<string | null>(null);
-  const [shuffleSeed, setShuffleSeed] = useState(() => String(Date.now()));
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoriteItemsById, setFavoriteItemsById] = useState<Record<string, Product>>({});
   const [favoriteBumpId, setFavoriteBumpId] = useState<string | null>(null);
@@ -342,8 +341,7 @@ const App: React.FC = () => {
   } = useGetExternalProducts({
     search: searchQuery,
     brand: activeBrand === "Все" ? undefined : activeBrand,
-    category: activeCategory === "Все" ? undefined : activeCategory,
-    seed: shuffleSeed
+    category: activeCategory === "Все" ? undefined : activeCategory
   });
 
   useEffect(() => {
@@ -679,31 +677,8 @@ const App: React.FC = () => {
   }, [activeBrand, derivedBrands]);
 
   const filteredAndSortedProducts = useMemo(() => {
-    if (!sourceProducts.length) return sourceProducts;
-
-    const arr = [...sourceProducts];
-
-    let x = 0;
-    for (let i = 0; i < shuffleSeed.length; i += 1) {
-      x = (x * 31 + shuffleSeed.charCodeAt(i)) >>> 0;
-    }
-
-    const rand = () => {
-      x ^= x << 13;
-      x ^= x >>> 17;
-      x ^= x << 5;
-      return (x >>> 0) / 4294967296;
-    };
-
-    for (let i = arr.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(rand() * (i + 1));
-      const tmp = arr[i];
-      arr[i] = arr[j];
-      arr[j] = tmp;
-    }
-
-    return arr;
-  }, [shuffleSeed, sourceProducts]);
+    return sourceProducts;
+  }, [sourceProducts]);
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
@@ -745,7 +720,6 @@ const App: React.FC = () => {
     setActiveBrand("Все");
     setActiveCategory("Все");
     setSearchQuery("");
-    setShuffleSeed(String(Date.now()));
   };
 
   const sendOrderToManager = async () => {
