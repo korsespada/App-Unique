@@ -21,7 +21,7 @@ function pbApi() {
   return axios.create({
     baseURL: url,
     headers,
-    timeout: 30000,
+    timeout: 10000,
   });
 }
 

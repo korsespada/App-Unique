@@ -275,7 +275,7 @@ function splitTelegramMessage(text, maxLen = 3500) {
   return parts.length ? parts : [''];
 }
 
-const externalProductsCache = new NodeCache({ stdTTL: 60 });
+const externalProductsCache = new NodeCache({ stdTTL: 300 });
 let lastGoodActiveProducts = null;
 
 // In-memory storage for profiles (in production, use a database)

@@ -96,7 +96,9 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
-      refetchOnMount: false
+      refetchOnMount: false,
+      staleTime: 2 * 60 * 1000, // 2 минуты
+      cacheTime: 5 * 60 * 1000 // 5 минут
     }
   );
 }

@@ -1150,8 +1150,9 @@ const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => fetchNextPage()}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-[12px] font-semibold text-white/80 transition-colors hover:bg-white/10">
-                  Загрузить ещё
+                  disabled={isFetchingNextPage}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-[12px] font-semibold text-white/80 transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isFetchingNextPage ? "Загрузка..." : "Загрузить ещё"}
                 </button>
               )}
             </div>
