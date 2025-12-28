@@ -3,50 +3,39 @@ import {
   useGetExternalProducts
 } from "@framework/api/product/external-get";
 import Api from "@framework/api/utils/api-config";
-import tgIcon from "./tg.svg";
-import {
-  ArrowLeft,
-  ChevronDown,
-  Grid3X3,
-  Heart,
-  LayoutGrid,
-  Minus,
-  Plus,
-  Search,
-  Share,
-  ShoppingBag,
-  Trash2,
-  X
-} from "lucide-react";
 import React, {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState
 } from "react";
 
+import BottomNav from "./components/BottomNav";
+import TopNav from "./components/TopNav";
+import { useHomeScroll } from "./hooks/useHomeScroll";
+import { useScrolled } from "./hooks/useScrolled";
 import { AppView, CartItem, Product } from "./types";
+import { getDetailImageUrl, getThumbUrl } from "./utils/images";
+import { CatalogFiltersResponse } from "./utils/types";
+import CartView from "./views/CartView";
+import FavoritesView from "./views/FavoritesView";
+import HomeView from "./views/HomeView";
+import ProductDetailView from "./views/ProductDetailView";
 
 const App: React.FC = () => {
-  type CatalogFiltersResponse = {
-    categories?: string[];
-    brands?: string[];
-    brandsByCategory?: Record<string, string[]>;
-  };
-
   const [currentView, setCurrentView] = useState<AppView>("home");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeBrand, setActiveBrand] = useState<string>("Все");
   const [activeCategory, setActiveCategory] = useState<string>("Все");
   const [searchQuery, setSearchQuery] = useState("");
-  const [scrolled, setScrolled] = useState(false);
   const [isSendingOrder, setIsSendingOrder] = useState(false);
   const [startProductId, setStartProductId] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [favoriteItemsById, setFavoriteItemsById] = useState<Record<string, Product>>({});
+  const [favoriteItemsById, setFavoriteItemsById] = useState<
+    Record<string, Product>
+  >({});
   const [favoriteBumpId, setFavoriteBumpId] = useState<string | null>(null);
   const [orderComment, setOrderComment] = useState<string>("");
 
@@ -56,12 +45,8 @@ const App: React.FC = () => {
     Record<string, string[]>
   >({});
 
-  const homeScrollYRef = useRef(0);
-  const shouldRestoreHomeScrollRef = useRef(false);
-
-  const saveHomeScroll = useCallback(() => {
-    homeScrollYRef.current = window.scrollY || 0;
-  }, []);
+  const { shouldRestoreHomeScrollRef, saveHomeScroll, restoreHomeScroll } =
+    useHomeScroll(currentView);
 
   // Gallery state for ProductDetail
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -70,7 +55,8 @@ const App: React.FC = () => {
   const [detailLayerASrc, setDetailLayerASrc] = useState<string>("");
   const [detailLayerBSrc, setDetailLayerBSrc] = useState<string>("");
   const [activeDetailLayer, setActiveDetailLayer] = useState<"A" | "B">("A");
-  const [isDetailImageCrossfading, setIsDetailImageCrossfading] = useState(false);
+  const [isDetailImageCrossfading, setIsDetailImageCrossfading] =
+    useState(false);
 
   const productsRef = useRef<Product[]>([]);
   const cartRef = useRef<CartItem[]>([]);
@@ -78,117 +64,9 @@ const App: React.FC = () => {
   const isPopNavRef = useRef(false);
   const lastPushedViewRef = useRef<AppView>("home");
 
-  const VKCLOUD_HOST = "hb.ru-msk.vkcloud-storage.ru";
-  const VKCLOUD_ORIG_BUCKET = "yeezy-app";
-  const VKCLOUD_THUMBS_BUCKET = "yeezy-app-thumbs";
+  const scrolled = useScrolled();
 
-  const getThumbUrl = useCallback((url: string, thumb = "400x500") => {
-    const raw = String(url || "").trim();
-    if (!raw) return raw;
-
-    try {
-      const u = new URL(raw);
-
-      if (
-        u.hostname === VKCLOUD_HOST &&
-        (u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`) ||
-          u.pathname.startsWith(`/${VKCLOUD_THUMBS_BUCKET}/`))
-      ) {
-        const fromOrig = u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`);
-        const rest = fromOrig
-          ? u.pathname.slice(`/${VKCLOUD_ORIG_BUCKET}/`.length)
-          : u.pathname.slice(`/${VKCLOUD_THUMBS_BUCKET}/`.length);
-
-        const key = fromOrig
-          ? rest
-          : (() => {
-              const parts = rest.split("/").filter(Boolean);
-              if (parts.length >= 2) return parts.slice(1).join("/");
-              return rest.replace(/^\/+/, "");
-            })();
-
-        u.pathname = `/${VKCLOUD_THUMBS_BUCKET}/${thumb}/${key}`;
-        u.search = "";
-        return u.toString();
-      }
-
-      if (!u.searchParams.has("thumb") && u.pathname.includes("/api/files/")) {
-        u.searchParams.set("thumb", thumb);
-      }
-
-      if (u.searchParams.has("w")) {
-        u.searchParams.set("w", "600");
-      }
-
-      return u.toString();
-    } catch {
-      return raw;
-    }
-  }, []);
-
-  const getDetailImageUrl = useCallback(
-    (url: string) => {
-      const raw = String(url || "").trim();
-      if (!raw) return raw;
-
-      try {
-        const u = new URL(raw);
-        if (
-          u.hostname === VKCLOUD_HOST &&
-          u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`)
-        ) {
-          return u.toString();
-        }
-      } catch {
-        // ignore
-      }
-
-      return getThumbUrl(raw, "1000x1250");
-    },
-    [getThumbUrl]
-  );
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  useEffect(() => {
-    const onScroll = () => {
-      if (currentView !== "home") return;
-      homeScrollYRef.current = window.scrollY || 0;
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [currentView]);
-
-  useLayoutEffect(() => {
-    if (currentView !== "home") return;
-    if (!shouldRestoreHomeScrollRef.current) return;
-    shouldRestoreHomeScrollRef.current = false;
-    restoreHomeScroll("auto");
-  }, [currentView]);
-
-  const restoreHomeScroll = (behavior: "auto" | "smooth" = "auto") => {
-    const y = homeScrollYRef.current || 0;
-    requestAnimationFrame(() => {
-      window.scrollTo({ top: y, behavior });
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: y, behavior });
-        requestAnimationFrame(() => {
-          window.scrollTo({ top: y, behavior });
-        });
-      });
-    });
-  };
-
-  const scrollHomeToTop = (behavior: "auto" | "smooth" = "auto") => {
-    homeScrollYRef.current = 0;
-    requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, behavior });
-    });
-  };
+  // scrollHomeToTop больше не используется здесь
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -239,7 +117,9 @@ const App: React.FC = () => {
       Object.entries(parsed as Record<string, any>).forEach(([k, v]) => {
         const id = String(k);
         if (!v || typeof v !== "object") return;
-        const images = Array.isArray((v as any).images) ? (v as any).images : [];
+        const images = Array.isArray((v as any).images)
+          ? (v as any).images
+          : [];
         next[id] = {
           id,
           name: String((v as any).name || ""),
@@ -247,7 +127,11 @@ const App: React.FC = () => {
           category: String((v as any).category || "Все"),
           price: Number((v as any).price) || 0,
           hasPrice: (v as any).hasPrice !== false,
-          images: images.length ? images : ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"],
+          images: images.length
+            ? images
+            : [
+                "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
+              ],
           description: String((v as any).description || ""),
           details: Array.isArray((v as any).details) ? (v as any).details : []
         };
@@ -268,7 +152,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     try {
-      localStorage.setItem("tg_favorite_items", JSON.stringify(favoriteItemsById));
+      localStorage.setItem(
+        "tg_favorite_items",
+        JSON.stringify(favoriteItemsById)
+      );
     } catch {
       // ignore
     }
@@ -294,7 +181,9 @@ const App: React.FC = () => {
         }
 
         if (!next[id]) {
-          const fromProducts = productsRef.current.find((p) => String(p.id) === id);
+          const fromProducts = productsRef.current.find(
+            (p) => String(p.id) === id
+          );
           const fromCart = cartRef.current.find((p) => String(p.id) === id);
           const fallback = fromProducts || fromCart;
           if (fallback) next[id] = fallback as any;
@@ -318,8 +207,7 @@ const App: React.FC = () => {
       if (!Array.isArray(parsed)) return;
       const restored = parsed
         .filter(
-          (it) =>
-            it && typeof it === "object" && (it as any).id && (it as any).name
+          (it) => it && typeof it === "object" && (it as any).id && (it as any).name
         )
         .map((it) => ({
           ...(it as any),
@@ -381,21 +269,19 @@ const App: React.FC = () => {
           ? data.brands.map((x) => String(x).trim()).filter(Boolean)
           : [];
         const brandsByCategoryRaw = data?.brandsByCategory;
-        const brandsByCategory =
-          brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
-          ? brandsByCategoryRaw
-          : {};
+        const brandsByCategory =          brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
+            ? brandsByCategoryRaw
+            : {};
 
-        const normalizedBrandsByCategory: Record<string, string[]> =
-          Object.fromEntries(
-          Object.entries(brandsByCategory).map(([k, v]) => {
-            const key = String(k).trim();
-            const value = Array.isArray(v)
-              ? v.map((x) => String(x).trim()).filter(Boolean)
-              : [];
-            return [key, value] as const;
-          })
-        );
+        const normalizedBrandsByCategory: Record<string, string[]> =          Object.fromEntries(
+            Object.entries(brandsByCategory).map(([k, v]) => {
+              const key = String(k).trim();
+              const value = Array.isArray(v)
+                ? v.map((x) => String(x).trim()).filter(Boolean)
+                : [];
+              return [key, value] as const;
+            })
+          );
 
         setCatalogCategories(categories);
         setCatalogBrands(brands);
@@ -432,19 +318,16 @@ const App: React.FC = () => {
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const apiProducts = useMemo<Product[]>(() => {
-    const pages = (externalData?.pages ||
-      []) as ExternalProductsPagedResponse[];
-    const raw = pages.flatMap((p) =>
-      Array.isArray(p?.products) ? p.products : []
-    );
+    const pages = (externalData?.pages
+      || []) as ExternalProductsPagedResponse[];
+    const raw = pages.flatMap((p) => Array.isArray(p?.products) ? p.products : []);
     return raw
       .map((p) => {
         const id = String((p as any).id || p.product_id || "");
         const name = String(p.title || p.name || p.product_id || "").trim();
         const brand = String(p.brand || p.season_title || "").trim();
         const category = String(p.category || "Все");
-        const images =
-          Array.isArray(p.images) && p.images.length ? p.images : [];
+        const images =          Array.isArray(p.images) && p.images.length ? p.images : [];
 
         const rawPrice = Number((p as any).price);
         const hasPrice = Number.isFinite(rawPrice) && rawPrice > 0;
@@ -459,8 +342,8 @@ const App: React.FC = () => {
           images: images.length
             ? images
             : [
-                "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
-              ],
+              "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
+            ],
           description: String(p.description || ""),
           details: Array.isArray((p as any).details) ? (p as any).details : []
         };
@@ -469,8 +352,8 @@ const App: React.FC = () => {
   }, [externalData]);
 
   const totalItems = useMemo(() => {
-    const pages = (externalData?.pages ||
-      []) as ExternalProductsPagedResponse[];
+    const pages = (externalData?.pages
+      || []) as ExternalProductsPagedResponse[];
     const first = pages[0];
     const totalItemsRaw = Number((first as any)?.totalItems);
     return Number.isFinite(totalItemsRaw) && totalItemsRaw >= 0
@@ -535,13 +418,12 @@ const App: React.FC = () => {
           ? nextItem.images[0]
           : undefined;
 
-        const same =
-          item.name === nextItem.name &&
-          item.brand === nextItem.brand &&
-          item.category === nextItem.category;
-        Number(item.price) === Number(nextItem.price)
-          && (item.hasPrice ?? true) === (nextItem.hasPrice ?? true)
-          && itemFirstImg === freshFirstImg;
+        const same = item.name === nextItem.name;
+        item.brand === nextItem.brand
+          && item.category === nextItem.category;
+        Number(item.price) === Number(nextItem.price) &&
+          (item.hasPrice ?? true) === (nextItem.hasPrice ?? true) &&
+          itemFirstImg === freshFirstImg;
 
         if (!same) changed = true;
         return same ? item : nextItem;
@@ -637,9 +519,10 @@ const App: React.FC = () => {
     }
 
     const fromView = lastPushedViewRef.current;
-    const state =      currentView === "product-detail"
-        ? { view: currentView, productId: selectedProduct?.id || "", fromView }
-        : { view: currentView, fromView };
+    const state =
+      currentView === "product-detail"
+      ? { view: currentView, productId: selectedProduct?.id || "", fromView }
+      : { view: currentView, fromView };
 
     window.history.pushState(state, "");
     lastPushedViewRef.current = currentView;
@@ -696,9 +579,10 @@ const App: React.FC = () => {
     }
   }, [activeBrand, derivedBrands]);
 
-  const filteredAndSortedProducts = useMemo(() => {
-    return sourceProducts;
-  }, [sourceProducts]);
+  const filteredAndSortedProducts = useMemo(
+    () => sourceProducts,
+    [sourceProducts]
+  );
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
@@ -715,13 +599,15 @@ const App: React.FC = () => {
   };
 
   const updateQuantity = (id: string, delta: number) => {
-    setCart((prev) => prev
-        .map((item) => {
-          if (item.id !== id) return item;
-          const newQty = Math.max(0, item.quantity + delta);
-          return { ...item, quantity: newQty };
-        })
-        .filter((item) => item.quantity > 0));
+    setCart((prev) =>
+      prev
+      .map((item) => {
+        if (item.id !== id) return item;
+        const newQty = Math.max(0, item.quantity + delta);
+        return { ...item, quantity: newQty };
+      })
+      .filter((item) => item.quantity > 0)
+    );
   };
 
   const cartHasUnknownPrice = cart.some((item) => item.hasPrice === false);
@@ -744,12 +630,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const raw = String(searchQuery || "").trim();
-    const looksLikeId =
-      raw.length >= 12 &&
-      raw.length <= 120 &&
-      !raw.includes(" ") &&
-      !raw.includes("\t") &&
-      !raw.includes("\n");
+    const looksLikeId = raw.length >= 12 && raw.length <= 120;
+    !raw.includes(" ")
+      && !raw.includes("\t")
+      && !raw.includes("\n");
     if (!looksLikeId) return;
 
     setActiveCategory("Все");
@@ -809,11 +693,14 @@ const App: React.FC = () => {
       ? `https://t.me/YeezyUniqueBot?startapp=product__${id}`
       : `${window.location.origin}?start_param=product_${selectedProduct.id}`;
 
-    navigator.clipboard.writeText(productUrl).then(() => {
-      alert('Ссылка скопирована!');
-    }).catch(() => {
-      alert('Не удалось скопировать ссылку');
-    });
+    navigator.clipboard
+      .writeText(productUrl)
+      .then(() => {
+        alert("Ссылка скопирована!");
+      })
+      .catch(() => {
+        alert("Не удалось скопировать ссылку");
+      });
   }, [selectedProduct]);
 
   const navigateToProduct = useCallback(
@@ -830,7 +717,7 @@ const App: React.FC = () => {
       setCurrentView("product-detail");
       window.scrollTo(0, 0);
     },
-    [currentView, getDetailImageUrl]
+    [currentView, saveHomeScroll]
   );
 
   useEffect(() => {
@@ -862,7 +749,8 @@ const App: React.FC = () => {
     const nextSrc = selectedProduct?.images?.[currentImageIndex] || "";
     if (!selectedProduct || !nextSrc) return;
     const nextResolved = getDetailImageUrl(nextSrc);
-    const currentResolved = activeDetailLayer === "A" ? detailLayerASrc : detailLayerBSrc;
+    const currentResolved =
+      activeDetailLayer === "A" ? detailLayerASrc : detailLayerBSrc;
     if (nextResolved === currentResolved) return;
 
     let cancelled = false;
@@ -899,7 +787,14 @@ const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeDetailLayer, currentImageIndex, detailLayerASrc, detailLayerBSrc, getDetailImageUrl, selectedProduct]);
+  }, [
+    activeDetailLayer,
+    currentImageIndex,
+    detailLayerASrc,
+    detailLayerBSrc,
+    getDetailImageUrl,
+    selectedProduct
+  ]);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -908,10 +803,8 @@ const App: React.FC = () => {
       : [];
     if (images.length < 2) return;
 
-    const nextIndex =
-      currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
-    const prevIndex =
-      currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
+    const nextIndex =      currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
+    const prevIndex =      currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
     const toPrefetch = [images[nextIndex], images[prevIndex]].filter(Boolean);
 
     toPrefetch.forEach((src) => {
@@ -928,14 +821,18 @@ const App: React.FC = () => {
     if (currentView !== "product-detail") return;
     if (!selectedProduct) return;
 
-    const images = Array.isArray(selectedProduct.images) ? selectedProduct.images : [];
+    const images = Array.isArray(selectedProduct.images)
+      ? selectedProduct.images
+      : [];
     if (images.length < 2) return;
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
       if (cancelled) return;
 
-      const currentRaw = String(selectedProduct.images?.[currentImageIndex] || "");
+      const currentRaw = String(
+        selectedProduct.images?.[currentImageIndex] || ""
+      );
       const currentResolved = currentRaw ? getDetailImageUrl(currentRaw) : "";
 
       const resolved = images
@@ -983,813 +880,104 @@ const App: React.FC = () => {
     };
   }, [currentImageIndex, currentView, getDetailImageUrl, selectedProduct]);
 
-  function HomeView() {
-    return (
-      <div className="animate-in fade-in pb-32 pt-2 duration-700">
-        {/* Search Header */}
-        <div className="mb-4 px-4">
-          <div className="relative">
-      <input
-              type="text"
-              placeholder="Что вы ищете?"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="none"
-              enterKeyHint="search"
-              className="premium-shadow w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 pr-12 text-[13px] font-medium tracking-normal text-white outline-none transition-all duration-200 ease-out [font-kerning:normal] placeholder:text-white/40 focus:border-white/20 focus:ring-2 focus:ring-white/10"
-            />
-      {searchQuery.trim() ? (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-xl p-2 text-white/40 transition-colors hover:text-white/70"
-                aria-label="Очистить поиск">
-                <X size={18} />
-              </button>
-            ) : (
-              <Search
-                size={18}
-                className="text-white/35 absolute right-5 top-1/2 -translate-y-1/2"
-              />
-            )}
-    </div>
-
-          <div className="-mx-4 mt-6 h-px w-full bg-white/10" />
-
-          {currentView === "product-detail" && (
-    <button
-              type="button"
-              onClick={() => setCurrentView("cart")}
-              className="premium-shadow absolute right-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]"
-              aria-label="Открыть корзину">
-              <ShoppingBag size={18} />
-            </button>
-    )}
-        </div>
-
-        {/* Filters */}
-        <div className="mb-8 space-y-4 px-4">
-          {/* Categories tabs */}
-          <div className="w-full overflow-hidden">
-      <div className="no-scrollbar flex max-w-full gap-3 overflow-x-auto pb-1">
-              {derivedCategories.map((category) => {
-                const active = category === activeCategory;
-                return (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => setActiveCategory(category)}
-                    className={`premium-shadow shrink-0 rounded-full border px-5 py-2.5 text-[12px] font-semibold tracking-normal transition-all duration-200 ease-out active:scale-[0.98] ${
-                      active
-                        ? "border-white/15 bg-white text-black"
-                        : "border-white/10 bg-white/5 text-white/75 hover:bg-white/10"
-                    }`}>
-                    {category === "Все" ? "Все" : category}
-                  </button>
-                );
-              })}
-            </div>
-    </div>
-
-          {/* Brand Select */}
-          <div className="group relative">
-      <select
-              value={activeBrand}
-              onChange={(e) => setActiveBrand(e.target.value)}
-              className="premium-shadow w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out focus:border-white/20 focus:ring-2 focus:ring-white/10">
-              <option value="Все" className="bg-[#0b0b0b] text-white">
-                Все бренды
-              </option>
-              {derivedBrands
-                .filter((b) => b !== "Все")
-                .map((brand) => (
-                  <option
-                    key={brand}
-                    value={brand}
-                    className="bg-[#0b0b0b] text-white">
-                    {brand}
-                  </option>
-                ))}
-            </select>
-            <ChevronDown
-              size={14}
-              className="text-white/35 pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 transition-colors group-hover:text-white/60"
-            />
-          </div>
-
-          {(activeBrand !== "Все" ||
-            activeCategory !== "Все" ||
-            searchQuery.trim()) && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="w-full text-left text-[12px] font-semibold tracking-normal text-red-400 [font-kerning:normal]">
-              Сбросить фильтры
-            </button>
-          )}
-        </div>
-
-        <div className="mb-4 px-4">
-          <p className="text-white/55 text-[12px] font-medium tracking-normal [font-kerning:normal]">
-      Товаров:
-            {" "}
-      {totalItems}
-    </p>
-        </div>
-
-        {/* Modern Grid */}
-        <div className="grid grid-cols-2 gap-4 px-4">
-          {isProductsLoading && sourceProducts.length === 0 ? (
-      Array.from({ length: 8 }).map((_, idx) => (
-              <div key={idx} className="animate-pulse">
-                <div className="mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-white/5" />
-                <div className="px-2">
-                  <div className="mb-2 h-3 w-16 rounded bg-white/10" />
-                  <div className="h-4 w-28 rounded bg-white/10" />
-                </div>
-              </div>
-      ))
-    ) : filteredAndSortedProducts.length > 0 ? (
-      filteredAndSortedProducts.map((product) => {
-        const isFavorited = favorites.includes(String(product.id));
-        const isBumping = favoriteBumpId === String(product.id);
-
-        return (
-                <div
-                  key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => {
-                  saveHomeScroll();
-                  navigateToProduct(product);
-                  }} onContextMenu={(e) => {
-                    e.preventDefault();
-                  }}>
-                  <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-white/5 transition-all duration-300 ease-out">
-                  <img
-                      src={getThumbUrl(product.images[0])}
-                      alt={product.name}
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover"
-                      onError={(e) => { e.currentTarget.src = product.images[0]; }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                      }}
-                    />
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
-
-                  <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(product.id, product);
-                      }}
-                      aria-label={
-                        isFavorited
-                          ? "Убрать из избранного"
-                          : "Добавить в избранное"
-                      }
-                      className={`premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96] ${
-                        isBumping ? "scale-[1.06]" : "scale-100"
-                      }`}>
-                      <Heart
-                        size={18}
-                        className={
-                          isFavorited
-                            ? "fill-red-500 text-red-500 transition-colors"
-                            : "text-white/80 transition-colors"
-                        }
-                      />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addToCart(product);
-                      }}
-                      aria-label="Добавить в корзину"
-                      className="premium-shadow absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96]">
-                      <ShoppingBag size={18} className="text-white/80 transition-colors" />
-                    </button>
-                </div>
-                  <div className="-mt-2 flex flex-col gap-1 px-2">
-                  <h3 className="line-clamp-2 text-[13px] font-semibold tracking-tight text-white">
-                      {product.name}
-                    </h3>
-                  {product.hasPrice ? (
-                      <p className="text-white/85 text-[14px] font-extrabold">
-                        {product.price.toLocaleString()} ₽
-                      </p>
-                    ) : (
-                      <p className="text-white/45 text-[13px] font-semibold">
-                        Цена по запросу
-                      </p>
-                    )}
-                </div>
-                </div>
-        );
-      })
-    ) : (
-            <div className="col-span-2 py-40 text-center">
-              <p className="text-white/55 text-[13px] font-medium tracking-wide">
-                Ничего не найдено
-              </p>
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="mt-6 inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.22em] text-white/70 transition-colors hover:bg-white/10 hover:text-white">
-                Сбросить фильтры
-              </button>
-            </div>
-    )}
-        </div>
-
-        <div className="px-4">
-          <div ref={loadMoreRef} className="h-12" />
-        </div>
-      </div>
-    );
-  }
-
-  function FavoritesView() {
-    const favoriteProducts = favorites
-      .map((id) => favoriteItemsById[String(id)])
-      .filter(Boolean);
-
-    return (
-      <div className="animate-in fade-in pb-32 pt-16 text-white duration-700">
-        <div className="mb-12 px-4">
-          <h2 className="text-5xl font-extrabold tracking-tight">Избранное</h2>
-        </div>
-
-        {favoriteProducts.length === 0 ? (
-          <div className="px-8 py-40 text-center">
-            <p className="text-white/55 text-[13px] font-medium tracking-normal [font-kerning:normal]">
-              Пока пусто
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 px-4">
-            {favoriteProducts.map((product) => {
-              const isFavorited = favorites.includes(String(product.id));
-              const isBumping = favoriteBumpId === String(product.id);
-
-              return (
-                <div
-                  key={product.id}
-                  className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]"
-                  onClick={() => {
-                    saveHomeScroll();
-                    navigateToProduct(product);
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                  }}>
-                  <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-white/5 transition-all duration-300 ease-out">
-                    <img
-                      src={getThumbUrl(product.images[0])}
-                      alt={product.name}
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover"
-                      onError={(e) => { e.currentTarget.src = product.images[0]; }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                      }}
-                    />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(product.id, product);
-                      }}
-                      aria-label={
-                        isFavorited
-                          ? "Убрать из избранного"
-                          : "Добавить в избранное"
-                      }
-                      className={`premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96] ${
-                        isBumping ? "scale-[1.06]" : "scale-100"
-                      }`}>
-                      <Heart
-                        size={18}
-                        className={
-                          isFavorited
-                            ? "fill-red-500 text-red-500 transition-colors"
-                            : "text-white/80 transition-colors"
-                        }
-                      />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addToCart(product);
-                      }}
-                      aria-label="Добавить в корзину"
-                      className="premium-shadow absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96]">
-                      <ShoppingBag size={18} className="text-white/80 transition-colors" />
-                    </button>
-                  </div>
-                  <div className="px-2">
-                    <div className="-mt-2 flex items-start justify-between gap-3">
-                      <h3 className="line-clamp-2 min-h-[2.6em] flex-1 text-[13px] font-semibold tracking-tight text-white">
-                        {product.name}
-                      </h3>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function ProductDetailView() {
-    if (!selectedProduct) return null;
-
-    const showA = activeDetailLayer === "A";
-    const showB = !showA;
-
-    const isFavorited = favorites.includes(String(selectedProduct.id));
-    const isBumping = favoriteBumpId === String(selectedProduct.id);
-    const isInCart = cart.some(
-      (it) => String(it.id) === String(selectedProduct.id)
-    );
-
-    const handleGalleryTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-      touchStartXRef.current = e.touches[0]?.clientX ?? null;
-      touchLastXRef.current = touchStartXRef.current;
-    };
-
-    const handleGalleryTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-      touchLastXRef.current = e.touches[0]?.clientX ?? null;
-    };
-
-    const handleGalleryTouchEnd = () => {
-      const start = touchStartXRef.current;
-      const end = touchLastXRef.current;
-      touchStartXRef.current = null;
-      touchLastXRef.current = null;
-      if (start == null || end == null) return;
-      const delta = start - end;
-      if (Math.abs(delta) < 40) return;
-      if (selectedProduct.images.length < 2) return;
-      if (delta > 0) {
-        setCurrentImageIndex((prev) => prev === selectedProduct.images.length - 1 ? 0 : prev + 1);
-      } else {
-        setCurrentImageIndex((prev) => prev === 0 ? selectedProduct.images.length - 1 : prev - 1);
-      }
-    };
-
-    return (
-      <div className="animate-in slide-in-from-right bg-[#050505] pb-36 pt-0 text-white duration-500">
-        {/* Hero Image Section */}
-        <div
-          className="relative aspect-[4/5] w-full overflow-hidden"
-          onTouchStart={handleGalleryTouchStart}
-          onTouchMove={handleGalleryTouchMove}
-          onTouchEnd={handleGalleryTouchEnd}>
-          <button
-            type="button"
-            onClick={() => window.history.back()}
-            className="premium-shadow absolute left-4 top-4 z-20 rounded-2xl border border-white/10 bg-black/40 p-2.5 text-white/90 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.98]"
-            aria-label="Назад">
-            <ArrowLeft size={18} />
-          </button>
-
-          <button
-            type="button"
-            onClick={copyProductLink}
-            className="premium-shadow absolute right-4 top-4 z-20 rounded-2xl border border-white/10 bg-black/40 p-2.5 text-white/90 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.98]"
-            aria-label="Копировать ссылку">
-            <Share size={18} />
-          </button>
-
-          <img
-            src={detailLayerASrc}
-            alt={selectedProduct.name}
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
-              showA ? "opacity-100" : "opacity-0"
-            } ${isDetailImageCrossfading ? "" : ""}`}
-            decoding="async"
-          />
-
-          <img
-            src={detailLayerBSrc}
-            alt={selectedProduct.name}
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
-              showB ? "opacity-100" : "opacity-0"
-            } ${isDetailImageCrossfading ? "" : ""}`}
-            decoding="async"
-          />
-
-          <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black to-transparent" />
-
-          {selectedProduct.images.length > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setCurrentImageIndex(prev => prev === 0 ? selectedProduct.images.length - 1 : prev - 1)}
-                className="absolute left-4 top-1/2 z-20 -translate-y-1/2 rounded-2xl border border-white/10 bg-black/40 p-3 text-white/90 backdrop-blur-2xl transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"
-                aria-label="Предыдущее изображение">
-                <ChevronDown size={20} className="rotate-90" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setCurrentImageIndex(prev => prev === selectedProduct.images.length - 1 ? 0 : prev + 1)}
-                className="absolute right-4 top-1/2 z-20 -translate-y-1/2 rounded-2xl border border-white/10 bg-black/40 p-3 text-white/90 backdrop-blur-2xl transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"
-                aria-label="Следующее изображение">
-                <ChevronDown size={20} className="-rotate-90" />
-              </button>
-            </>
-          )}
-
-          {selectedProduct.images.length > 1 && (
-            <div className="pointer-events-none absolute bottom-12 left-0 right-0 flex items-center justify-center px-6">
-              <div className="flex gap-2.5">
-                {selectedProduct.images.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1.5 rounded-full transition-all duration-500 ${
-                      i === currentImageIndex
-                        ? "w-8 bg-white"
-                        : "w-2 bg-white/25"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="relative z-10 -mt-8 rounded-t-[3rem] bg-[#070707] px-8 pt-12">
-          <div className="mb-10">
-            <div className="mb-6">
-              <p className="mb-3 text-[10px] font-extralight uppercase tracking-[0.42em] text-white/40">
-                {selectedProduct.brand}
-              </p>
-              <h2 className="text-4xl font-extrabold leading-none tracking-tight text-white">
-                {selectedProduct.name}
-              </h2>
-
-              {selectedProduct.hasPrice ? (
-                <p className="mt-3 text-[16px] font-extrabold text-white">
-                  {selectedProduct.price.toLocaleString()}
-{' '}
-₽
-</p>
-              ) : (
-                <p className="mt-3 text-[13px] font-semibold tracking-normal text-white/60">
-                  Цена по запросу
-                </p>
-              )}
-              <div className="mt-4 h-1 w-8 bg-white/40" />
-            </div>
-          </div>
-
-          <p
-            className="mb-12 text-[15px] font-medium leading-relaxed text-white/70"
-            style={{ whiteSpace: "pre-line" }}>
-            {selectedProduct.description}
-          </p>
-
-          <div className="mb-12 space-y-8">
-            <div className="grid grid-cols-1 gap-5">
-              {selectedProduct.details.map((detail, i) => (
-                <div
-                  key={i}
-                  className="hover:bg-white/7 flex items-center gap-5 rounded-[2rem] border border-white/10 bg-white/5 p-6 transition-all duration-300 ease-out hover:translate-x-1 hover:border-white/20">
-                  <div className="premium-shadow flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-xs font-semibold text-white/50">
-                    0
-{i + 1}
-                  </div>
-                  <span className="text-white/85 text-[13px] font-semibold">
-                    {detail}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mb-6 -mt-4">
-            <p className="mb-4 text-[15px] font-semibold text-white/75 [font-kerning:normal]">
-              Не хватило деталей?
-            </p>
-            <a
-              href={`https://t.me/htsadmin?text=${encodeURIComponent(
-                `Здравствуйте, у меня вопрос по товару [${selectedProduct.name}](https://t.me/YeezyUniqueBot?startapp=product__${selectedProduct.id})`
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#26adeb] py-4 text-[14px] font-extrabold uppercase tracking-normal text-white shadow-xl transition-all duration-200 ease-out [font-kerning:normal] active:scale-[0.98]">
-              <img src={tgIcon} alt="" className="h-5 w-5" />
-              Спросить у менеджера
-            </a>
-          </div>
-        </div>
-
-        <div className="fixed bottom-0 z-[130] w-full max-w-md">
-          <div className="bg-black/65 rounded-t-[2.5rem] border-t border-white/10 px-6 pb-6 pt-4 backdrop-blur-2xl">
-            <div className="flex items-stretch gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  if (isInCart) {
-                    updateQuantity(selectedProduct.id, -1);
-                    return;
-                  }
-                  addToCart(selectedProduct);
-                }}
-                className={`flex-1 rounded-2xl py-4 text-[14px] font-extrabold uppercase tracking-normal shadow-xl transition-all duration-200 ease-out [font-kerning:normal] active:scale-[0.98] ${
-                  isInCart
-                    ? "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                    : "bg-white text-black hover:bg-white/90"
-                }`}>
-                {isInCart ? "Убрать из корзины" : "Добавить в корзину"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => toggleFavorite(selectedProduct.id, selectedProduct)}
-                aria-label={
-                  isFavorited ? "Убрать из избранного" : "Добавить в избранное"
-                }
-                className={`flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition-all duration-200 ease-out active:scale-[0.96] ${
-                  isBumping ? "scale-[1.06]" : "scale-100"
-                }`}>
-                <Heart
-                  size={22}
-                  className={
-                    isFavorited
-                      ? "fill-red-500 text-red-500 transition-colors"
-                      : "text-white/80 transition-colors"
-                  }
-                />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function CartView() {
-    return (
-      <div
-        className={`animate-in fade-in px-4 pb-32 pt-16 text-white duration-500 ${
-          cart.length === 0 ? "h-[100dvh] overflow-hidden" : "min-h-screen"
-        }`}>
-        <div className="mb-12 flex items-baseline justify-between gap-6">
-          <h2 className="text-5xl font-extrabold tracking-tight">Корзина</h2>
-        </div>
-
-        {cart.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center text-center">
-      <div className="premium-shadow mb-10 flex h-32 w-32 items-center justify-center rounded-[3rem] border border-white/10 bg-white/5">
-              <ShoppingBag size={40} className="text-white/25" />
-            </div>
-      <p className="text-white/55 mb-12 font-semibold tracking-tight">
-              Ваша корзина пуста
-            </p>
-      <button
-              type="button"
-              onClick={() => {
-                setCurrentView("home");
-                restoreHomeScroll();
-              }}
-              className="rounded-2xl bg-white px-12 py-4 text-[14px] font-extrabold uppercase tracking-normal text-black shadow-xl transition-all duration-200 ease-out [font-kerning:normal] hover:bg-white/90 active:scale-[0.98]">
-              В каталог
-            </button>
-    </div>
-        ) : (
-    <>
-            <div className="mb-16 space-y-8">
-              {cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="group flex cursor-pointer items-center gap-8"
-                  onClick={() => navigateToProduct(item)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                  }}>
-                  <div className="premium-shadow h-32 w-28 flex-shrink-0 overflow-hidden rounded-[1.25rem] bg-white/5 transition-transform duration-500 ease-out group-hover:scale-[1.03]">
-                    <img
-                      src={getThumbUrl(item.images[0], "240x320")}
-                      alt={item.name}
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover"
-                      onError={(e) => { e.currentTarget.src = item.images[0]; }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                      }}
-                    />
-                  </div>
-                  <div className="flex flex-1 flex-col gap-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="mb-1 text-[9px] font-light uppercase tracking-[0.34em] text-white/40">
-                          {item.brand}
-                        </p>
-                        <h4 className="mb-1 text-[15px] font-semibold leading-tight text-white">
-                          {item.name}
-                        </h4>
-                        {item.hasPrice !== false && Number(item.price) > 0 ? (
-                          <p className="text-sm font-bold text-white/80">
-                            {Number(item.price).toLocaleString()} ₽
-                          </p>
-                        ) : (
-                          <p className="text-white/55 text-[12px] font-semibold">
-                            Цена по запросу
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateQuantity(item.id, -item.quantity);
-                        }}
-                        className="p-2 text-white/60 transition-colors hover:text-red-400">
-                        <Trash2 size={20} />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-4 self-start rounded-2xl border border-white/10 bg-white/5 px-2 py-1.5">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (item.quantity > 1) updateQuantity(item.id, -1);
-                        }}
-                        className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]">
-                        <Minus size={14} />
-                      </button>
-                      <span className="min-w-[20px] text-center text-xs font-semibold text-white/80">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateQuantity(item.id, 1);
-                        }}
-                        className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]">
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mb-10 w-full rounded-[3.5rem] border border-white/10 bg-white/5 p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-[10px] font-light uppercase tracking-[0.42em] text-white/40 [font-kerning:normal]">
-                  Сумма заказа
-                </span>
-                <span className="text-right text-[15px] font-semibold leading-tight tracking-tight text-white">
-                  {cartTotalText}
-                </span>
-              </div>
-              <div className="mt-8">
-                <label className="mb-3 block text-[10px] font-light uppercase tracking-[0.42em] text-white/40 [font-kerning:normal]">
-                  Комментарий
-                </label>
-                <textarea
-                  value={orderComment}
-                  onChange={(e) => setOrderComment(e.target.value)}
-                  rows={3}
-                  placeholder="Комментарий к заказу"
-                  className="premium-shadow placeholder:text-white/35 w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-[13px] font-medium text-white/80 outline-none transition-all duration-200 ease-out focus:border-white/20 focus:ring-2 focus:ring-white/10"
-                />
-              </div>
-
-              <button
-                onClick={sendOrderToManager}
-                disabled={isSendingOrder}
-                className="mt-6 w-full rounded-2xl bg-white py-6 text-[14px] font-extrabold uppercase tracking-normal text-black shadow-xl transition-all duration-200 ease-out [font-kerning:normal] hover:bg-white/90 active:scale-[0.98] disabled:opacity-60">
-                {isSendingOrder ? "Отправляем…" : "Отправить менеджеру"}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className="relative mx-auto min-h-screen max-w-md overflow-x-hidden bg-gradient-to-b from-black via-[#070707] to-[#050505] text-white">
       {/* Dynamic Navbar */}
       {currentView !== "product-detail" && (
-        <nav
-          className={`z-[120] flex h-14 w-full max-w-md items-center justify-center px-6 transition-colors duration-300 ${
-            scrolled || currentView !== "home"
-              ? "blur-nav border-b border-white/10"
-              : "bg-transparent"
-          }`}>
-          {currentView !== "home" && (
-            <button
-              type="button"
-              onClick={() => window.history.back()}
-              className="premium-shadow absolute left-4 rounded-2xl border border-white/10 bg-white/5 p-2.5 text-white/80 transition-all duration-200 ease-out hover:bg-white/10 hover:text-white active:scale-[0.98]">
-              <ArrowLeft size={18} />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentView("home");
-              shouldRestoreHomeScrollRef.current = true;
-              restoreHomeScroll("auto");
-            }}
-            className="cursor-pointer select-none"
-            aria-label="На главную">
-            <img
-              src="/logo.svg"
-              alt="Logo"
-              className="logo-auto h-7 w-auto opacity-95"
-            />
-          </button>
-        </nav>
+        <TopNav
+          currentView={currentView}
+          scrolled={scrolled}
+          setCurrentView={setCurrentView}
+          restoreHomeScroll={restoreHomeScroll}
+          shouldRestoreHomeScrollRef={shouldRestoreHomeScrollRef}
+        />
       )}
 
       <main>
-        {currentView === "home" && HomeView()}
-        {currentView === "product-detail" && ProductDetailView()}
-        {currentView === "cart" && CartView()}
-        {currentView === "favorites" && FavoritesView()}
+        {currentView === "home" && (
+          <HomeView
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            derivedCategories={derivedCategories}
+            activeCategory={activeCategory}
+            setActiveCategory={setActiveCategory}
+            derivedBrands={derivedBrands}
+            activeBrand={activeBrand}
+            setActiveBrand={setActiveBrand}
+            resetFilters={resetFilters}
+            totalItems={totalItems}
+            isProductsLoading={isProductsLoading}
+            sourceProducts={sourceProducts}
+            filteredAndSortedProducts={filteredAndSortedProducts}
+            favorites={favorites}
+            favoriteBumpId={favoriteBumpId}
+            saveHomeScroll={saveHomeScroll}
+            navigateToProduct={navigateToProduct}
+            getThumbUrl={getThumbUrl}
+            toggleFavorite={toggleFavorite}
+            addToCart={addToCart}
+            loadMoreRef={loadMoreRef}
+          />
+        )}
+        {currentView === "product-detail" && (
+          <ProductDetailView
+            selectedProduct={selectedProduct}
+            activeDetailLayer={activeDetailLayer}
+            detailLayerASrc={detailLayerASrc}
+            detailLayerBSrc={detailLayerBSrc}
+            isDetailImageCrossfading={isDetailImageCrossfading}
+            currentImageIndex={currentImageIndex}
+            setCurrentImageIndex={setCurrentImageIndex}
+            touchStartXRef={touchStartXRef}
+            touchLastXRef={touchLastXRef}
+            favorites={favorites}
+            favoriteBumpId={favoriteBumpId}
+            cart={cart}
+            copyProductLink={copyProductLink}
+            addToCart={addToCart}
+            updateQuantity={updateQuantity}
+            toggleFavorite={toggleFavorite}
+          />
+        )}
+        {currentView === "cart" && (
+          <CartView
+            cart={cart}
+            cartTotalText={cartTotalText}
+            orderComment={orderComment}
+            setOrderComment={setOrderComment}
+            sendOrderToManager={sendOrderToManager}
+            isSendingOrder={isSendingOrder}
+            setCurrentView={setCurrentView}
+            restoreHomeScroll={restoreHomeScroll}
+            navigateToProduct={navigateToProduct}
+            getThumbUrl={getThumbUrl}
+            updateQuantity={updateQuantity}
+          />
+        )}
+        {currentView === "favorites" && (
+          <FavoritesView
+            favorites={favorites}
+            favoriteItemsById={favoriteItemsById}
+            favoriteBumpId={favoriteBumpId}
+            saveHomeScroll={saveHomeScroll}
+            navigateToProduct={navigateToProduct}
+            getThumbUrl={getThumbUrl}
+            toggleFavorite={toggleFavorite}
+            addToCart={addToCart}
+          />
+        )}
       </main>
 
       {/* Stylish Minimal Bottom Nav */}
       {currentView !== "product-detail" && (
-        <div className="fixed bottom-0 z-[110] flex w-full max-w-md justify-center px-4 pb-6 pt-2">
-          <div className="grid w-full grid-cols-3 items-center rounded-[2rem] border border-white/10 bg-black/50 px-6 py-3 shadow-2xl backdrop-blur-2xl">
-            <button
-              type="button"
-              onClick={() => {
-                setCurrentView("home");
-                shouldRestoreHomeScrollRef.current = true;
-                restoreHomeScroll("auto");
-              }}
-              className={`flex items-center justify-center transition-all ${
-                currentView === "home"
-                  ? "scale-125 text-white"
-                  : "text-neutral-500 hover:text-white"
-              }`}>
-              <LayoutGrid size={22} strokeWidth={currentView === "home" ? 3 : 2} />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                saveHomeScroll();
-                setCurrentView("favorites");
-              }}
-              className={`flex items-center justify-center transition-all ${
-                currentView === "favorites"
-                  ? "scale-125 text-white"
-                  : "text-neutral-500 hover:text-white"
-              }`}
-              aria-label="Избранное">
-              <Heart
-                size={22}
-                strokeWidth={currentView === "favorites" ? 3 : 2}
-                className={
-                  currentView === "favorites" ? "text-white" : undefined
-                }
-              />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                saveHomeScroll();
-                setCurrentView("cart");
-              }}
-              className={`relative flex items-center justify-center transition-all ${
-                currentView === "cart"
-                  ? "scale-125 text-white"
-                  : "text-neutral-500 hover:text-white"
-              }`}>
-              <ShoppingBag
-                size={22}
-                strokeWidth={currentView === "cart" ? 3 : 2}
-              />
-              {cartCount > 0 && (
-                <span className={`absolute -top-3 left-1/2 translate-x-1 flex items-center justify-center rounded-full bg-white text-[10px] font-extrabold text-black ${
-                  cartCount > 9 ? "h-5 w-5 text-[9px]" : "h-4 w-4 text-[10px]"
-                }`}>
-                  {cartCount}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
+        <BottomNav
+          currentView={currentView}
+          setCurrentView={setCurrentView}
+          saveHomeScroll={saveHomeScroll}
+          restoreHomeScroll={restoreHomeScroll}
+          shouldRestoreHomeScrollRef={shouldRestoreHomeScrollRef}
+          cartCount={cartCount}
+        />
       )}
     </div>
   );

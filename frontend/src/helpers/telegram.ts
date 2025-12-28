@@ -1,4 +1,4 @@
-import type { TelegramType, WebApp } from "../types";
+import type { TelegramType, WebApp } from "../new-ui/types";
 
 export function getTelegramWebApp(): WebApp | null {
   if (typeof window === "undefined") return null;

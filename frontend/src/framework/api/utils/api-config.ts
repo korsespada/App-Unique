@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const { VITE_API_URL, VITE_API_VERSION, VITE_SHOP_NAME } =
-  import.meta.env as Record<string, string | undefined>;
+const { VITE_API_URL, VITE_API_VERSION, VITE_SHOP_NAME } = import.meta
+  .env as Record<string, string | undefined>;
 
 const defaultLegacyApiUrl = "https://app-unique.vercel.app";
 const legacyApiRoot = `${

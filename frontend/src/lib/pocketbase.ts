@@ -56,7 +56,9 @@ export type UiProduct = {
   details: string[];
 };
 
-const PB_BASE_URL = String(import.meta.env.VITEAPIBASEURL || "").trim().replace(/\/$/, "");
+const PB_BASE_URL = String(import.meta.env.VITEAPIBASEURL || "")
+  .trim()
+  .replace(/\/$/, "");
 
 function getTelegramInitDataHeader(): Record<string, string> {
   try {
@@ -88,10 +90,7 @@ function buildPbFilter(params: ProductsQueryParams): string {
   const parts: string[] = [];
 
   const safe = (value: string) =>
-    value
-      .replace(/\\/g, "\\\\")
-      .replace(/\"/g, "\\\"")
-      .trim();
+    value.replace(/\\/g, "\\\\").replace(/\"/g, "\\\"").trim();
 
   if (params.search && params.search.trim()) {
     // PocketBase filter supports contains via ~
@@ -116,7 +115,9 @@ function buildPbFilter(params: ProductsQueryParams): string {
 }
 
 function mapPbProductToUi(record: PocketBaseProductRecord): UiProduct {
-  const name = String(record.titletext || record.seotitle || record.productid || "").trim();
+  const name = String(
+    record.titletext || record.seotitle || record.productid || ""
+  ).trim();
   const brand = String(record.brand || "").trim() || " ";
   const category = String(record.category || "Все").trim() || "Все";
 
@@ -136,7 +137,9 @@ function mapPbProductToUi(record: PocketBaseProductRecord): UiProduct {
   };
 }
 
-function sortPhotos(photos: PocketBaseProductPhotoRecord[]): PocketBaseProductPhotoRecord[] {
+function sortPhotos(
+  photos: PocketBaseProductPhotoRecord[]
+): PocketBaseProductPhotoRecord[] {
   return [...photos].sort((a, b) => {
     const aMain = a.ismain ? 0 : 1;
     const bMain = b.ismain ? 0 : 1;
@@ -148,7 +151,9 @@ function sortPhotos(photos: PocketBaseProductPhotoRecord[]): PocketBaseProductPh
   });
 }
 
-export async function getProducts(params: ProductsQueryParams = {}): Promise<{ products: UiProduct[] }> {
+export async function getProducts(
+  params: ProductsQueryParams = {}
+): Promise<{ products: UiProduct[] }> {
   const api = pbApi();
 
   const page = Number(params.page || 1);
@@ -156,17 +161,16 @@ export async function getProducts(params: ProductsQueryParams = {}): Promise<{ p
 
   const filter = buildPbFilter(params);
 
-  const { data } = await api.get<PocketBaseListResponse<PocketBaseProductRecord>>(
-    "/api/collections/products/records",
-    {
-      params: {
-        page,
-        perPage,
-        ...(filter ? { filter } : {})
-      },
-      timeout: 30000
-    }
-  );
+  const { data } = await api.get<
+    PocketBaseListResponse<PocketBaseProductRecord>
+  >("/api/collections/products/records", {
+    params: {
+      page,
+      perPage,
+      ...(filter ? { filter } : {})
+    },
+    timeout: 30000
+  });
 
   const items = Array.isArray(data?.items) ? data.items : [];
   const products = items.map(mapPbProductToUi);
@@ -197,7 +201,10 @@ export async function getProductById(productId: string): Promise<UiProduct> {
 
   const ui = mapPbProductToUi(record);
 
-  const photosFilter = `productid = "${String(record.productid).replace(/\"/g, "\\\"")}"`;
+  const photosFilter = `productid = "${String(record.productid).replace(
+    /\"/g,
+    "\\\""
+  )}"`;
   const { data: photosData } = await api.get<
     PocketBaseListResponse<PocketBaseProductPhotoRecord>
   >("/api/collections/productphotos/records", {

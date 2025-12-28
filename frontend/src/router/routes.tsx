@@ -26,7 +26,7 @@ import {
   UserProfileOrder,
   UserProfileOrderSingle
 } from "@pages/index";
-import { Navigate, createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 
 export const routes = createBrowserRouter([
   {

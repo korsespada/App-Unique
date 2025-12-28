@@ -52,11 +52,13 @@ function CustomerDetail({ orders }: Props) {
           title="Дата заказа:"
           description={
             <div>
-              <span>Jalali: </span>{" "}
+              <span>Jalali: </span>
+              {" "}
               {moment(orders?.order_Date).locale("fa").format("YYYY/MM/DD") ||
                 ""}
               <br />
-              <span>Григорианский: </span>{" "}
+              <span>Григорианский: </span>
+              {" "}
               {moment(orders?.order_Date).locale("en").format("YYYY/MM/DD") ||
                 ""}
             </div>

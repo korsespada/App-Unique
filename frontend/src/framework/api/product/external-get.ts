@@ -24,9 +24,8 @@ async function fetchExternalProductsPage(
 ): Promise<ExternalProductsPagedResponse> {
   try {
     const rawSearch = String(query?.search || "").trim();
-    const looksLikeId =
-      rawSearch.length >= 12 &&
-      rawSearch.length <= 120 &&
+    const looksLikeId = rawSearch.length >= 12;
+    rawSearch.length <= 120 &&
       !rawSearch.includes(" ") &&
       !rawSearch.includes("\t") &&
       !rawSearch.includes("\n");
@@ -102,7 +101,7 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
     {
       // eslint-disable-next-line implicit-arrow-linebreak
       getNextPageParam: (lastPage) =>
-        (lastPage.hasNextPage ? lastPage.page + 1 : undefined),
+        lastPage.hasNextPage ? lastPage.page + 1 : undefined,
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
