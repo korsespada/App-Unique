@@ -3,6 +3,7 @@ import {
   useGetExternalProducts
 } from "@framework/api/product/external-get";
 import Api from "@framework/api/utils/api-config";
+import tgIcon from "./tg.svg";
 import {
   ArrowLeft,
   ChevronDown,
@@ -194,9 +195,25 @@ const App: React.FC = () => {
     const startParam = String(tg?.initDataUnsafe?.start_param || "").trim();
     if (!startParam) return;
 
+    if (startParam.startsWith("product__")) {
+      const id = startParam.slice("product__".length).trim();
+      if (id) {
+        setSearchQuery("");
+        setActiveCategory("Все");
+        setActiveBrand("Все");
+        setStartProductId(id);
+      }
+      return;
+    }
+
     if (startParam.startsWith("product_")) {
       const id = startParam.slice("product_".length).trim();
-      if (id) setStartProductId(id);
+      if (id) {
+        setSearchQuery("");
+        setActiveCategory("Все");
+        setActiveBrand("Все");
+        setStartProductId(id);
+      }
     }
   }, []);
 
@@ -800,16 +817,28 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!startProductId) return;
-    if (!sourceProducts.length) return;
 
     const product = sourceProducts.find(
       (p) => String(p.id) === String(startProductId)
     );
-    if (!product) return;
 
-    navigateToProduct(product);
-    setStartProductId(null);
-  }, [navigateToProduct, sourceProducts, startProductId]);
+    if (product) {
+      navigateToProduct(product);
+      setStartProductId(null);
+      return;
+    }
+
+    if (!hasNextPage) return;
+    if (isFetchingNextPage) return;
+    fetchNextPage();
+  }, [
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    navigateToProduct,
+    sourceProducts,
+    startProductId
+  ]);
 
   useEffect(() => {
     const nextSrc = selectedProduct?.images?.[currentImageIndex] || "";
@@ -1449,12 +1478,12 @@ const App: React.FC = () => {
             </p>
             <a
               href={`https://t.me/htsadmin?text=${encodeURIComponent(
-                `Здравствуйте, у меня вопрос по товару ${selectedProduct.name} (${window.location.origin}?start_param=product_${selectedProduct.id})`
+                `Здравствуйте, у меня вопрос по товару [${selectedProduct.name}](https://t.me/YeezyUniqueBot?startapp=product__${selectedProduct.id})`
               )}`}
               target="_blank"
               rel="noreferrer"
               className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#26adeb] py-4 text-[14px] font-extrabold uppercase tracking-normal text-white shadow-xl transition-all duration-200 ease-out [font-kerning:normal] active:scale-[0.98]">
-              <img src="/src/new-ui/tg.svg" alt="" className="h-5 w-5" />
+              <img src={tgIcon} alt="" className="h-5 w-5" />
               Спросить у менеджера
             </a>
           </div>
