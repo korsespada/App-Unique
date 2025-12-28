@@ -644,14 +644,14 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
           const titleText = escapeHtml(String(it?.title || '').trim() || 'Без названия');
           const id = escapeHtml(String(it?.id || '').trim() || '-');
 
-          const titleWithId = `${titleText} (${id}) — id: <code>${id}</code>`;
+          const titleWithId = `${titleText} <code>${id}</code>`;
 
           if (!hasPrice || !Number.isFinite(price) || price <= 0) {
-            return `${idx + 1}. ${titleWithId} — ${qty} шт — Цена по запросу`;
+            return `${idx + 1}. ${titleWithId} | ${qty} шт | Цена по запросу`;
           }
 
           const lineTotal = price * qty;
-          return `${idx + 1}. ${titleWithId} — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
+          return `${idx + 1}. ${titleWithId} | ${qty} шт | ${price} ₽ | ${lineTotal} ₽`;
         })
       )
       .concat([
