@@ -280,13 +280,13 @@ let lastGoodActiveProducts = null;
 
 const profilesCache = new NodeCache({ stdTTL: 60 });
 
-function buildNicknameFromTelegramUser(user) {
-  if (!user || typeof user !== 'object') return '';
+function buildProfileFieldsFromTelegramUser(user) {
+  if (!user || typeof user !== 'object') return { username: '', nickname: '' };
   const username = user?.username ? String(user.username).trim() : '';
-  if (username) return username;
   const first = user?.first_name ? String(user.first_name).trim() : '';
   const last = user?.last_name ? String(user.last_name).trim() : '';
-  return `${first} ${last}`.trim();
+  const nickname = `${first} ${last}`.trim();
+  return { username, nickname };
 }
 
 function getInitDataFromRequest(req) {
@@ -579,10 +579,13 @@ app.post(['/api/profile/state', '/profile/state'], async (req, res) => {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const cart = Array.isArray(body.cart) ? body.cart : [];
     const favorites = Array.isArray(body.favorites) ? body.favorites : [];
-    const nickname = String(body.nickname || buildNicknameFromTelegramUser(auth.user) || '').trim();
+    const fallback = buildProfileFieldsFromTelegramUser(auth.user);
+    const nickname = String(body.nickname || fallback.nickname || '').trim();
+    const username = String(body.username || fallback.username || '').trim();
 
     const updated = await updateProfileCartAndFavorites({
       telegramId: auth.telegramId,
+      username,
       nickname,
       cart,
       favorites,
@@ -596,6 +599,7 @@ app.post(['/api/profile/state', '/profile/state'], async (req, res) => {
       cart: Array.isArray(updated?.cart) ? updated.cart : [],
       favorites: Array.isArray(updated?.favorites) ? updated.favorites : [],
       nickname: typeof updated?.nickname === 'string' ? updated.nickname : nickname,
+      username: typeof updated?.username === 'string' ? updated.username : username,
     });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to update profile state', message: error?.message });

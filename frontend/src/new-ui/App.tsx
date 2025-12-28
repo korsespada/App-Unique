@@ -80,9 +80,17 @@ const App: React.FC = () => {
     profileSyncTimerRef.current = window.setTimeout(async () => {
       profileSyncTimerRef.current = null;
       try {
+        const tg = (window as any)?.Telegram?.WebApp;
+        const u = tg?.initDataUnsafe?.user;
+        const username = u?.username ? String(u.username).trim() : '';
+        const first = u?.first_name ? String(u.first_name).trim() : '';
+        const last = u?.last_name ? String(u.last_name).trim() : '';
+        const nickname = `${first} ${last}`.trim();
         await Api.post('/profile/state', {
           cart: nextCart,
           favorites: nextFavorites,
+          username,
+          nickname,
         }, { timeout: 15000 });
       } catch {
         // ignore

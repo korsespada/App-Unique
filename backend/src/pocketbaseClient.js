@@ -124,7 +124,7 @@ async function createProfile(payload) {
   return resp?.data || null;
 }
 
-async function ensureProfileByTelegramId({ telegramId, nickname }) {
+async function ensureProfileByTelegramId({ telegramId, username, nickname }) {
   const tg = safeString(telegramId);
   if (!tg) throw new Error('telegramId is required');
 
@@ -134,6 +134,7 @@ async function ensureProfileByTelegramId({ telegramId, nickname }) {
   try {
     return await createProfile({
       telegramid: tg,
+      username: safeString(username),
       nickname: safeString(nickname),
       favorites: [],
       cart: [],
@@ -155,12 +156,13 @@ async function patchProfile(profileId, patch) {
   return resp?.data || null;
 }
 
-async function updateProfileCartAndFavorites({ telegramId, nickname, cart, favorites }) {
-  const profile = await ensureProfileByTelegramId({ telegramId, nickname });
+async function updateProfileCartAndFavorites({ telegramId, username, nickname, cart, favorites }) {
+  const profile = await ensureProfileByTelegramId({ telegramId, username, nickname });
   const patch = {
     cart: normalizeCart(cart),
     favorites: normalizeFavorites(favorites),
   };
+  if (safeString(username)) patch.username = safeString(username);
   if (safeString(nickname)) patch.nickname = safeString(nickname);
   return await patchProfile(profile.id, patch);
 }
