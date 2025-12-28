@@ -43,6 +43,128 @@ function safeArray(value) {
   return [];
 }
 
+function isAxiosNotFound(err) {
+  const status = err?.response?.status;
+  return status === 404;
+}
+
+function isAxiosConflict(err) {
+  const status = err?.response?.status;
+  return status === 409;
+}
+
+function normalizeFavorites(value) {
+  return safeArray(value)
+    .map((x) => String(x ?? '').trim())
+    .filter(Boolean);
+}
+
+function normalizeCart(value) {
+  const arr = safeArray(value);
+  return arr
+    .map((it) => {
+      if (!it || typeof it !== 'object') return null;
+      const id = safeString(it.id);
+      const name = safeString(it.name);
+      const quantity = Math.min(99, Math.max(1, Number(it.quantity) || 1));
+      const brand = safeString(it.brand) || ' ';
+      const category = safeString(it.category) || 'Все';
+      const priceRaw = Number(it.price);
+      const hasPrice = it.hasPrice === false ? false : Number.isFinite(priceRaw) && priceRaw > 0;
+      const price = hasPrice ? priceRaw : 0;
+      const images = safeArray(it.images).map((x) => safeString(x)).filter(Boolean);
+      const description = safeString(it.description);
+      const details = safeArray(it.details).map((x) => safeString(x)).filter(Boolean);
+      if (!id || !name) return null;
+      return {
+        id,
+        name,
+        brand,
+        category,
+        price,
+        hasPrice,
+        images,
+        description,
+        details,
+        quantity,
+      };
+    })
+    .filter(Boolean);
+}
+
+async function getProfileByTelegramId(telegramId) {
+  const api = pbApi();
+  const tg = safeString(telegramId);
+  if (!tg) throw new Error('telegramId is required');
+
+  try {
+    const resp = await api.get('/api/collections/profiles/records', {
+      params: {
+        page: 1,
+        perPage: 1,
+        filter: `telegramid = "${tg.replace(/"/g, '\\"')}"`,
+      },
+    });
+    const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
+    return items[0] || null;
+  } catch (err) {
+    if (isAxiosNotFound(err)) {
+      throw new Error('PocketBase collection "profiles" not found');
+    }
+    throw err;
+  }
+}
+
+async function createProfile(payload) {
+  const api = pbApi();
+  const data = payload && typeof payload === 'object' ? payload : {};
+  const telegramid = safeString(data.telegramid);
+  if (!telegramid) throw new Error('telegramid is required');
+  const resp = await api.post('/api/collections/profiles/records', data);
+  return resp?.data || null;
+}
+
+async function ensureProfileByTelegramId({ telegramId, nickname }) {
+  const tg = safeString(telegramId);
+  if (!tg) throw new Error('telegramId is required');
+
+  const existing = await getProfileByTelegramId(tg);
+  if (existing) return existing;
+
+  try {
+    return await createProfile({
+      telegramid: tg,
+      nickname: safeString(nickname),
+      favorites: [],
+      cart: [],
+    });
+  } catch (err) {
+    if (isAxiosConflict(err)) {
+      return await getProfileByTelegramId(tg);
+    }
+    throw err;
+  }
+}
+
+async function patchProfile(profileId, patch) {
+  const api = pbApi();
+  const id = safeString(profileId);
+  if (!id) throw new Error('profileId is required');
+  const data = patch && typeof patch === 'object' ? patch : {};
+  const resp = await api.patch(`/api/collections/profiles/records/${encodeURIComponent(id)}`, data);
+  return resp?.data || null;
+}
+
+async function updateProfileCartAndFavorites({ telegramId, nickname, cart, favorites }) {
+  const profile = await ensureProfileByTelegramId({ telegramId, nickname });
+  const patch = {
+    cart: normalizeCart(cart),
+    favorites: normalizeFavorites(favorites),
+  };
+  if (safeString(nickname)) patch.nickname = safeString(nickname);
+  return await patchProfile(profile.id, patch);
+}
+
 function pickRecordLabel(record) {
   if (!record || typeof record !== 'object') return '';
 
@@ -171,5 +293,8 @@ async function listAllActiveProducts(perPage = 2000) {
 
 module.exports = {
   listActiveProducts,
+  getProfileByTelegramId,
+  ensureProfileByTelegramId,
+  updateProfileCartAndFavorites,
   listAllActiveProducts,
 };

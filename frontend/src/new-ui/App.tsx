@@ -39,6 +39,57 @@ const App: React.FC = () => {
   const [favoriteBumpId, setFavoriteBumpId] = useState<string | null>(null);
   const [orderComment, setOrderComment] = useState<string>("");
 
+  const didInitProfileSyncRef = useRef(false);
+  const profileSyncTimerRef = useRef<number | null>(null);
+
+  const buildMergedFavorites = useCallback((a: string[], b: string[]) => {
+    return Array.from(new Set([...(a || []), ...(b || [])].map((x) => String(x).trim()).filter(Boolean)));
+  }, []);
+
+  const buildMergedCart = useCallback((localCart: CartItem[], serverCart: CartItem[]) => {
+    const byId = new Map<string, CartItem>();
+    const add = (it: any) => {
+      if (!it) return;
+      const id = String(it.id || '').trim();
+      const name = String(it.name || '').trim();
+      if (!id || !name) return;
+      const qty = Math.max(1, Number(it.quantity) || 1);
+      const normalized: CartItem = {
+        ...(it as any),
+        id,
+        name,
+        quantity: qty,
+      };
+      const prev = byId.get(id);
+      if (!prev) {
+        byId.set(id, normalized);
+        return;
+      }
+      byId.set(id, { ...normalized, quantity: Math.min(99, (prev.quantity || 1) + qty) });
+    };
+    (Array.isArray(serverCart) ? serverCart : []).forEach(add);
+    (Array.isArray(localCart) ? localCart : []).forEach(add);
+    return Array.from(byId.values());
+  }, []);
+
+  const scheduleProfileSync = useCallback((nextCart: CartItem[], nextFavorites: string[]) => {
+    if (profileSyncTimerRef.current) {
+      window.clearTimeout(profileSyncTimerRef.current);
+      profileSyncTimerRef.current = null;
+    }
+    profileSyncTimerRef.current = window.setTimeout(async () => {
+      profileSyncTimerRef.current = null;
+      try {
+        await Api.post('/profile/state', {
+          cart: nextCart,
+          favorites: nextFavorites,
+        }, { timeout: 15000 });
+      } catch {
+        // ignore
+      }
+    }, 500);
+  }, []);
+
   const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
   const [catalogBrands, setCatalogBrands] = useState<string[]>([]);
   const [catalogBrandsByCategory, setCatalogBrandsByCategory] = useState<
@@ -151,6 +202,11 @@ const App: React.FC = () => {
   }, [favorites]);
 
   useEffect(() => {
+    if (!didInitProfileSyncRef.current) return;
+    scheduleProfileSync(cartRef.current, favorites);
+  }, [favorites, scheduleProfileSync]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(
         "tg_favorite_items",
@@ -220,6 +276,48 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (didInitProfileSyncRef.current) return;
+
+    const tg = (window as any)?.Telegram?.WebApp;
+    const initData = tg?.initData;
+    const userId = tg?.initDataUnsafe?.user?.id;
+    if (!initData || !userId) {
+      didInitProfileSyncRef.current = true;
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data } = await Api.get('/profile/state', { timeout: 15000 });
+        if (cancelled) return;
+
+        const serverCart = Array.isArray((data as any)?.cart) ? (data as any).cart : [];
+        const serverFavorites = Array.isArray((data as any)?.favorites)
+          ? (data as any).favorites
+          : [];
+
+        const mergedFavorites = buildMergedFavorites(favorites, serverFavorites);
+        const mergedCart = buildMergedCart(cartRef.current, serverCart as any);
+
+        setFavorites(mergedFavorites);
+        setCart(mergedCart);
+
+        scheduleProfileSync(mergedCart, mergedFavorites);
+      } catch {
+        // ignore
+      } finally {
+        didInitProfileSyncRef.current = true;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [buildMergedCart, buildMergedFavorites, favorites, scheduleProfileSync]);
+
+  useEffect(() => {
     cartRef.current = cart;
     try {
       localStorage.setItem("tg_cart", JSON.stringify(cart));
@@ -227,6 +325,11 @@ const App: React.FC = () => {
       // ignore
     }
   }, [cart]);
+
+  useEffect(() => {
+    if (!didInitProfileSyncRef.current) return;
+    scheduleProfileSync(cart, favorites);
+  }, [cart, favorites, scheduleProfileSync]);
 
   useEffect(() => {
     if (currentView !== "cart") return undefined;

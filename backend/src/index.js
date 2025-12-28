@@ -62,7 +62,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const axios = require('axios');
 const NodeCache = require('node-cache');
-const { listActiveProducts } = require('./pocketbaseClient');
+const { listActiveProducts, getProfileByTelegramId, updateProfileCartAndFavorites } = require('./pocketbaseClient');
 const { validateTelegramInitData, parseInitData } = require('./telegramWebAppAuth');
 
 const app = express();
@@ -278,8 +278,42 @@ function splitTelegramMessage(text, maxLen = 3500) {
 const externalProductsCache = new NodeCache({ stdTTL: 300 });
 let lastGoodActiveProducts = null;
 
-// In-memory storage for profiles (in production, use a database)
-const profiles = new Map();
+const profilesCache = new NodeCache({ stdTTL: 60 });
+
+function buildNicknameFromTelegramUser(user) {
+  if (!user || typeof user !== 'object') return '';
+  const username = user?.username ? String(user.username).trim() : '';
+  if (username) return username;
+  const first = user?.first_name ? String(user.first_name).trim() : '';
+  const last = user?.last_name ? String(user.last_name).trim() : '';
+  return `${first} ${last}`.trim();
+}
+
+function getInitDataFromRequest(req) {
+  const header = req?.headers?.['x-telegram-init-data'];
+  if (typeof header === 'string' && header.trim()) return header;
+  return '';
+}
+
+function telegramAuthFromRequest(req) {
+  const botToken = process.env.BOT_TOKEN;
+  const initData = getInitDataFromRequest(req);
+  const auth = validateTelegramInitData(initData, botToken, {
+    maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 86400),
+  });
+
+  if (!auth.ok) {
+    return { ok: false, status: 401, error: auth.error || 'initData невалиден' };
+  }
+
+  const user = auth.user || null;
+  const telegramId = user?.id ? String(user.id) : '';
+  if (!telegramId) {
+    return { ok: false, status: 400, error: 'Некорректные данные пользователя Telegram' };
+  }
+
+  return { ok: true, telegramId, user };
+}
 
 // Middleware
 const corsAllowList = String(process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || '')
@@ -513,24 +547,59 @@ app.get(['/api/products/:id', '/products/:id'], async (req, res) => {
   }
 });
 
-app.get('/profile', (req, res) => {
-  const { telegramUserId } = req.query;
-  if (!telegramUserId) {
-    return res.status(400).json({ error: 'telegramUserId is required' });
+app.get(['/api/profile/state', '/profile/state'], async (req, res) => {
+  try {
+    const auth = telegramAuthFromRequest(req);
+    if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+
+    const cacheKey = `profile:${auth.telegramId}`;
+    const cached = profilesCache.get(cacheKey);
+    if (cached) return res.json(cached);
+
+    const profile = await getProfileByTelegramId(auth.telegramId);
+    const payload = {
+      ok: true,
+      profileExists: Boolean(profile),
+      cart: Array.isArray(profile?.cart) ? profile.cart : [],
+      favorites: Array.isArray(profile?.favorites) ? profile.favorites : [],
+      nickname: typeof profile?.nickname === 'string' ? profile.nickname : '',
+    };
+    profilesCache.set(cacheKey, payload);
+    return res.json(payload);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to load profile state', message: error?.message });
   }
-  
-  const profile = profiles.get(telegramUserId) || { telegramUserId };
-  res.json(profile);
 });
 
-app.post('/profile', (req, res) => {
-  const { telegramUserId, ...profileData } = req.body;
-  if (!telegramUserId) {
-    return res.status(400).json({ error: 'telegramUserId is required' });
+app.post(['/api/profile/state', '/profile/state'], async (req, res) => {
+  try {
+    const auth = telegramAuthFromRequest(req);
+    if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const cart = Array.isArray(body.cart) ? body.cart : [];
+    const favorites = Array.isArray(body.favorites) ? body.favorites : [];
+    const nickname = String(body.nickname || buildNicknameFromTelegramUser(auth.user) || '').trim();
+
+    const updated = await updateProfileCartAndFavorites({
+      telegramId: auth.telegramId,
+      nickname,
+      cart,
+      favorites,
+    });
+
+    profilesCache.del(`profile:${auth.telegramId}`);
+
+    return res.json({
+      ok: true,
+      profileExists: true,
+      cart: Array.isArray(updated?.cart) ? updated.cart : [],
+      favorites: Array.isArray(updated?.favorites) ? updated.favorites : [],
+      nickname: typeof updated?.nickname === 'string' ? updated.nickname : nickname,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to update profile state', message: error?.message });
   }
-  
-  profiles.set(telegramUserId, { ...profileData, telegramUserId });
-  res.json({ success: true });
 });
 
 app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
