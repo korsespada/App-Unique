@@ -1285,17 +1285,6 @@ const App: React.FC = () => {
                       <h3 className="line-clamp-2 min-h-[2.6em] flex-1 text-[13px] font-semibold tracking-tight text-white">
                         {product.name}
                       </h3>
-                      {product.hasPrice ? (
-                        <p className="text-white/85 whitespace-nowrap pt-0.5 text-[14px] font-extrabold">
-                          {product.price.toLocaleString()}
-                          {" "}
-                          ₽
-                        </p>
-                      ) : (
-                        <p className="text-white/45 whitespace-nowrap pt-0.5 text-[12px] font-semibold">
-                          Цена по запросу
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>
