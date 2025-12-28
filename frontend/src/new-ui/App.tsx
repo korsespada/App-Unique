@@ -6,10 +6,13 @@ import Api from "@framework/api/utils/api-config";
 import {
   ArrowLeft,
   ChevronDown,
+  Grid3X3,
   Heart,
+  LayoutGrid,
   Minus,
   Plus,
   Search,
+  Share,
   ShoppingBag,
   Trash2,
   X
@@ -766,6 +769,18 @@ const App: React.FC = () => {
     }
   };
 
+  const copyProductLink = useCallback(() => {
+    if (!selectedProduct) return;
+
+    const productUrl = `${window.location.origin}?start_param=product_${selectedProduct.id}`;
+
+    navigator.clipboard.writeText(productUrl).then(() => {
+      alert('Ссылка скопирована!');
+    }).catch(() => {
+      alert('Не удалось скопировать ссылку');
+    });
+  }, [selectedProduct]);
+
   const navigateToProduct = useCallback(
     (product: Product) => {
       if (currentView === "home") saveHomeScroll();
@@ -1042,7 +1057,7 @@ const App: React.FC = () => {
           {isProductsLoading && sourceProducts.length === 0 ? (
       Array.from({ length: 8 }).map((_, idx) => (
               <div key={idx} className="animate-pulse">
-                <div className="mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5" />
+                <div className="mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-white/5" />
                 <div className="px-2">
                   <div className="mb-2 h-3 w-16 rounded bg-white/10" />
                   <div className="h-4 w-28 rounded bg-white/10" />
@@ -1059,8 +1074,10 @@ const App: React.FC = () => {
                   key={product.id} className="group cursor-pointer transition-all duration-300 ease-out active:scale-[0.98]" onClick={() => {
                   saveHomeScroll();
                   navigateToProduct(product);
+                  }} onContextMenu={(e) => {
+                    e.preventDefault();
                   }}>
-                  <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 transition-all duration-300 ease-out group-hover:border-white/20">
+                  <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-white/5 transition-all duration-300 ease-out">
                   <img
                       src={getThumbUrl(product.images[0])}
                       alt={product.name}
@@ -1068,6 +1085,9 @@ const App: React.FC = () => {
                       decoding="async"
                       className="h-full w-full object-cover"
                       onError={(e) => { e.currentTarget.src = product.images[0]; }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                      }}
                     />
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
 
@@ -1139,24 +1159,6 @@ const App: React.FC = () => {
         </div>
 
         <div className="px-4">
-          {hasNextPage && (
-            <div className="mt-8 flex flex-col items-center gap-4">
-              {(isFetchingNextPage || isExternalFetching) && (
-                <div className="text-white/55 animate-pulse text-[12px] font-semibold">
-                  Загружаем товары…
-                </div>
-              )}
-              {!isFetchingNextPage && (
-                <button
-                  type="button"
-                  onClick={() => fetchNextPage()}
-                  disabled={isFetchingNextPage}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-[12px] font-semibold text-white/80 transition-colors hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isFetchingNextPage ? "Загрузка..." : "Загрузить ещё"}
-                </button>
-              )}
-            </div>
-          )}
           <div ref={loadMoreRef} className="h-12" />
         </div>
       </div>
@@ -1169,7 +1171,7 @@ const App: React.FC = () => {
       .filter(Boolean);
 
     return (
-      <div className="animate-in fade-in pb-32 pt-24 text-white duration-700">
+      <div className="animate-in fade-in pb-32 pt-16 text-white duration-700">
         <div className="mb-12 px-4">
           <h2 className="text-5xl font-extrabold tracking-tight">Избранное</h2>
         </div>
@@ -1193,8 +1195,11 @@ const App: React.FC = () => {
                   onClick={() => {
                     saveHomeScroll();
                     navigateToProduct(product);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
                   }}>
-                  <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 transition-all duration-300 ease-out group-hover:border-white/20">
+                  <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-white/5 transition-all duration-300 ease-out">
                     <img
                       src={getThumbUrl(product.images[0])}
                       alt={product.name}
@@ -1202,6 +1207,9 @@ const App: React.FC = () => {
                       decoding="async"
                       className="h-full w-full object-cover"
                       onError={(e) => { e.currentTarget.src = product.images[0]; }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                      }}
                     />
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
 
@@ -1241,18 +1249,22 @@ const App: React.FC = () => {
                     </button>
                   </div>
                   <div className="px-2">
-                    <h3 className="-mt-2 line-clamp-2 min-h-[2.6em] text-[13px] font-semibold tracking-tight text-white">
-                      {product.name}
-                    </h3>
-                    {product.hasPrice ? (
-                      <p className="text-white/85 mt-0.5 text-[14px] font-extrabold">
-                        {product.price.toLocaleString()} ₽
-                      </p>
-                    ) : (
-                      <p className="text-white/45 mt-0.5 text-[13px] font-semibold">
-                        Цена по запросу
-                      </p>
-                    )}
+                    <div className="-mt-2 flex items-start justify-between gap-3">
+                      <h3 className="line-clamp-2 min-h-[2.6em] flex-1 text-[13px] font-semibold tracking-tight text-white">
+                        {product.name}
+                      </h3>
+                      {product.hasPrice ? (
+                        <p className="text-white/85 whitespace-nowrap pt-0.5 text-[14px] font-extrabold">
+                          {product.price.toLocaleString()}
+                          {" "}
+                          ₽
+                        </p>
+                      ) : (
+                        <p className="text-white/45 whitespace-nowrap pt-0.5 text-[12px] font-semibold">
+                          Цена по запросу
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -1316,6 +1328,14 @@ const App: React.FC = () => {
             <ArrowLeft size={18} />
           </button>
 
+          <button
+            type="button"
+            onClick={copyProductLink}
+            className="premium-shadow absolute right-4 top-4 z-20 rounded-2xl border border-white/10 bg-black/40 p-2.5 text-white/90 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.98]"
+            aria-label="Копировать ссылку">
+            <Share size={18} />
+          </button>
+
           <img
             src={detailLayerASrc}
             alt={selectedProduct.name}
@@ -1335,6 +1355,26 @@ const App: React.FC = () => {
           />
 
           <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black to-transparent" />
+
+          {selectedProduct.images.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setCurrentImageIndex(prev => prev === 0 ? selectedProduct.images.length - 1 : prev - 1)}
+                className="absolute left-4 top-1/2 z-20 -translate-y-1/2 rounded-2xl border border-white/10 bg-black/40 p-3 text-white/90 backdrop-blur-2xl transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"
+                aria-label="Предыдущее изображение">
+                <ChevronDown size={20} className="rotate-90" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentImageIndex(prev => prev === selectedProduct.images.length - 1 ? 0 : prev + 1)}
+                className="absolute right-4 top-1/2 z-20 -translate-y-1/2 rounded-2xl border border-white/10 bg-black/40 p-3 text-white/90 backdrop-blur-2xl transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]"
+                aria-label="Следующее изображение">
+                <ChevronDown size={20} className="-rotate-90" />
+              </button>
+            </>
+          )}
 
           {selectedProduct.images.length > 1 && (
             <div className="pointer-events-none absolute bottom-12 left-0 right-0 flex items-center justify-center px-6">
@@ -1402,6 +1442,22 @@ const App: React.FC = () => {
               ))}
             </div>
           </div>
+
+          <div className="mb-6 -mt-4">
+            <p className="mb-4 text-[15px] font-semibold text-white/75 [font-kerning:normal]">
+              Не хватило деталей?
+            </p>
+            <a
+              href={`https://t.me/htsadmin?text=${encodeURIComponent(
+                `Здравствуйте, у меня вопрос по товару ${selectedProduct.name} (${window.location.origin}?start_param=product_${selectedProduct.id})`
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#26adeb] py-4 text-[14px] font-extrabold uppercase tracking-normal text-white shadow-xl transition-all duration-200 ease-out [font-kerning:normal] active:scale-[0.98]">
+              <img src="/src/new-ui/tg.svg" alt="" className="h-5 w-5" />
+              Спросить у менеджера
+            </a>
+          </div>
         </div>
 
         <div className="fixed bottom-0 z-[130] w-full max-w-md">
@@ -1452,7 +1508,7 @@ const App: React.FC = () => {
   function CartView() {
     return (
       <div
-        className={`animate-in fade-in px-4 pb-32 pt-24 text-white duration-500 ${
+        className={`animate-in fade-in px-4 pb-32 pt-16 text-white duration-500 ${
           cart.length === 0 ? "h-[100dvh] overflow-hidden" : "min-h-screen"
         }`}>
         <div className="mb-12 flex items-baseline justify-between gap-6">
@@ -1484,8 +1540,11 @@ const App: React.FC = () => {
                 <div
                   key={item.id}
                   className="group flex cursor-pointer items-center gap-8"
-                  onClick={() => navigateToProduct(item)}>
-                  <div className="premium-shadow h-32 w-28 flex-shrink-0 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 transition-transform duration-500 ease-out group-hover:scale-[1.03]">
+                  onClick={() => navigateToProduct(item)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                  }}>
+                  <div className="premium-shadow h-32 w-28 flex-shrink-0 overflow-hidden rounded-[1.25rem] bg-white/5 transition-transform duration-500 ease-out group-hover:scale-[1.03]">
                     <img
                       src={getThumbUrl(item.images[0], "240x320")}
                       alt={item.name}
@@ -1493,6 +1552,9 @@ const App: React.FC = () => {
                       decoding="async"
                       className="h-full w-full object-cover"
                       onError={(e) => { e.currentTarget.src = item.images[0]; }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                      }}
                     />
                   </div>
                   <div className="flex flex-1 flex-col gap-3">
@@ -1519,7 +1581,7 @@ const App: React.FC = () => {
                           e.stopPropagation();
                           updateQuantity(item.id, -item.quantity);
                         }}
-                        className="p-2 text-white/25 transition-colors hover:text-red-400">
+                        className="p-2 text-white/60 transition-colors hover:text-red-400">
                         <Trash2 size={20} />
                       </button>
                     </div>
@@ -1551,7 +1613,7 @@ const App: React.FC = () => {
 
             <div className="mb-10 w-full rounded-[3.5rem] border border-white/10 bg-white/5 p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-[10px] font-light uppercase tracking-[0.42em] text-white/40">
+                <span className="text-[10px] font-light uppercase tracking-[0.42em] text-white/40 [font-kerning:normal]">
                   Сумма заказа
                 </span>
                 <span className="text-right text-[15px] font-semibold leading-tight tracking-tight text-white">
@@ -1559,7 +1621,7 @@ const App: React.FC = () => {
                 </span>
               </div>
               <div className="mt-8">
-                <label className="mb-3 block text-[10px] font-light uppercase tracking-[0.42em] text-white/40">
+                <label className="mb-3 block text-[10px] font-light uppercase tracking-[0.42em] text-white/40 [font-kerning:normal]">
                   Комментарий
                 </label>
                 <textarea
@@ -1643,7 +1705,7 @@ const App: React.FC = () => {
                   ? "scale-125 text-white"
                   : "text-neutral-500 hover:text-white"
               }`}>
-              <Search size={22} strokeWidth={currentView === "home" ? 3 : 2} />
+              <LayoutGrid size={22} strokeWidth={currentView === "home" ? 3 : 2} />
             </button>
 
             <button
@@ -1683,7 +1745,9 @@ const App: React.FC = () => {
                 strokeWidth={currentView === "cart" ? 3 : 2}
               />
               {cartCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white text-[6px] font-extrabold text-black">
+                <span className={`absolute -top-3 left-1/2 translate-x-1 flex items-center justify-center rounded-full bg-white text-[10px] font-extrabold text-black ${
+                  cartCount > 9 ? "h-5 w-5 text-[9px]" : "h-4 w-4 text-[10px]"
+                }`}>
                   {cartCount}
                 </span>
               )}

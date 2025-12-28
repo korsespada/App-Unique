@@ -33,7 +33,7 @@ async function fetchExternalProductsPage(
       {
         params: {
           page,
-          perPage: 200,
+          perPage: 40,
           ...(seed ? { seed } : {}),
           ...(search ? { search } : {}),
           ...(brand ? { brand } : {}),
