@@ -789,7 +789,10 @@ const App: React.FC = () => {
   const copyProductLink = useCallback(() => {
     if (!selectedProduct) return;
 
-    const productUrl = `${window.location.origin}?start_param=product_${selectedProduct.id}`;
+    const id = String(selectedProduct.id || "").trim();
+    const productUrl = id
+      ? `https://t.me/YeezyUniqueBot?startapp=product__${id}`
+      : `${window.location.origin}?start_param=product_${selectedProduct.id}`;
 
     navigator.clipboard.writeText(productUrl).then(() => {
       alert('Ссылка скопирована!');

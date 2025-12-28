@@ -23,7 +23,15 @@ async function fetchExternalProductsPage(
   query?: ExternalProductsQuery
 ): Promise<ExternalProductsPagedResponse> {
   try {
-    const search = String(query?.search || "").trim();
+    const rawSearch = String(query?.search || "").trim();
+    const looksLikeId =
+      rawSearch.length >= 12 &&
+      rawSearch.length <= 120 &&
+      !rawSearch.includes(" ") &&
+      !rawSearch.includes("\t") &&
+      !rawSearch.includes("\n");
+    const productId = looksLikeId ? rawSearch : undefined;
+    const search = looksLikeId ? undefined : rawSearch;
     const brand = String(query?.brand || "").trim();
     const category = String(query?.category || "").trim();
     const seed = String(query?.seed || "").trim();
@@ -36,6 +44,7 @@ async function fetchExternalProductsPage(
           perPage: 40,
           ...(seed ? { seed } : {}),
           ...(search ? { search } : {}),
+          ...(productId ? { productId } : {}),
           ...(brand ? { brand } : {}),
           ...(category ? { category } : {})
         }
@@ -65,7 +74,8 @@ async function fetchExternalProductsPage(
 }
 
 export function useGetExternalProducts(query?: ExternalProductsQuery) {
-  const search = String(query?.search || "").trim();
+  const rawSearch = String(query?.search || "").trim();
+  const search = rawSearch;
   const brand = String(query?.brand || "").trim();
   const category = String(query?.category || "").trim();
   const seed = String(query?.seed || "").trim();
