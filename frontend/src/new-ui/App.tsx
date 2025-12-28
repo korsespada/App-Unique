@@ -742,6 +742,21 @@ const App: React.FC = () => {
     setSearchQuery("");
   };
 
+  useEffect(() => {
+    const raw = String(searchQuery || "").trim();
+    const looksLikeId =
+      raw.length >= 12 &&
+      raw.length <= 120 &&
+      !raw.includes(" ") &&
+      !raw.includes("\t") &&
+      !raw.includes("\n");
+    if (!looksLikeId) return;
+
+    setActiveCategory("Все");
+    setActiveBrand("Все");
+    setStartProductId(raw);
+  }, [searchQuery, setActiveBrand, setActiveCategory, setStartProductId]);
+
   const sendOrderToManager = async () => {
     if (isSendingOrder) return;
     if (!cart.length) return;
