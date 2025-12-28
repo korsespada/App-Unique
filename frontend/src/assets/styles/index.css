@@ -20,6 +20,19 @@ body,
   height: 100%;
 }
 
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:where(a, button, [role="button"], input, textarea, select):focus {
+  outline: none;
+}
+
+:where(a, button, [role="button"], input, textarea, select):focus-visible {
+  outline: 2px solid rgba(32, 122, 228, 0.55);
+  outline-offset: 2px;
+}
+
 /* button,
 [type="button"],
 [type="reset"],
