@@ -215,7 +215,7 @@ const App: React.FC = () => {
         setStartProductId(id);
       }
     }
-  }, []);
+  }, [setActiveBrand, setActiveCategory, setSearchQuery, setStartProductId]);
 
   useEffect(() => {
     try {

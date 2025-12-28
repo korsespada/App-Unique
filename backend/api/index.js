@@ -206,6 +206,57 @@ function splitTelegramMessage(text, maxLen = 3500) {
   return parts.length ? parts : [''];
 }
 
+function buildCartKeyboardAiogram3() {
+  return `from __future__ import annotations
+
+from typing import Iterable, TypedDict
+
+from aiogram.types import InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+
+BOT_USERNAME = "YeezyUniqueBot"
+
+
+class CartProduct(TypedDict):
+    name: str
+    price: int | float
+    id: str
+
+
+def build_cart_keyboard(
+    products: Iterable[CartProduct],
+    *,
+    bot_username: str = BOT_USERNAME,
+    row_width: int = 2,
+    checkout_callback: str = "cart:checkout",
+    clear_callback: str = "cart:clear",
+) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+
+    for p in products:
+        name = str(p.get("name", "")).strip() or "Товар"
+        price = p.get("price", None)
+        pid = str(p.get("id", "")).strip()
+
+        if isinstance(price, (int, float)):
+            title = f"{name} — {price:g} ₽"
+        else:
+            title = name
+
+        url = f"https://t.me/{bot_username}?startapp=product__{pid}"
+        kb.button(text=title, url=url)
+
+    kb.adjust(row_width)
+
+    kb.button(text="Оформить", callback_data=checkout_callback)
+    kb.button(text="Очистить", callback_data=clear_callback)
+    kb.adjust(row_width, 2)
+
+    return kb.as_markup()
+`;
+}
+
 // Middleware
 const corsAllowList = String(process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || '')
   .split(',')
