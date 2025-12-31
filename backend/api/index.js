@@ -511,6 +511,7 @@ app.get('/api/products', async (req, res) => {
       season_title: String(p.season_title || p.brand || ''),
       status: String(p.status || ''),
       images: Array.isArray(p.images) ? p.images : [],
+      thumb: String(p.thumb || ''),
     }));
 
     return res.json({ products: result });

@@ -432,6 +432,12 @@ const App: React.FC = () => {
     const pages = (externalData?.pages
       || []) as ExternalProductsPagedResponse[];
     const raw = pages.flatMap((p) => Array.isArray(p?.products) ? p.products : []);
+
+    // Логируем первый продукт для проверки thumb
+    if (raw.length > 0 && !(raw[0] as any).thumb) {
+      console.log("First product without thumb:", raw[0]);
+    }
+
     return raw
       .map((p) => {
         const id = String((p as any).id || p.product_id || "");
