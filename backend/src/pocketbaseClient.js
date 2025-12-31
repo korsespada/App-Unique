@@ -237,6 +237,12 @@ async function listActiveProducts(page = 1, perPage = 2000) {
       },
     });
     data = resp?.data;
+    
+    // Логируем первый товар для проверки полей
+    if (data?.items?.length > 0) {
+      console.log('PocketBase first item fields:', Object.keys(data.items[0]));
+      console.log('PocketBase first item thumb:', data.items[0].thumb);
+    }
   } catch (err) {
     const status = err?.response?.status;
     const respData = err?.response?.data;
