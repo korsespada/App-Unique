@@ -234,6 +234,7 @@ async function listActiveProducts(page = 1, perPage = 2000) {
         perPage: safePerPage,
         filter: 'status = "active"',
         expand: 'brand,category',
+        fields: '*'
       },
     });
     data = resp?.data;
