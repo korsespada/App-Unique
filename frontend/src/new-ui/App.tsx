@@ -428,6 +428,22 @@ const App: React.FC = () => {
     return () => observer.disconnect();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
+  useEffect(() => {
+    if (currentView !== "home") return;
+    if (!hasNextPage) return;
+    if (isFetchingNextPage) return;
+
+    const el = loadMoreRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const rootMarginPx = 600;
+    const inRange = rect.top <= window.innerHeight + rootMarginPx;
+    if (!inRange) return;
+
+    fetchNextPage();
+  }, [currentView, fetchNextPage, hasNextPage, isFetchingNextPage]);
+
   const apiProducts = useMemo<Product[]>(() => {
     const pages = (externalData?.pages
       || []) as ExternalProductsPagedResponse[];
