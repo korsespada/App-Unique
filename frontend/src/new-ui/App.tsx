@@ -455,6 +455,7 @@ const App: React.FC = () => {
             : [
               "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
             ],
+          thumb: (p as any).thumb || "",
           description: String(p.description || ""),
           details: Array.isArray((p as any).details) ? (p as any).details : []
         };
