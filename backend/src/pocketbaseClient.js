@@ -194,10 +194,12 @@ function mapPbProductToExternal(record) {
   const brandValue = expand.brand ? pickRecordLabel(expand.brand) : safeString(record.brand);
   const categoryValue = expand.category ? pickRecordLabel(expand.category) : safeString(record.category);
 
-  const photos = safeArray(record.photos);
-  const images = photos
+  const imagesRaw = safeArray(record.images);
+  const images = imagesRaw
     .map((p) => safeString(p))
     .filter(Boolean);
+
+  const thumb = safeString(record.thumb);
 
   const rawPrice = Number(record.price);
   const price = Number.isFinite(rawPrice) ? rawPrice : 0;
@@ -216,6 +218,7 @@ function mapPbProductToExternal(record) {
     images: images.length
       ? images
       : ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000'],
+    thumb,
     inStock: true,
   };
 }
@@ -234,7 +237,6 @@ async function listActiveProducts(page = 1, perPage = 2000) {
         perPage: safePerPage,
         filter: 'status = "active"',
         expand: 'brand,category',
-        fields: 'id,title,name,description,price,brand,category,status,images,thumb,product_id,season_title,created,updated'
       },
     });
     data = resp?.data;
