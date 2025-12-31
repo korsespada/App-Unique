@@ -234,15 +234,10 @@ async function listActiveProducts(page = 1, perPage = 2000) {
         perPage: safePerPage,
         filter: 'status = "active"',
         expand: 'brand,category',
+        fields: 'id,title,name,description,price,brand,category,status,images,thumb,product_id,season_title'
       },
     });
     data = resp?.data;
-    
-    // Логируем первый товар для проверки полей
-    if (data?.items?.length > 0) {
-      console.log('PocketBase first item fields:', Object.keys(data.items[0]));
-      console.log('PocketBase first item thumb:', data.items[0].thumb);
-    }
   } catch (err) {
     const status = err?.response?.status;
     const respData = err?.response?.data;
