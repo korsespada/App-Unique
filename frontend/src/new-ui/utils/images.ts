@@ -17,17 +17,17 @@ export function getThumbUrl(url: string, thumb = "400x500") {
       const fromOrig = u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`);
       const rest = fromOrig
         ? u.pathname.slice(`/${VKCLOUD_ORIG_BUCKET}/`.length)
-        : u.pathname.slice(`/${VKCLOUD_THUMBS_BUCKET}/`.length);
-
-      const key = fromOrig
-        ? rest
         : (() => {
-            const parts = rest.split("/").filter(Boolean);
-            if (parts.length >= 2) return parts.slice(1).join("/");
-            return rest.replace(/^\/+/, "");
+            const parts = u.pathname.slice(`/${VKCLOUD_THUMBS_BUCKET}/`.length).split("/").filter(Boolean);
+            // Если уже содержит размер в пути, удаляем его
+            if (parts.length >= 1 && /^\d+x\d+$/.test(parts[0])) {
+              return parts.slice(1).join("/");
+            }
+            return parts.join("/");
           })();
 
-      u.pathname = `/${VKCLOUD_THUMBS_BUCKET}/${thumb}/${key}`;
+      // Формируем новый путь к thumb с правильной структурой
+      u.pathname = `/${VKCLOUD_THUMBS_BUCKET}/${thumb}/${rest}`;
       u.search = "";
       return u.toString();
     }

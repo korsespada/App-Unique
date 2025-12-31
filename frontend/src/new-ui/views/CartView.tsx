@@ -1,5 +1,5 @@
 import {
- Minus, Plus, ShoppingBag, Trash2 
+ Minus, Plus, ShoppingBag, Trash2
 } from "lucide-react";
 import React from "react";
 
@@ -72,7 +72,7 @@ export default function CartView({
                 }}>
                 <div className="premium-shadow h-32 w-28 flex-shrink-0 overflow-hidden rounded-[1.25rem] bg-white/5 transition-transform duration-500 ease-out group-hover:scale-[1.03]">
                   <img
-                    src={getThumbUrl(item.images[0], "240x320")}
+                    src={item.thumb || getThumbUrl(item.images[0], "240x320")}
                     alt={item.name}
                     loading="lazy"
                     decoding="async"

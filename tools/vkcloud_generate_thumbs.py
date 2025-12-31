@@ -228,7 +228,9 @@ def _s3_head_exists(s3, bucket: str, key: str) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--thumb", default="400x500")
+    parser.add_argument("--thumb", default="400x500", help="Thumbnail size (default: 400x500)")
+    parser.add_argument("--sizes", nargs="+", default=["400x500", "240x320"], help="Multiple thumbnail sizes to generate")
+    parser.add_argument("--format", default="webp", choices=["webp", "jpeg"], help="Thumbnail format")
     parser.add_argument("--collection", default="products")
     parser.add_argument("--photos-field", default="photos")
     parser.add_argument("--pb-per-page", type=int, default=200)
@@ -249,13 +251,26 @@ def main() -> int:
     orig_secret_key = _require_env("S3_ORIG_SECRET_KEY")
     thumbs_access_key = _require_env("S3_THUMBS_ACCESS_KEY")
     thumbs_secret_key = _require_env("S3_THUMBS_SECRET_KEY")
+    
+    # Default PocketBase settings
+    if not pb_url:
+        pb_url = "http://144.31.116.66:8090"
+    if not s3_endpoint:
+        s3_endpoint = "https://hb.ru-msk.vkcloud-storage.ru"
+    if not orig_bucket:
+        orig_bucket = "yeezy-app"
+    if not thumbs_bucket:
+        thumbs_bucket = "yeezy-app-thumbs"
 
-    pb_url = os.getenv("PB_URL")
+    pb_url = os.getenv("PB_URL", "http://144.31.116.66:8090")
     pb_token = os.getenv("PB_TOKEN")
-    if not args.no_pb and (not pb_url or not pb_token):
-        raise RuntimeError("PB_URL/PB_TOKEN are required in env (or pass --no-pb)")
+    if not args.no_pb and not pb_token:
+        raise RuntimeError("PB_TOKEN is required in env (or pass --no-pb)")
 
-    tw, th = _parse_size(args.thumb)
+    sizes = args.sizes if len(args.sizes) > 0 else [args.thumb]
+    
+    for size in sizes:
+        tw, th = _parse_size(size)
 
     # иногда CDN отдает обрезанные/частично скачанные jpg, Pillow может ругаться
     ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -318,15 +333,23 @@ def main() -> int:
                 img.load()
                 thumb_img = _cover_resize_center_crop(img, tw, th)
                 out = io.BytesIO()
-                thumb_img.save(out, format="JPEG", quality=78, optimize=True, progressive=True)
+                
+                if args.format == "webp":
+                    thumb_img.save(out, format="WEBP", quality=85, optimize=True)
+                    content_type = "image/webp"
+                else:
+                    thumb_img.save(out, format="JPEG", quality=78, optimize=True, progressive=True)
+                    content_type = "image/jpeg"
+                
                 body = out.getvalue()
 
                 thumbs_s3.put_object(
                     Bucket=thumbs_bucket,
                     Key=thumb_key,
                     Body=body,
-                    ContentType="image/jpeg",
+                    ContentType=content_type,
                     CacheControl="public, max-age=31536000, immutable",
+                    ACL="public-read"
                 )
 
                 uploaded += 1
@@ -364,21 +387,31 @@ def main() -> int:
             )
         thumb_img = _cover_resize_center_crop(img, tw, th)
         out = io.BytesIO()
-        thumb_img.save(out, format="JPEG", quality=78, optimize=True, progressive=True)
+        
+        if args.format == "webp":
+            thumb_img.save(out, format="WEBP", quality=85, optimize=True)
+            content_type = "image/webp"
+        else:
+            thumb_img.save(out, format="JPEG", quality=78, optimize=True, progressive=True)
+            content_type = "image/jpeg"
+        
         body = out.getvalue()
 
         thumbs_s3.put_object(
             Bucket=thumbs_bucket,
             Key=thumb_key,
             Body=body,
-            ContentType="image/jpeg",
+            ContentType=content_type,
             CacheControl="public, max-age=31536000, immutable",
+            ACL="public-read"
         )
         uploaded = 1
         print(f"uploaded {thumb_key}")
         print(f"total_candidates={total} uploaded={uploaded} skipped={skipped} errors={errors}")
         return 0
 
+    sizes = args.sizes if len(args.sizes) > 0 else [args.thumb]
+    
     for rec_id, photos in _pb_iter_products(
         pb_url=pb_url or "",
         pb_token=pb_token or "",
@@ -408,44 +441,54 @@ def main() -> int:
                 errors += 1
                 continue
 
-            thumb_key = f"{args.thumb}/{orig_key}"
+            for size in sizes:
+                tw, th = _parse_size(size)
+                thumb_key = f"{size}/{orig_key}"
 
-            total += 1
+                total += 1
 
-            try:
-                if _s3_head_exists(thumbs_s3, thumbs_bucket, thumb_key):
-                    skipped += 1
-                    continue
+                try:
+                    if _s3_head_exists(thumbs_s3, thumbs_bucket, thumb_key):
+                        skipped += 1
+                        continue
 
-                original = _s3_get_object_bytes(orig_s3, orig_bucket, orig_key)
-                if not original:
-                    errors += 1
-                    continue
+                    original = _s3_get_object_bytes(orig_s3, orig_bucket, orig_key)
+                    if not original:
+                        errors += 1
+                        continue
 
-                img = Image.open(io.BytesIO(original))
-                thumb_img = _cover_resize_center_crop(img, tw, th)
+                    img = Image.open(io.BytesIO(original))
+                    thumb_img = _cover_resize_center_crop(img, tw, th)
 
-                out = io.BytesIO()
-                thumb_img.save(out, format="JPEG", quality=78, optimize=True, progressive=True)
-                body = out.getvalue()
+                    out = io.BytesIO()
+                    
+                    if args.format == "webp":
+                        thumb_img.save(out, format="WEBP", quality=85, optimize=True)
+                        content_type = "image/webp"
+                    else:
+                        thumb_img.save(out, format="JPEG", quality=78, optimize=True, progressive=True)
+                        content_type = "image/jpeg"
+                    
+                    body = out.getvalue()
 
-                thumbs_s3.put_object(
-                    Bucket=thumbs_bucket,
-                    Key=thumb_key,
-                    Body=body,
-                    ContentType="image/jpeg",
-                    CacheControl="public, max-age=31536000, immutable",
-                )
-
-                uploaded += 1
-                if uploaded % 50 == 0:
-                    print(
-                        f"progress products={processed_products} total={total} uploaded={uploaded} skipped={skipped} errors={errors}"
+                    thumbs_s3.put_object(
+                        Bucket=thumbs_bucket,
+                        Key=thumb_key,
+                        Body=body,
+                        ContentType=content_type,
+                        CacheControl="public, max-age=31536000, immutable",
+                        ACL="public-read"
                     )
-                if args.sleep > 0:
-                    time.sleep(args.sleep)
-            except Exception:
-                errors += 1
+
+                    uploaded += 1
+                    if uploaded % 50 == 0:
+                        print(
+                            f"progress products={processed_products} total={total} uploaded={uploaded} skipped={skipped} errors={errors}"
+                        )
+                    if args.sleep > 0:
+                        time.sleep(args.sleep)
+                except Exception:
+                    errors += 1
 
     print(f"total_candidates={total} uploaded={uploaded} skipped={skipped} errors={errors}")
     return 0 if errors == 0 else 2

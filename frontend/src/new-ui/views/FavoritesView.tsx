@@ -59,7 +59,7 @@ export default function FavoritesView({
                 }}>
                 <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-white/5 transition-all duration-300 ease-out">
                   <img
-                    src={getThumbUrl(product.images[0])}
+                    src={product.thumb || getThumbUrl(product.images[0])}
                     alt={product.name}
                     loading="lazy"
                     decoding="async"

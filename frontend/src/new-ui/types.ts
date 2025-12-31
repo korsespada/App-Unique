@@ -81,6 +81,7 @@ export interface Product {
   price: number;
   hasPrice?: boolean;
   images: string[];
+  thumb?: string;
   description: string;
   details: string[];
 }
