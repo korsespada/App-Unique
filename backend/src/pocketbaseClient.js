@@ -194,12 +194,17 @@ function mapPbProductToExternal(record) {
   const brandValue = expand.brand ? pickRecordLabel(expand.brand) : safeString(record.brand);
   const categoryValue = expand.category ? pickRecordLabel(expand.category) : safeString(record.category);
 
-  const imagesRaw = safeArray(record.images);
-  const images = imagesRaw
-    .map((p) => safeString(p))
-    .filter(Boolean);
+  const imagesCandidates = [
+    record.images,
+    record.photos,
+    record.photo,
+    record.pictures,
+    record.gallery,
+  ];
+  const imagesRaw = safeArray(imagesCandidates.find((v) => Array.isArray(v) && v.length));
+  const images = imagesRaw.map((p) => safeString(p)).filter(Boolean);
 
-  const thumb = safeString(record.thumb);
+  const thumb = safeString(record.thumb || record.thumbs || record.thumb_new || record.thumbs_new);
 
   const rawPrice = Number(record.price);
   const price = Number.isFinite(rawPrice) ? rawPrice : 0;
