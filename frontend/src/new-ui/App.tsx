@@ -407,10 +407,14 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const [loadMoreEl, setLoadMoreEl] = useState<HTMLDivElement | null>(null);
+  const loadMoreRef = useCallback((node: HTMLDivElement | null) => {
+    setLoadMoreEl(node);
+  }, []);
 
   useEffect(() => {
-    const el = loadMoreRef.current;
+    if (currentView !== "home") return undefined;
+    const el = loadMoreEl;
     if (!el) return undefined;
 
     const observer = new IntersectionObserver(
@@ -426,14 +430,14 @@ const App: React.FC = () => {
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+  }, [currentView, fetchNextPage, hasNextPage, isFetchingNextPage, loadMoreEl]);
 
   useEffect(() => {
     if (currentView !== "home") return;
     if (!hasNextPage) return;
     if (isFetchingNextPage) return;
 
-    const el = loadMoreRef.current;
+    const el = loadMoreEl;
     if (!el) return;
 
     const rect = el.getBoundingClientRect();
@@ -442,7 +446,7 @@ const App: React.FC = () => {
     if (!inRange) return;
 
     fetchNextPage();
-  }, [currentView, fetchNextPage, hasNextPage, isFetchingNextPage]);
+  }, [currentView, fetchNextPage, hasNextPage, isFetchingNextPage, loadMoreEl]);
 
   const apiProducts = useMemo<Product[]>(() => {
     const pages = (externalData?.pages

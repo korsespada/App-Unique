@@ -24,7 +24,7 @@ type Props = {
   getThumbUrl: (url: string, thumb?: string) => string;
   toggleFavorite: (productId: string, product?: Product) => void;
   addToCart: (product: Product) => void;
-  loadMoreRef: React.RefObject<HTMLDivElement | null>;
+  loadMoreRef: (node: HTMLDivElement | null) => void;
 };
 
 export default function HomeView({
