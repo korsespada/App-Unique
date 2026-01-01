@@ -26,12 +26,12 @@ import ProductDetailView from "./views/ProductDetailView";
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>("home");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [pendingOpenProductId, setPendingOpenProductId] = useState<string>("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeBrand, setActiveBrand] = useState<string>("Все");
   const [activeCategory, setActiveCategory] = useState<string>("Все");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSendingOrder, setIsSendingOrder] = useState(false);
-  const [startProductId, setStartProductId] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoriteItemsById, setFavoriteItemsById] = useState<
     Record<string, Product>
@@ -132,27 +132,18 @@ const App: React.FC = () => {
     const startParam = String(tg?.initDataUnsafe?.start_param || "").trim();
     if (!startParam) return;
 
-    if (startParam.startsWith("product__")) {
-      const id = startParam.slice("product__".length).trim();
-      if (id) {
-        setSearchQuery("");
-        setActiveCategory("Все");
-        setActiveBrand("Все");
-        setStartProductId(id);
-      }
-      return;
-    }
+    const id = startParam.startsWith("product__")
+      ? startParam.slice("product__".length).trim()
+      : startParam.startsWith("product_")
+        ? startParam.slice("product_".length).trim()
+        : "";
 
-    if (startParam.startsWith("product_")) {
-      const id = startParam.slice("product_".length).trim();
-      if (id) {
-        setSearchQuery("");
-        setActiveCategory("Все");
-        setActiveBrand("Все");
-        setStartProductId(id);
-      }
-    }
-  }, [setActiveBrand, setActiveCategory, setSearchQuery, setStartProductId]);
+    if (!id) return;
+    setSearchQuery("");
+    setActiveCategory("Все");
+    setActiveBrand("Все");
+    setPendingOpenProductId(id);
+  }, []);
 
   useEffect(() => {
     try {
@@ -498,6 +489,20 @@ const App: React.FC = () => {
   const isProductsLoading = isExternalLoading || isExternalFetching;
 
   useEffect(() => {
+    if (!pendingOpenProductId) return;
+    if (currentView !== "home") return;
+
+    const p = sourceProducts.find(
+      (x) => String(x.id).trim() === pendingOpenProductId
+    );
+    if (!p) return;
+
+    setSelectedProduct(p);
+    setCurrentView("product-detail");
+    setPendingOpenProductId("");
+  }, [pendingOpenProductId, currentView, sourceProducts]);
+
+  useEffect(() => {
     if (!favorites.length) return;
     if (!sourceProducts.length) return;
     const byId = new Map(sourceProducts.map((p) => [String(p.id), p] as const));
@@ -771,8 +776,8 @@ const App: React.FC = () => {
 
     setActiveCategory("Все");
     setActiveBrand("Все");
-    setStartProductId(raw);
-  }, [searchQuery, setActiveBrand, setActiveCategory, setStartProductId]);
+    setPendingOpenProductId(raw);
+  }, [searchQuery]);
 
   const sendOrderToManager = async () => {
     if (isSendingOrder) return;
@@ -822,9 +827,8 @@ const App: React.FC = () => {
     if (!selectedProduct) return;
 
     const id = String(selectedProduct.id || "").trim();
-    const productUrl = id
-      ? `https://t.me/YeezyUniqueBot?startapp=product__${id}`
-      : `${window.location.origin}?start_param=product_${selectedProduct.id}`;
+    if (!id) return;
+    const productUrl = `https://t.me/YeezyUniqueBot?startapp=product__${id}`;
 
     navigator.clipboard
       .writeText(productUrl)
@@ -852,31 +856,6 @@ const App: React.FC = () => {
     },
     [currentView, saveHomeScroll]
   );
-
-  useEffect(() => {
-    if (!startProductId) return;
-
-    const product = sourceProducts.find(
-      (p) => String(p.id) === String(startProductId)
-    );
-
-    if (product) {
-      navigateToProduct(product);
-      setStartProductId(null);
-      return;
-    }
-
-    if (!hasNextPage) return;
-    if (isFetchingNextPage) return;
-    fetchNextPage();
-  }, [
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    navigateToProduct,
-    sourceProducts,
-    startProductId
-  ]);
 
   useEffect(() => {
     const nextSrc = selectedProduct?.images?.[currentImageIndex] || "";

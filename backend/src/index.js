@@ -230,7 +230,7 @@ async function getBotUsername(botToken) {
 }
 
 function buildProductStartParam(productId) {
-  return `product_${String(productId)}`;
+  return `product__${String(productId)}`;
 }
 
 function buildMiniAppLink(botUsername, startParam) {
@@ -736,14 +736,15 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
 
           const startParam = buildProductStartParam(String(it?.id || '').trim());
           const link = buildMiniAppLink(botUsername, startParam);
-          const title = link ? `<a href="${escapeHtml(link)}">${titleText}</a>` : titleText;
+          const title = titleText;
+          const linkLine = link ? `\n${escapeHtml(link)}` : '';
 
           if (!hasPrice || !Number.isFinite(price) || price <= 0) {
-            return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт — Цена по запросу`;
+            return `${idx + 1}. ${title}${linkLine} (id: <code>${id}</code>) — ${qty} шт — Цена по запросу`;
           }
 
           const lineTotal = price * qty;
-          return `${idx + 1}. ${title} (id: <code>${id}</code>) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
+          return `${idx + 1}. ${title}${linkLine} (id: <code>${id}</code>) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
         })
       )
       .concat([
