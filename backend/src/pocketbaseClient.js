@@ -240,7 +240,10 @@ async function listActiveProducts(page = 1, perPage = 2000) {
       params: {
         page: safePage,
         perPage: safePerPage,
-        filter: 'status = "active"',
+        filter: 'status = "active" && (photos.len()>0 || thumb != null)',
+        sort: '-updated',
+        fields: 'name,photos,thumb,price,brand,category,expand.brand,expand.category',
+        skipTotal: true,
         expand: 'brand,category',
       },
     });
