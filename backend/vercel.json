@@ -12,11 +12,14 @@
   ],
   "routes": [
     {
+      "handle": "filesystem"
+    },
+    {
       "src": "/images/(.*)",
       "dest": "/public/images/$1"
     },
     {
-      "src": "/(.*)",
+      "src": "/(?!_vercel/)(.*)",
       "dest": "api/index.js"
     }
   ]
