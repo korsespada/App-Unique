@@ -1,6 +1,8 @@
 import "@style/index.css";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { createRoot } from "react-dom/client";
 
 import App from "./new-ui/App";
@@ -19,5 +21,7 @@ const queryClient = new QueryClient();
 createRoot(container).render(
   <QueryClientProvider client={queryClient}>
     <App />
+    <Analytics />
+    <SpeedInsights />
   </QueryClientProvider>
 );
