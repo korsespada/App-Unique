@@ -1,5 +1,5 @@
 import {
- ArrowLeft, ChevronDown, Heart, Share 
+ ArrowLeft, ChevronDown, Heart, Share
 } from "lucide-react";
 import React from "react";
 
@@ -44,6 +44,45 @@ export default function ProductDetailView({
   toggleFavorite
 }: Props) {
   if (!selectedProduct) return null;
+
+  const renderDescription = (text: string) => {
+    const raw = String(text || "");
+    const lines = raw.split("\n");
+    const out: React.ReactNode[] = [];
+    let offset = 0;
+
+    lines.forEach((line, lineIdx) => {
+      const parts: React.ReactNode[] = [];
+      const re = /\*\*(.+?)\*\*/g;
+      let lastIndex = 0;
+      let match = re.exec(line);
+      while (match) {
+        const start = Number(match.index ?? 0);
+        const full = String(match[0] ?? "");
+        const inner = String(match[1] ?? "");
+
+        if (start > lastIndex) {
+          parts.push(line.slice(lastIndex, start));
+        }
+        parts.push(<strong key={`b:${offset + start}`}>{inner}</strong>);
+
+        lastIndex = start + full.length;
+        match = re.exec(line);
+      }
+      if (lastIndex < line.length) {
+        parts.push(line.slice(lastIndex));
+      }
+
+      out.push(...parts);
+      if (lineIdx < lines.length - 1) {
+        out.push(<br key={`br:${offset + line.length}`} />);
+      }
+
+      offset += line.length + 1;
+    });
+
+    return out;
+  };
 
   const showA = activeDetailLayer === "A";
   const showB = !showA;
@@ -193,10 +232,8 @@ export default function ProductDetailView({
           </div>
         </div>
 
-        <p
-          className="mb-12 text-[15px] font-medium leading-relaxed text-white/70"
-          style={{ whiteSpace: "pre-line" }}>
-          {selectedProduct.description}
+        <p className="mb-12 text-[15px] font-medium leading-relaxed text-white/70">
+          {renderDescription(selectedProduct.description)}
         </p>
 
         <div className="mb-12 space-y-8">
@@ -222,7 +259,7 @@ export default function ProductDetailView({
           </p>
           <a
             href={`https://t.me/htsadmin?text=${encodeURIComponent(
-              `Здравствуйте, у меня вопрос по товару [${selectedProduct.name}](https://t.me/YeezyUniqueBot?startapp=product__${selectedProduct.id})`
+              `Здравствуйте, у меня вопрос по товару ${selectedProduct.name}\nhttps://t.me/YeezyUniqueBot?startapp=product__${selectedProduct.id}`
             )}`}
             target="_blank"
             rel="noreferrer"

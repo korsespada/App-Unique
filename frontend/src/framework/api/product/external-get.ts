@@ -23,12 +23,14 @@ async function fetchExternalProductsPage(
   query?: ExternalProductsQuery
 ): Promise<ExternalProductsPagedResponse> {
   try {
-    const rawSearch = String(query?.search || "").trim();
-    const looksLikeId = rawSearch.length >= 12;
-    rawSearch.length <= 120 &&
-      !rawSearch.includes(" ") &&
-      !rawSearch.includes("\t") &&
-      !rawSearch.includes("\n");
+    const rawSearch = String(query?.search || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const looksLikeId = rawSearch.length >= 12
+      && rawSearch.length <= 120
+      && !rawSearch.includes(" ")
+      && !rawSearch.includes("\t")
+      && !rawSearch.includes("\n");
     const productId = looksLikeId ? rawSearch : undefined;
     const search = looksLikeId ? undefined : rawSearch;
     const brand = String(query?.brand || "").trim();
@@ -73,7 +75,9 @@ async function fetchExternalProductsPage(
 }
 
 export function useGetExternalProducts(query?: ExternalProductsQuery) {
-  const rawSearch = String(query?.search || "").trim();
+  const rawSearch = String(query?.search || "")
+    .replace(/\s+/g, " ")
+    .trim();
   const search = rawSearch;
   const brand = String(query?.brand || "").trim();
   const category = String(query?.category || "").trim();
@@ -89,19 +93,16 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
         seed
       }
     ],
-    // eslint-disable-next-line implicit-arrow-linebreak
-    ({ pageParam = 1 }) =>
-      // eslint-disable-next-line object-curly-newline
-      fetchExternalProductsPage(Number(pageParam), {
-        search,
-        brand,
-        category,
-        seed
-      }),
+    ({ pageParam = 1 }) => fetchExternalProductsPage(Number(pageParam), {
+      search,
+      brand,
+      category,
+      seed
+    }),
     {
-      // eslint-disable-next-line implicit-arrow-linebreak
-      getNextPageParam: (lastPage) =>
-        lastPage.hasNextPage ? lastPage.page + 1 : undefined,
+      getNextPageParam: (lastPage) => (
+        lastPage.hasNextPage ? lastPage.page + 1 : undefined
+      ),
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,

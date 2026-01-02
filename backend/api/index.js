@@ -413,7 +413,7 @@ async function handleExternalProducts(req, res) {
   const perPage = Math.max(1, Math.min(200, Number(req.query.perPage) || 40));
   const seed = String(req.query.seed || '').trim();
 
-  const search = String(req.query.search || '').trim();
+  const search = String(req.query.search || '').replace(/\s+/g, ' ').trim();
   const brand = String(req.query.brand || '').trim();
   const category = String(req.query.category || '').trim();
 
@@ -427,14 +427,19 @@ async function handleExternalProducts(req, res) {
   const pbAll = await getAllActiveProductsSafe(2000);
 
   const q = search.toLowerCase();
+  const tokens = q ? q.split(' ').map((t) => t.trim()).filter(Boolean) : [];
   const items = Array.isArray(pbAll?.items) ? pbAll.items : [];
   const filtered = items.filter((p) => {
     if (brand && String(p.brand || '') !== brand) return false;
     if (category && String(p.category || '') !== category) return false;
-    if (q) {
-      const title = String(p.title || p.name || '').toLowerCase();
+    if (tokens.length) {
+      const title = String(p.title || p.name || p.product_id || p.id || '').toLowerCase();
       const desc = String(p.description || '').toLowerCase();
-      if (!title.includes(q) && !desc.includes(q)) return false;
+      const pid = String(p.product_id || p.id || '').toLowerCase();
+      const hay = `${title} ${desc} ${pid}`;
+      for (const tok of tokens) {
+        if (!hay.includes(tok)) return false;
+      }
     }
     return true;
   });

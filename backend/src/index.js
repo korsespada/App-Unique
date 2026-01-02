@@ -409,14 +409,15 @@ async function getCachedActiveProducts() {
 // Routes
 app.get('/api/:version/:shop/external-products', async (req, res) => {
   const { version, shop } = req.params;
-  const search = String(req.query.search || '').trim();
+  const search = String(req.query.search || '').replace(/\s+/g, ' ').trim();
+  const productId = String(req.query.productId || '').trim();
   const brand = String(req.query.brand || '').trim();
   const category = String(req.query.category || '').trim();
   const seed = String(req.query.seed || '').trim();
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.max(1, Math.min(2000, Number(req.query.perPage) || 200));
 
-  const cacheKey = `external-products:${version}:${shop}:${search}:${brand}:${category}:${seed}:${page}:${perPage}`;
+  const cacheKey = `external-products:${version}:${shop}:${search}:${productId}:${brand}:${category}:${seed}:${page}:${perPage}`;
 
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
@@ -426,8 +427,31 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
   try {
     const products = await getCachedActiveProducts();
     const baseList = toProductArray(products);
-    const shuffled = seed ? shuffleDeterministic(baseList, seed) : baseList;
-    const mixed = seed ? mixByBrandRoundRobin(shuffled, seed) : mixByBrandRoundRobin(shuffled, '');
+    const q = search.toLowerCase();
+    const tokens = q ? q.split(' ').map((t) => t.trim()).filter(Boolean) : [];
+    const filtered = baseList.filter((p) => {
+      if (brand && String(p.brand || '') !== brand) return false;
+      if (category && String(p.category || '') !== category) return false;
+      if (productId) {
+        const id = String(p.id || p.product_id || '').trim();
+        return id === productId;
+      }
+      if (tokens.length) {
+        const title = String(p.title || p.name || p.product_id || '').toLowerCase();
+        const desc = String(p.description || '').toLowerCase();
+        const pid = String(p.product_id || p.id || '').toLowerCase();
+        const hay = `${title} ${desc} ${pid}`;
+        for (const tok of tokens) {
+          if (!hay.includes(tok)) return false;
+        }
+      }
+      return true;
+    });
+
+    const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
+    const mixed = seed
+      ? mixByBrandRoundRobin(shuffled, seed)
+      : mixByBrandRoundRobin(shuffled, '');
     const payload = normalizeProductDescriptions(
       buildPagedExternalProductsResponse(mixed, { page, perPage })
     );
@@ -442,13 +466,14 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
 });
 
 app.get('/api/external-products', async (req, res) => {
-  const search = String(req.query.search || '').trim();
+  const search = String(req.query.search || '').replace(/\s+/g, ' ').trim();
+  const productId = String(req.query.productId || '').trim();
   const brand = String(req.query.brand || '').trim();
   const category = String(req.query.category || '').trim();
   const seed = String(req.query.seed || '').trim();
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.max(1, Math.min(2000, Number(req.query.perPage) || 200));
-  const cacheKey = `external-products:default:${search}:${brand}:${category}:${seed}:${page}:${perPage}`;
+  const cacheKey = `external-products:default:${search}:${productId}:${brand}:${category}:${seed}:${page}:${perPage}`;
 
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
@@ -458,8 +483,31 @@ app.get('/api/external-products', async (req, res) => {
   try {
     const products = await getCachedActiveProducts();
     const baseList = toProductArray(products);
-    const shuffled = seed ? shuffleDeterministic(baseList, seed) : baseList;
-    const mixed = seed ? mixByBrandRoundRobin(shuffled, seed) : mixByBrandRoundRobin(shuffled, '');
+    const q = search.toLowerCase();
+    const tokens = q ? q.split(' ').map((t) => t.trim()).filter(Boolean) : [];
+    const filtered = baseList.filter((p) => {
+      if (brand && String(p.brand || '') !== brand) return false;
+      if (category && String(p.category || '') !== category) return false;
+      if (productId) {
+        const id = String(p.id || p.product_id || '').trim();
+        return id === productId;
+      }
+      if (tokens.length) {
+        const title = String(p.title || p.name || p.product_id || '').toLowerCase();
+        const desc = String(p.description || '').toLowerCase();
+        const pid = String(p.product_id || p.id || '').toLowerCase();
+        const hay = `${title} ${desc} ${pid}`;
+        for (const tok of tokens) {
+          if (!hay.includes(tok)) return false;
+        }
+      }
+      return true;
+    });
+
+    const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
+    const mixed = seed
+      ? mixByBrandRoundRobin(shuffled, seed)
+      : mixByBrandRoundRobin(shuffled, '');
     const payload = normalizeProductDescriptions({
       ...buildPagedExternalProductsResponse(mixed, { page, perPage }),
     });
