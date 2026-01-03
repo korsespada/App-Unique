@@ -196,6 +196,8 @@ function mapPbProductToExternal(record) {
       rawDescription: record.description,
       safeDescription: description
     });
+    console.log('🔍 All available fields:', Object.keys(record));
+    console.log('🔍 Raw record:', record);
   }
   
   const status = safeString(record.status || '');
