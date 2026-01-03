@@ -824,9 +824,7 @@ const App: React.FC = () => {
   };
 
   const copyProductLink = useCallback(() => {
-    if (!selectedProduct) return;
-
-    const id = String(selectedProduct.id || "").trim();
+    const id = selectedProduct?.id || "";
     if (!id) return;
     const productUrl = `https://t.me/YeezyUniqueBot?startapp=product__${id}`;
 
@@ -856,6 +854,53 @@ const App: React.FC = () => {
     },
     [currentView, saveHomeScroll]
   );
+
+  useEffect(() => {
+    if (currentView !== "product-detail") return;
+    const id = String(selectedProduct?.id || "").trim();
+    if (!id) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data } = await Api.get(`/products/${encodeURIComponent(id)}`);
+        if (cancelled) return;
+
+        const fullImages = Array.isArray((data as any)?.images)
+          ? (data as any).images
+          : [];
+        if (!fullImages.length) return;
+
+        setSelectedProduct((prev) => {
+          if (!prev) return prev;
+          if (String(prev.id) !== id) return prev;
+          return {
+            ...prev,
+            images: fullImages,
+            description: String((data as any)?.description || prev.description || ""),
+            category: String((data as any)?.category || prev.category || "Все"),
+            brand: String((data as any)?.brand || prev.brand || " "),
+            thumb: String((data as any)?.thumb || prev.thumb || ""),
+          } as Product;
+        });
+
+        setCurrentImageIndex(0);
+        const first = String(fullImages[0] || "");
+        const firstResolved = first ? getDetailImageUrl(first) : "";
+        setDetailLayerASrc(firstResolved);
+        setDetailLayerBSrc("");
+        setActiveDetailLayer("A");
+        setIsDetailImageCrossfading(false);
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentView, selectedProduct?.id]);
 
   useEffect(() => {
     const nextSrc = selectedProduct?.images?.[currentImageIndex] || "";

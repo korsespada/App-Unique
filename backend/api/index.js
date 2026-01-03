@@ -452,7 +452,15 @@ async function handleExternalProducts(req, res) {
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * perPage;
   const end = start + perPage;
-  const pageItems = mixed.slice(start, end);
+  const pageItems = mixed.slice(start, end).map((p) => {
+    const thumb = typeof p?.thumb === 'string' ? String(p.thumb).trim() : '';
+    const firstImage = Array.isArray(p?.images) && p.images.length ? String(p.images[0]).trim() : '';
+    const preview = thumb || firstImage;
+    return {
+      ...p,
+      images: preview ? [preview] : [],
+    };
+  });
 
   const payload = {
     products: pageItems,
