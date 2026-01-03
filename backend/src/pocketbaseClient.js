@@ -188,6 +188,16 @@ function mapPbProductToExternal(record) {
   const productId = safeString(record.productId || record.product_id || record.productid || record.id);
   const name = safeString(record.name || record.title || record.titletext || record.titleText || productId);
   const description = safeString(record.description || '');
+  
+  // Debug: логируем описание товара
+  if (productId === 'yks9yg3ppaqyjwp') {
+    console.log('🔍 Debug product description:', {
+      productId,
+      rawDescription: record.description,
+      safeDescription: description
+    });
+  }
+  
   const status = safeString(record.status || '');
 
   const expand = record.expand && typeof record.expand === 'object' ? record.expand : {};
