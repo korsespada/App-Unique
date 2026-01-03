@@ -13,6 +13,7 @@ const { validateTelegramInitData } = require('../src/telegramWebAppAuth');
 const {
   listActiveProducts,
   listAllActiveProducts,
+  getActiveProductById,
   getProfileByTelegramId,
   updateProfileCartAndFavorites,
 } = require('../src/pocketbaseClient');
@@ -571,10 +572,8 @@ app.get('/products', async (req, res) => {
 
 app.get(['/api/products/:id', '/products/:id'], async (req, res) => {
   try {
-    const pb = await listActiveProducts(1, 2000);
-    const products = pb.items;
     const id = String(req.params.id || '').trim();
-    const product = products.find((p) => String(p.id || p.product_id || '').trim() === id);
+    const product = await getActiveProductById(id);
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }

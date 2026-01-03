@@ -303,10 +303,39 @@ async function listAllActiveProducts(perPage = 2000) {
   };
 }
 
+async function getActiveProductById(productId) {
+  const api = pbApi();
+  const id = safeString(productId);
+  if (!id) throw new Error('productId is required');
+
+  let record;
+  try {
+    const resp = await api.get(
+      `/api/collections/products/records/${encodeURIComponent(id)}`,
+      {
+        params: {
+          fields: 'id,name,description,photos,thumb,price,brand,category,status,expand.brand,expand.category,updated',
+          expand: 'brand,category',
+        },
+      }
+    );
+    record = resp?.data || null;
+  } catch (err) {
+    if (isAxiosNotFound(err)) return null;
+    throw err;
+  }
+
+  if (!record || typeof record !== 'object') return null;
+  if (safeString(record.status) !== 'active') return null;
+  const mapped = mapPbProductToExternal(record);
+  return mapped && mapped.id ? mapped : null;
+}
+
 module.exports = {
   listActiveProducts,
   getProfileByTelegramId,
   ensureProfileByTelegramId,
   updateProfileCartAndFavorites,
   listAllActiveProducts,
+  getActiveProductById,
 };
