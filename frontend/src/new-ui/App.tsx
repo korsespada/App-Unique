@@ -864,17 +864,21 @@ const App: React.FC = () => {
 
     (async () => {
       try {
-        const { data } = await Api.get(`/products/${encodeURIComponent(id)}`);
+        const { data } = await Api.get(`products/${encodeURIComponent(id)}`);
         if (cancelled) return;
 
-        const fullImages = Array.isArray((data as any)?.images)
-          ? (data as any).images
-          : [];
+        const rawImages = (data as any)?.images;
+        const rawPhotos = (data as any)?.photos;
+        const fullImages = Array.isArray(rawImages)
+          ? rawImages
+          : (Array.isArray(rawPhotos)
+            ? rawPhotos.map((x: any) => String(x?.url || "").trim()).filter(Boolean)
+            : []);
         if (!fullImages.length) return;
 
         setSelectedProduct((prev) => {
           if (!prev) return prev;
-          if (String(prev.id) !== id) return prev;
+          if (String(prev.id || "").trim() !== id) return prev;
           return {
             ...prev,
             images: fullImages,
