@@ -188,18 +188,6 @@ function mapPbProductToExternal(record) {
   const productId = safeString(record.productId || record.product_id || record.productid || record.id);
   const name = safeString(record.name || record.title || record.titletext || record.titleText || productId);
   const description = safeString(record.description || '');
-  
-  // Debug: логируем описание товара
-  if (productId === 'yks9yg3ppaqyjwp') {
-    console.log('🔍 Debug product description:', {
-      productId,
-      rawDescription: record.description,
-      safeDescription: description
-    });
-    console.log('🔍 All available fields:', Object.keys(record));
-    console.log('🔍 Raw record:', record);
-  }
-  
   const status = safeString(record.status || '');
 
   const expand = record.expand && typeof record.expand === 'object' ? record.expand : {};
@@ -254,7 +242,7 @@ async function listActiveProducts(page = 1, perPage = 2000) {
         perPage: safePerPage,
         filter: 'status = "active"',
         sort: '-updated',
-        fields: 'id,name,photos,thumb,price,brand,category,expand.brand,expand.category,updated',
+        fields: 'id,name,description,photos,thumb,price,brand,category,expand.brand,expand.category,updated',
         expand: 'brand,category',
       },
     });
