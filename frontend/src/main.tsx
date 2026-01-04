@@ -20,38 +20,55 @@ declare global {
   }
 }
 
-function RouteAnalytics() {
+function TelegramAnalytics() {
   useEffect(() => {
-    const handleRouteChange = () => {
+    // Отслеживаем изменения view через custom events
+    const handleViewChange = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { view, productId } = customEvent.detail;
+
       if (window.va) {
+        let pagePath = "/";
+        let pageTitle = "Home";
+
+        switch (view) {
+          case "product-detail":
+            pagePath = `/product/${productId}`;
+            pageTitle = `Product ${productId}`;
+            break;
+          case "cart":
+            pagePath = "/cart";
+            pageTitle = "Cart";
+            break;
+          case "favorites":
+            pagePath = "/favorites";
+            pageTitle = "Favorites";
+            break;
+          case "home":
+          default:
+            pagePath = "/";
+            pageTitle = "Home";
+            break;
+        }
+
         window.va("track", "pageview", {
-          path: window.location.pathname + window.location.search,
-          title: document.title
+          path: pagePath,
+          title: pageTitle
         });
       }
     };
 
-    // Отслеживаем изменение view в Telegram App
-    const originalPushState = window.history.pushState;
-    const originalReplaceState = window.history.replaceState;
+    window.addEventListener("telegram-view-change", handleViewChange);
 
-    window.history.pushState = function (...args) {
-      originalPushState.apply(window.history, args);
-      setTimeout(handleRouteChange, 0);
-    };
-
-    window.history.replaceState = function (...args) {
-      originalReplaceState.apply(window.history, args);
-      setTimeout(handleRouteChange, 0);
-    };
-
-    window.addEventListener("popstate", handleRouteChange);
-    handleRouteChange(); // Initial page view
+    // Initial page view
+    window.dispatchEvent(
+      new CustomEvent("telegram-view-change", {
+        detail: { view: "home" }
+      })
+    );
 
     return () => {
-      window.history.pushState = originalPushState;
-      window.history.replaceState = originalReplaceState;
-      window.removeEventListener("popstate", handleRouteChange);
+      window.removeEventListener("telegram-view-change", handleViewChange);
     };
   }, []);
 
@@ -64,7 +81,7 @@ const queryClient = new QueryClient();
 
 createRoot(container).render(
   <QueryClientProvider client={queryClient}>
-    <RouteAnalytics />
+    <TelegramAnalytics />
     <App />
     <Analytics />
     <SpeedInsights />

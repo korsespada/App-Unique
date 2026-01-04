@@ -691,6 +691,16 @@ const App: React.FC = () => {
 
     window.history.pushState(state, "");
     lastPushedViewRef.current = currentView;
+
+    // Отправляем событие для аналитики
+    window.dispatchEvent(
+      new CustomEvent("telegram-view-change", {
+        detail: {
+          view: currentView,
+          productId: currentView === "product-detail" ? selectedProduct?.id : undefined,
+        },
+      })
+    );
   }, [currentView, selectedProduct?.id]);
 
   const derivedCategories = useMemo<string[]>(() => {
