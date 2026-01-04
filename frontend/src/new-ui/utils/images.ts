@@ -18,7 +18,10 @@ export function getThumbUrl(url: string, thumb = "400x500") {
       const rest = fromOrig
         ? u.pathname.slice(`/${VKCLOUD_ORIG_BUCKET}/`.length)
         : (() => {
-            const parts = u.pathname.slice(`/${VKCLOUD_THUMBS_BUCKET}/`.length).split("/").filter(Boolean);
+            const parts = u.pathname
+            .slice(`/${VKCLOUD_THUMBS_BUCKET}/`.length)
+            .split("/")
+            .filter(Boolean);
             // Если уже содержит размер в пути, удаляем его
             if (parts.length >= 1 && /^\d+x\d+$/.test(parts[0])) {
               return parts.slice(1).join("/");

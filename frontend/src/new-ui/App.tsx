@@ -42,61 +42,81 @@ const App: React.FC = () => {
   const didInitProfileSyncRef = useRef(false);
   const profileSyncTimerRef = useRef<number | null>(null);
 
-  const buildMergedFavorites = useCallback((a: string[], b: string[]) => {
-    return Array.from(new Set([...(a || []), ...(b || [])].map((x) => String(x).trim()).filter(Boolean)));
-  }, []);
+  const buildMergedFavorites = useCallback(
+    (a: string[], b: string[]) => Array.from(
+        new Set(
+          [...(a || []), ...(b || [])]
+            .map((x) => String(x).trim())
+            .filter(Boolean)
+        )
+      ),
+    []
+  );
 
-  const buildMergedCart = useCallback((localCart: CartItem[], serverCart: CartItem[]) => {
-    const byId = new Map<string, CartItem>();
-    const add = (it: any) => {
-      if (!it) return;
-      const id = String(it.id || '').trim();
-      const name = String(it.name || '').trim();
-      if (!id || !name) return;
-      const qty = Math.max(1, Number(it.quantity) || 1);
-      const normalized: CartItem = {
-        ...(it as any),
-        id,
-        name,
-        quantity: qty,
+  const buildMergedCart = useCallback(
+    (localCart: CartItem[], serverCart: CartItem[]) => {
+      const byId = new Map<string, CartItem>();
+      const add = (it: any) => {
+        if (!it) return;
+        const id = String(it.id || "").trim();
+        const name = String(it.name || "").trim();
+        if (!id || !name) return;
+        const qty = Math.max(1, Number(it.quantity) || 1);
+        const normalized: CartItem = {
+          ...(it as any),
+          id,
+          name,
+          quantity: qty
+        };
+        const prev = byId.get(id);
+        if (!prev) {
+          byId.set(id, normalized);
+          return;
+        }
+        byId.set(id, {
+          ...normalized,
+          quantity: Math.min(99, (prev.quantity || 1) + qty)
+        });
       };
-      const prev = byId.get(id);
-      if (!prev) {
-        byId.set(id, normalized);
-        return;
-      }
-      byId.set(id, { ...normalized, quantity: Math.min(99, (prev.quantity || 1) + qty) });
-    };
-    (Array.isArray(serverCart) ? serverCart : []).forEach(add);
-    (Array.isArray(localCart) ? localCart : []).forEach(add);
-    return Array.from(byId.values());
-  }, []);
+      (Array.isArray(serverCart) ? serverCart : []).forEach(add);
+      (Array.isArray(localCart) ? localCart : []).forEach(add);
+      return Array.from(byId.values());
+    },
+    []
+  );
 
-  const scheduleProfileSync = useCallback((nextCart: CartItem[], nextFavorites: string[]) => {
-    if (profileSyncTimerRef.current) {
-      window.clearTimeout(profileSyncTimerRef.current);
-      profileSyncTimerRef.current = null;
-    }
-    profileSyncTimerRef.current = window.setTimeout(async () => {
-      profileSyncTimerRef.current = null;
-      try {
-        const tg = (window as any)?.Telegram?.WebApp;
-        const u = tg?.initDataUnsafe?.user;
-        const username = u?.username ? String(u.username).trim() : '';
-        const first = u?.first_name ? String(u.first_name).trim() : '';
-        const last = u?.last_name ? String(u.last_name).trim() : '';
-        const nickname = `${first} ${last}`.trim();
-        await Api.post('/profile/state', {
-          cart: nextCart,
-          favorites: nextFavorites,
-          username,
-          nickname,
-        }, { timeout: 15000 });
-      } catch {
-        // ignore
+  const scheduleProfileSync = useCallback(
+    (nextCart: CartItem[], nextFavorites: string[]) => {
+      if (profileSyncTimerRef.current) {
+        window.clearTimeout(profileSyncTimerRef.current);
+        profileSyncTimerRef.current = null;
       }
-    }, 500);
-  }, []);
+      profileSyncTimerRef.current = window.setTimeout(async () => {
+        profileSyncTimerRef.current = null;
+        try {
+          const tg = (window as any)?.Telegram?.WebApp;
+          const u = tg?.initDataUnsafe?.user;
+          const username = u?.username ? String(u.username).trim() : "";
+          const first = u?.first_name ? String(u.first_name).trim() : "";
+          const last = u?.last_name ? String(u.last_name).trim() : "";
+          const nickname = `${first} ${last}`.trim();
+          await Api.post(
+            "/profile/state",
+            {
+              cart: nextCart,
+              favorites: nextFavorites,
+              username,
+              nickname
+            },
+            { timeout: 15000 }
+          );
+        } catch {
+          // ignore
+        }
+      }, 500);
+    },
+    []
+  );
 
   const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
   const [catalogBrands, setCatalogBrands] = useState<string[]>([]);
@@ -104,8 +124,7 @@ const App: React.FC = () => {
     Record<string, string[]>
   >({});
 
-  const { shouldRestoreHomeScrollRef, saveHomeScroll, restoreHomeScroll } =
-    useHomeScroll(currentView);
+  const { shouldRestoreHomeScrollRef, saveHomeScroll, restoreHomeScroll } =    useHomeScroll(currentView);
 
   // Gallery state for ProductDetail
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -114,8 +133,7 @@ const App: React.FC = () => {
   const [detailLayerASrc, setDetailLayerASrc] = useState<string>("");
   const [detailLayerBSrc, setDetailLayerBSrc] = useState<string>("");
   const [activeDetailLayer, setActiveDetailLayer] = useState<"A" | "B">("A");
-  const [isDetailImageCrossfading, setIsDetailImageCrossfading] =
-    useState(false);
+  const [isDetailImageCrossfading, setIsDetailImageCrossfading] =    useState(false);
 
   const productsRef = useRef<Product[]>([]);
   const cartRef = useRef<CartItem[]>([]);
@@ -135,8 +153,8 @@ const App: React.FC = () => {
     const id = startParam.startsWith("product__")
       ? startParam.slice("product__".length).trim()
       : startParam.startsWith("product_")
-        ? startParam.slice("product_".length).trim()
-        : "";
+      ? startParam.slice("product_".length).trim()
+      : "";
 
     if (!id) return;
     setSearchQuery("");
@@ -180,8 +198,8 @@ const App: React.FC = () => {
           images: images.length
             ? images
             : [
-                "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
-              ],
+              "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
+            ],
           description: String((v as any).description || ""),
           details: Array.isArray((v as any).details) ? (v as any).details : []
         };
@@ -262,7 +280,8 @@ const App: React.FC = () => {
       if (!Array.isArray(parsed)) return;
       const restored = parsed
         .filter(
-          (it) => it && typeof it === "object" && (it as any).id && (it as any).name
+          (it) =>
+            it && typeof it === "object" && (it as any).id && (it as any).name
         )
         .map((it) => ({
           ...(it as any),
@@ -289,15 +308,20 @@ const App: React.FC = () => {
 
     (async () => {
       try {
-        const { data } = await Api.get('/profile/state', { timeout: 15000 });
+        const { data } = await Api.get("/profile/state", { timeout: 15000 });
         if (cancelled) return;
 
-        const serverCart = Array.isArray((data as any)?.cart) ? (data as any).cart : [];
+        const serverCart = Array.isArray((data as any)?.cart)
+          ? (data as any).cart
+          : [];
         const serverFavorites = Array.isArray((data as any)?.favorites)
           ? (data as any).favorites
           : [];
 
-        const mergedFavorites = buildMergedFavorites(favorites, serverFavorites);
+        const mergedFavorites = buildMergedFavorites(
+          favorites,
+          serverFavorites
+        );
         const mergedCart = buildMergedCart(cartRef.current, serverCart as any);
 
         setFavorites(mergedFavorites);
@@ -371,19 +395,21 @@ const App: React.FC = () => {
           ? data.brands.map((x) => String(x).trim()).filter(Boolean)
           : [];
         const brandsByCategoryRaw = data?.brandsByCategory;
-        const brandsByCategory =          brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
-            ? brandsByCategoryRaw
-            : {};
+        const brandsByCategory =
+          brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
+          ? brandsByCategoryRaw
+          : {};
 
-        const normalizedBrandsByCategory: Record<string, string[]> =          Object.fromEntries(
-            Object.entries(brandsByCategory).map(([k, v]) => {
-              const key = String(k).trim();
-              const value = Array.isArray(v)
-                ? v.map((x) => String(x).trim()).filter(Boolean)
-                : [];
-              return [key, value] as const;
-            })
-          );
+        const normalizedBrandsByCategory: Record<string, string[]> =
+          Object.fromEntries(
+          Object.entries(brandsByCategory).map(([k, v]) => {
+            const key = String(k).trim();
+            const value = Array.isArray(v)
+              ? v.map((x) => String(x).trim()).filter(Boolean)
+              : [];
+            return [key, value] as const;
+          })
+        );
 
         setCatalogCategories(categories);
         setCatalogBrands(brands);
@@ -440,9 +466,11 @@ const App: React.FC = () => {
   }, [currentView, fetchNextPage, hasNextPage, isFetchingNextPage, loadMoreEl]);
 
   const apiProducts = useMemo<Product[]>(() => {
-    const pages = (externalData?.pages
-      || []) as ExternalProductsPagedResponse[];
-    const raw = pages.flatMap((p) => Array.isArray(p?.products) ? p.products : []);
+    const pages = (externalData?.pages ||
+      []) as ExternalProductsPagedResponse[];
+    const raw = pages.flatMap((p) =>
+      Array.isArray(p?.products) ? p.products : []
+    );
 
     return raw
       .map((p) => {
@@ -450,7 +478,8 @@ const App: React.FC = () => {
         const name = String(p.title || p.name || p.product_id || "").trim();
         const brand = String(p.brand || p.season_title || "").trim();
         const category = String(p.category || "Все");
-        const images =          Array.isArray(p.images) && p.images.length ? p.images : [];
+        const images =
+          Array.isArray(p.images) && p.images.length ? p.images : [];
 
         const rawPrice = Number((p as any).price);
         const hasPrice = Number.isFinite(rawPrice) && rawPrice > 0;
@@ -465,8 +494,8 @@ const App: React.FC = () => {
           images: images.length
             ? images
             : [
-              "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
-            ],
+                "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
+              ],
           thumb: (p as any).thumb || "",
           description: String(p.description || ""),
           details: Array.isArray((p as any).details) ? (p as any).details : []
@@ -476,8 +505,8 @@ const App: React.FC = () => {
   }, [externalData]);
 
   const totalItems = useMemo(() => {
-    const pages = (externalData?.pages
-      || []) as ExternalProductsPagedResponse[];
+    const pages = (externalData?.pages ||
+      []) as ExternalProductsPagedResponse[];
     const first = pages[0];
     const totalItemsRaw = Number((first as any)?.totalItems);
     return Number.isFinite(totalItemsRaw) && totalItemsRaw >= 0
@@ -557,11 +586,10 @@ const App: React.FC = () => {
           : undefined;
 
         const same = item.name === nextItem.name;
-        item.brand === nextItem.brand
-          && item.category === nextItem.category;
-        Number(item.price) === Number(nextItem.price) &&
-          (item.hasPrice ?? true) === (nextItem.hasPrice ?? true) &&
-          itemFirstImg === freshFirstImg;
+        item.brand === nextItem.brand && item.category === nextItem.category;
+        Number(item.price) === Number(nextItem.price)
+          && (item.hasPrice ?? true) === (nextItem.hasPrice ?? true)
+          && itemFirstImg === freshFirstImg;
 
         if (!same) changed = true;
         return same ? item : nextItem;
@@ -657,10 +685,9 @@ const App: React.FC = () => {
     }
 
     const fromView = lastPushedViewRef.current;
-    const state =
-      currentView === "product-detail"
-      ? { view: currentView, productId: selectedProduct?.id || "", fromView }
-      : { view: currentView, fromView };
+    const state =      currentView === "product-detail"
+        ? { view: currentView, productId: selectedProduct?.id || "", fromView }
+        : { view: currentView, fromView };
 
     window.history.pushState(state, "");
     lastPushedViewRef.current = currentView;
@@ -726,8 +753,7 @@ const App: React.FC = () => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        return prev.map((item) =>
-          item.id === product.id
+        return prev.map((item) => (item.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
@@ -737,15 +763,13 @@ const App: React.FC = () => {
   };
 
   const updateQuantity = (id: string, delta: number) => {
-    setCart((prev) =>
-      prev
-      .map((item) => {
-        if (item.id !== id) return item;
-        const newQty = Math.max(0, item.quantity + delta);
-        return { ...item, quantity: newQty };
-      })
-      .filter((item) => item.quantity > 0)
-    );
+    setCart((prev) => prev
+        .map((item) => {
+          if (item.id !== id) return item;
+          const newQty = Math.max(0, item.quantity + delta);
+          return { ...item, quantity: newQty };
+        })
+        .filter((item) => item.quantity > 0));
   };
 
   const cartHasUnknownPrice = cart.some((item) => item.hasPrice === false);
@@ -756,8 +780,7 @@ const App: React.FC = () => {
     if (!Number.isFinite(price) || price <= 0) return sum;
     return sum + price * qty;
   }, 0);
-  const cartTotalText =
-    cartTotal > 0 ? `${cartTotal.toLocaleString()} ₽` : "Цена по запросу";
+  const cartTotalText =    cartTotal > 0 ? `${cartTotal.toLocaleString()} ₽` : "Цена по запросу";
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const resetFilters = () => {
@@ -769,9 +792,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const raw = String(searchQuery || "").trim();
     const looksLikeId = raw.length >= 12 && raw.length <= 120;
-    !raw.includes(" ")
-      && !raw.includes("\t")
-      && !raw.includes("\n");
+    !raw.includes(" ") && !raw.includes("\t") && !raw.includes("\n");
     if (!looksLikeId) return;
 
     setActiveCategory("Все");
@@ -871,9 +892,11 @@ const App: React.FC = () => {
         const rawPhotos = (data as any)?.photos;
         const fullImages = Array.isArray(rawImages)
           ? rawImages
-          : (Array.isArray(rawPhotos)
-            ? rawPhotos.map((x: any) => String(x?.url || "").trim()).filter(Boolean)
-            : []);
+          : Array.isArray(rawPhotos)
+          ? rawPhotos
+              .map((x: any) => String(x?.url || "").trim())
+              .filter(Boolean)
+          : [];
         if (!fullImages.length) return;
 
         setSelectedProduct((prev) => {
@@ -882,10 +905,12 @@ const App: React.FC = () => {
           return {
             ...prev,
             images: fullImages,
-            description: String((data as any)?.description || prev.description || ""),
+            description: String(
+              (data as any)?.description || prev.description || ""
+            ),
             category: String((data as any)?.category || prev.category || "Все"),
             brand: String((data as any)?.brand || prev.brand || " "),
-            thumb: String((data as any)?.thumb || prev.thumb || ""),
+            thumb: String((data as any)?.thumb || prev.thumb || "")
           } as Product;
         });
 
@@ -910,8 +935,7 @@ const App: React.FC = () => {
     const nextSrc = selectedProduct?.images?.[currentImageIndex] || "";
     if (!selectedProduct || !nextSrc) return;
     const nextResolved = getDetailImageUrl(nextSrc);
-    const currentResolved =
-      activeDetailLayer === "A" ? detailLayerASrc : detailLayerBSrc;
+    const currentResolved =      activeDetailLayer === "A" ? detailLayerASrc : detailLayerBSrc;
     if (nextResolved === currentResolved) return;
 
     let cancelled = false;
@@ -964,8 +988,10 @@ const App: React.FC = () => {
       : [];
     if (images.length < 2) return;
 
-    const nextIndex =      currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
-    const prevIndex =      currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
+    const nextIndex =
+      currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
+    const prevIndex =
+      currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
     const toPrefetch = [images[nextIndex], images[prevIndex]].filter(Boolean);
 
     toPrefetch.forEach((src) => {

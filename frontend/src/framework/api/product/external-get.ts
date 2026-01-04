@@ -26,8 +26,8 @@ async function fetchExternalProductsPage(
     const rawSearch = String(query?.search || "")
       .replace(/\s+/g, " ")
       .trim();
-    const looksLikeId = rawSearch.length >= 12
-      && rawSearch.length <= 120
+    const looksLikeId = rawSearch.length >= 12;
+    rawSearch.length <= 120
       && !rawSearch.includes(" ")
       && !rawSearch.includes("\t")
       && !rawSearch.includes("\n");
@@ -94,15 +94,13 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
       }
     ],
     ({ pageParam = 1 }) => fetchExternalProductsPage(Number(pageParam), {
-      search,
-      brand,
-      category,
-      seed
-    }),
+        search,
+        brand,
+        category,
+        seed
+      }),
     {
-      getNextPageParam: (lastPage) => (
-        lastPage.hasNextPage ? lastPage.page + 1 : undefined
-      ),
+      getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.page + 1 : undefined,
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,

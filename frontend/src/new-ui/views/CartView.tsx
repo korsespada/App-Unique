@@ -1,5 +1,5 @@
 import {
- Minus, Plus, ShoppingBag, Trash2
+ Minus, Plus, ShoppingBag, Trash2 
 } from "lucide-react";
 import React from "react";
 
