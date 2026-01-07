@@ -478,19 +478,12 @@ async function handleExternalProducts(req, res) {
       filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
     const filter = filterParts.join(" && ");
 
-    console.log(
-      "Fetching with filter:",
-      filter,
-      "page:",
-      page,
-      "perPage:",
-      perPage
-    );
+    console.log("Fetching all with filter:", filter);
 
-    const pbResult = await listActiveProducts(page, perPage, filter);
+    const pbResult = await listActiveProducts(1, 2000, filter);
     items = Array.isArray(pbResult?.items) ? pbResult.items : [];
     totalItems = pbResult?.totalItems || 0;
-    totalPages = pbResult?.totalPages || 1;
+    totalPages = Math.max(1, Math.ceil(totalItems / perPage));
 
     console.log("PB result:", {
       itemsCount: items.length,
@@ -527,9 +520,7 @@ async function handleExternalProducts(req, res) {
   });
 
   const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
-  const mixed = hasFilters
-    ? shuffled
-    : mixByCategoryRoundRobin(shuffled, seed || "");
+  const mixed = mixByCategoryRoundRobin(shuffled, seed || "");
 
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * perPage;
