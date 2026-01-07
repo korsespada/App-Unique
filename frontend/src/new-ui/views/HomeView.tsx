@@ -1,4 +1,4 @@
-import { ChevronDown, Heart, Search, ShoppingBag, X } from "lucide-react";
+import { ChevronDown, Heart, Search, X } from "lucide-react";
 import React from "react";
 
 import { Product } from "../types";
@@ -23,7 +23,6 @@ type Props = {
   navigateToProduct: (product: Product) => void;
   getThumbUrl: (url: string, thumb?: string) => string;
   toggleFavorite: (productId: string, product?: Product) => void;
-  addToCart: (product: Product) => void;
   loadMoreRef: (node: HTMLDivElement | null) => void;
 };
 
@@ -47,7 +46,6 @@ export default function HomeView({
   navigateToProduct,
   getThumbUrl,
   toggleFavorite,
-  addToCart,
   loadMoreRef
 }: Props) {
   return (
@@ -213,20 +211,6 @@ export default function HomeView({
                           ? "fill-red-500 text-red-500 transition-colors"
                           : "text-white/80 transition-colors"
                       }
-                    />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addToCart(product);
-                    }}
-                    aria-label="Добавить в корзину"
-                    className="premium-shadow absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96]">
-                    <ShoppingBag
-                      size={18}
-                      className="text-white/80 transition-colors"
                     />
                   </button>
                 </div>

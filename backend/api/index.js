@@ -512,7 +512,9 @@ async function handleExternalProducts(req, res) {
   });
 
   const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
-  const mixed = mixByCategoryRoundRobin(shuffled, seed || "");
+  const mixed = hasFilters
+    ? shuffled
+    : mixByCategoryRoundRobin(shuffled, seed || "");
 
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * perPage;
