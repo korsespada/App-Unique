@@ -478,10 +478,25 @@ async function handleExternalProducts(req, res) {
       filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
     const filter = filterParts.join(" && ");
 
+    console.log(
+      "Fetching with filter:",
+      filter,
+      "page:",
+      page,
+      "perPage:",
+      perPage
+    );
+
     const pbResult = await listActiveProducts(page, perPage, filter);
     items = Array.isArray(pbResult?.items) ? pbResult.items : [];
     totalItems = pbResult?.totalItems || 0;
     totalPages = pbResult?.totalPages || 1;
+
+    console.log("PB result:", {
+      itemsCount: items.length,
+      totalItems,
+      totalPages,
+    });
   } else {
     const allProducts = await getAllActiveProductsSafe(2000);
     items = Array.isArray(allProducts?.items) ? allProducts.items : [];
