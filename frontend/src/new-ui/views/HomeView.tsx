@@ -180,11 +180,15 @@ export default function HomeView({
                     alt={product.name}
                     loading="lazy"
                     decoding="async"
-                    className="h-full w-full object-cover"
+                    className="pointer-events-none h-full w-full select-none object-cover"
+                    draggable={false}
                     onError={(e) => {
                       e.currentTarget.src = product.images[0];
                     }}
                     onContextMenu={(e) => {
+                      e.preventDefault();
+                    }}
+                    onDragStart={(e) => {
                       e.preventDefault();
                     }}
                   />

@@ -45,7 +45,14 @@ export default function TopNav({
         <img
           src="/logo.svg"
           alt="Logo"
-          className="logo-auto h-7 w-auto opacity-95"
+          className="logo-auto pointer-events-none h-7 w-auto select-none opacity-95"
+          draggable={false}
+          onContextMenu={(e) => {
+            e.preventDefault();
+          }}
+          onDragStart={(e) => {
+            e.preventDefault();
+          }}
         />
       </button>
     </nav>
