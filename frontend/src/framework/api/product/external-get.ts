@@ -26,11 +26,7 @@ async function fetchExternalProductsPage(
     const rawSearch = String(query?.search || "")
       .replace(/\s+/g, " ")
       .trim();
-    const looksLikeId = rawSearch.length >= 12;
-    rawSearch.length <= 120
-      && !rawSearch.includes(" ")
-      && !rawSearch.includes("\t")
-      && !rawSearch.includes("\n");
+    const looksLikeId = /^[a-z0-9]{15}$/i.test(rawSearch);
     const productId = looksLikeId ? rawSearch : undefined;
     const search = looksLikeId ? undefined : rawSearch;
     const brand = String(query?.brand || "").trim();
@@ -83,6 +79,19 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
   const category = String(query?.category || "").trim();
   const seed = String(query?.seed || "").trim();
 
+  function getNextPageParam(lastPage: ExternalProductsPagedResponse) {
+    return lastPage.hasNextPage ? lastPage.page + 1 : undefined;
+  }
+
+  function fetcher({ pageParam = 1 }: { pageParam?: number }) {
+    return fetchExternalProductsPage(Number(pageParam), {
+      search,
+      brand,
+      category,
+      seed
+    });
+  }
+
   return useInfiniteQuery<ExternalProductsPagedResponse, Error>(
     [
       "external-products",
@@ -93,14 +102,9 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
         seed
       }
     ],
-    ({ pageParam = 1 }) => fetchExternalProductsPage(Number(pageParam), {
-        search,
-        brand,
-        category,
-        seed
-      }),
+    fetcher,
     {
-      getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.page + 1 : undefined,
+      getNextPageParam,
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,

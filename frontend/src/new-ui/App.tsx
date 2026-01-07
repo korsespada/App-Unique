@@ -839,8 +839,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const raw = String(searchQuery || "").trim();
-    const looksLikeId = raw.length >= 12 && raw.length <= 120;
-    !raw.includes(" ") && !raw.includes("\t") && !raw.includes("\n");
+    const looksLikeId = /^[a-z0-9]{15}$/i.test(raw);
     if (!looksLikeId) return;
 
     setActiveCategory("Все");
