@@ -7,18 +7,7 @@ import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
 import App from "./new-ui/App";
-import { TelegramType } from "./new-ui/types";
-
-declare global {
-  interface Window {
-    Telegram?: TelegramType;
-    va?: (
-      event: string,
-      action: string,
-      data?: Record<string, unknown>
-    ) => void;
-  }
-}
+import { trackPageView } from "./new-ui/utils/analytics";
 
 function TelegramAnalytics() {
   useEffect(() => {
@@ -27,35 +16,30 @@ function TelegramAnalytics() {
       const customEvent = event as CustomEvent;
       const { view, productId } = customEvent.detail;
 
-      if (window.va) {
-        let pagePath = "/";
-        let pageTitle = "Home";
+      let pagePath = "/";
+      let pageTitle = "Home";
 
-        switch (view) {
-          case "product-detail":
-            pagePath = `/product/${productId}`;
-            pageTitle = `Product ${productId}`;
-            break;
-          case "cart":
-            pagePath = "/cart";
-            pageTitle = "Cart";
-            break;
-          case "favorites":
-            pagePath = "/favorites";
-            pageTitle = "Favorites";
-            break;
-          case "home":
-          default:
-            pagePath = "/";
-            pageTitle = "Home";
-            break;
-        }
-
-        window.va("track", "pageview", {
-          path: pagePath,
-          title: pageTitle
-        });
+      switch (view) {
+        case "product-detail":
+          pagePath = `/product/${productId}`;
+          pageTitle = `Product ${productId}`;
+          break;
+        case "cart":
+          pagePath = "/cart";
+          pageTitle = "Cart";
+          break;
+        case "favorites":
+          pagePath = "/favorites";
+          pageTitle = "Favorites";
+          break;
+        case "home":
+        default:
+          pagePath = "/";
+          pageTitle = "Home";
+          break;
       }
+
+      trackPageView(pagePath, pageTitle);
     };
 
     window.addEventListener("telegram-view-change", handleViewChange);
