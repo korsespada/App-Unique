@@ -463,17 +463,31 @@ async function handleExternalProducts(req, res) {
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const { listActiveProducts } = require("../src/pocketbaseClient");
+  const {
+    listActiveProducts,
+    listAllActiveProducts,
+  } = require("../src/pocketbaseClient");
 
-  let filterParts = ['status = "active"'];
-  if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
-  if (category)
-    filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
-  const filter = filterParts.join(" && ");
+  const hasFilters = brand || category;
+  let items, totalItems, totalPages;
 
-  const pbResult = await listActiveProducts(page, perPage, filter);
+  if (hasFilters) {
+    let filterParts = ['status = "active"'];
+    if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
+    if (category)
+      filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
+    const filter = filterParts.join(" && ");
 
-  const items = Array.isArray(pbResult?.items) ? pbResult.items : [];
+    const pbResult = await listActiveProducts(page, perPage, filter);
+    items = Array.isArray(pbResult?.items) ? pbResult.items : [];
+    totalItems = pbResult?.totalItems || 0;
+    totalPages = pbResult?.totalPages || 1;
+  } else {
+    const allProducts = await getAllActiveProductsSafe(2000);
+    items = Array.isArray(allProducts?.items) ? allProducts.items : [];
+    totalItems = items.length;
+    totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  }
 
   const q = search.toLowerCase();
   const tokens = q
@@ -500,7 +514,10 @@ async function handleExternalProducts(req, res) {
   const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
   const mixed = mixByCategoryRoundRobin(shuffled, seed || "");
 
-  const pageItems = mixed.map((p) => {
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * perPage;
+  const end = start + perPage;
+  const pageItems = mixed.slice(start, end).map((p) => {
     const thumb = typeof p?.thumb === "string" ? String(p.thumb).trim() : "";
     const firstImage =
       Array.isArray(p?.images) && p.images.length
@@ -515,11 +532,11 @@ async function handleExternalProducts(req, res) {
 
   const payload = {
     products: pageItems,
-    page,
+    page: safePage,
     perPage,
-    totalPages: pbResult?.totalPages || 1,
-    totalItems: pbResult?.totalItems || 0,
-    hasNextPage: page < (pbResult?.totalPages || 1),
+    totalPages,
+    totalItems,
+    hasNextPage: safePage < totalPages,
   };
 
   externalProductsCache.set(cacheKey, payload);
@@ -715,12 +732,10 @@ app.post(["/api/profile/state", "/profile/state"], async (req, res) => {
         typeof updated?.username === "string" ? updated.username : username,
     });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        error: "Failed to update profile state",
-        message: error?.message,
-      });
+    return res.status(500).json({
+      error: "Failed to update profile state",
+      message: error?.message,
+    });
   }
 });
 
@@ -919,13 +934,11 @@ app.use((err, req, res, next) => {
           .json({ error: "Upstream authorization failed", message });
       }
       if (status && status >= 400 && status < 600) {
-        return res
-          .status(502)
-          .json({
-            error: "Upstream request failed",
-            message,
-            upstreamStatus: status,
-          });
+        return res.status(502).json({
+          error: "Upstream request failed",
+          message,
+          upstreamStatus: status,
+        });
       }
       return res.status(500).json({ error: "Internal server error", message });
     }

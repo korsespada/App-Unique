@@ -476,14 +476,29 @@ app.get("/api/:version/:shop/external-products", async (req, res) => {
   }
 
   try {
-    let filterParts = ['status = "active"'];
-    if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
-    if (category)
-      filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
-    const filter = filterParts.join(" && ");
+    const hasFilters = brand || category;
+    let items, totalItems, totalPages;
 
-    const products = await listActiveProducts(page, perPage, filter);
-    const baseList = toProductArray(products);
+    if (hasFilters) {
+      let filterParts = ['status = "active"'];
+      if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
+      if (category)
+        filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
+      const filter = filterParts.join(" && ");
+
+      const products = await listActiveProducts(page, perPage, filter);
+      const baseList = toProductArray(products);
+      items = baseList;
+      totalItems = products?.totalItems || 0;
+      totalPages = products?.totalPages || 1;
+    } else {
+      const products = await getCachedActiveProducts();
+      const baseList = toProductArray(products);
+      items = baseList;
+      totalItems = items.length;
+      totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+    }
+
     const q = search.toLowerCase();
     const tokens = q
       ? q
@@ -491,7 +506,7 @@ app.get("/api/:version/:shop/external-products", async (req, res) => {
           .map((t) => t.trim())
           .filter(Boolean)
       : [];
-    const filtered = baseList.filter((p) => {
+    const filtered = items.filter((p) => {
       if (productId) {
         const id = String(p.id || p.product_id || "").trim();
         return id === productId;
@@ -514,6 +529,7 @@ app.get("/api/:version/:shop/external-products", async (req, res) => {
     const mixed = seed
       ? mixByBrandRoundRobin(shuffled, seed)
       : mixByBrandRoundRobin(shuffled, "");
+
     const payload = normalizeProductDescriptions(
       buildPagedExternalProductsResponse(mixed, { page, perPage })
     );
