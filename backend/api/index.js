@@ -1,40 +1,40 @@
 // Serverless function wrapper for Vercel
-const path = require('path');
+const path = require("path");
 
 // Set the correct path for .env file
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 // Import the app after env is loaded
-const express = require('express');
-const cors = require('cors');
-const axios = require('axios');
-const NodeCache = require('node-cache');
-const { validateTelegramInitData } = require('../src/telegramWebAppAuth');
+const express = require("express");
+const cors = require("cors");
+const axios = require("axios");
+const NodeCache = require("node-cache");
+const { validateTelegramInitData } = require("../src/telegramWebAppAuth");
 const {
   listActiveProducts,
   listAllActiveProducts,
   getActiveProductById,
   getProfileByTelegramId,
   updateProfileCartAndFavorites,
-} = require('../src/pocketbaseClient');
+} = require("../src/pocketbaseClient");
 
 const app = express();
 
 const profilesCache = new NodeCache({ stdTTL: 60 });
 
 function buildProfileFieldsFromTelegramUser(user) {
-  if (!user || typeof user !== 'object') return { username: '', nickname: '' };
-  const username = user?.username ? String(user.username).trim() : '';
-  const first = user?.first_name ? String(user.first_name).trim() : '';
-  const last = user?.last_name ? String(user.last_name).trim() : '';
+  if (!user || typeof user !== "object") return { username: "", nickname: "" };
+  const username = user?.username ? String(user.username).trim() : "";
+  const first = user?.first_name ? String(user.first_name).trim() : "";
+  const last = user?.last_name ? String(user.last_name).trim() : "";
   const nickname = `${first} ${last}`.trim();
   return { username, nickname };
 }
 
 function getInitDataFromRequest(req) {
-  const header = req?.headers?.['x-telegram-init-data'];
-  if (typeof header === 'string' && header.trim()) return header;
-  return '';
+  const header = req?.headers?.["x-telegram-init-data"];
+  if (typeof header === "string" && header.trim()) return header;
+  return "";
 }
 
 function telegramAuthFromRequest(req) {
@@ -45,13 +45,21 @@ function telegramAuthFromRequest(req) {
   });
 
   if (!auth.ok) {
-    return { ok: false, status: 401, error: auth.error || 'initData невалиден' };
+    return {
+      ok: false,
+      status: 401,
+      error: auth.error || "initData невалиден",
+    };
   }
 
   const user = auth.user || null;
-  const telegramId = user?.id ? String(user.id) : '';
+  const telegramId = user?.id ? String(user.id) : "";
   if (!telegramId) {
-    return { ok: false, status: 400, error: 'Некорректные данные пользователя Telegram' };
+    return {
+      ok: false,
+      status: 400,
+      error: "Некорректные данные пользователя Telegram",
+    };
   }
 
   return { ok: true, telegramId, user };
@@ -70,17 +78,18 @@ function extractAxiosStatus(err) {
 
 function extractAxiosMessage(err) {
   const data = err?.response?.data;
-  if (typeof data === 'string' && data.trim()) return data;
-  if (data && typeof data === 'object') {
+  if (typeof data === "string" && data.trim()) return data;
+  if (data && typeof data === "object") {
     const msg = data.message || data.error || data.detail;
-    if (typeof msg === 'string' && msg.trim()) return msg;
+    if (typeof msg === "string" && msg.trim()) return msg;
   }
-  if (typeof err?.message === 'string' && err.message.trim()) return err.message;
-  return 'Request failed';
+  if (typeof err?.message === "string" && err.message.trim())
+    return err.message;
+  return "Request failed";
 }
 
 const normalizeDescription = (s) =>
-  typeof s === 'string' ? s.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n') : s;
+  typeof s === "string" ? s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n") : s;
 
 function normalizeProductDescriptions(payload) {
   if (!payload) return payload;
@@ -89,7 +98,7 @@ function normalizeProductDescriptions(payload) {
     return payload.map((item) => normalizeProductDescriptions(item));
   }
 
-  if (typeof payload !== 'object') return payload;
+  if (typeof payload !== "object") return payload;
 
   if (Array.isArray(payload.products)) {
     return {
@@ -101,7 +110,7 @@ function normalizeProductDescriptions(payload) {
     };
   }
 
-  if ('description' in payload) {
+  if ("description" in payload) {
     return {
       ...payload,
       description: normalizeDescription(payload.description),
@@ -112,7 +121,7 @@ function normalizeProductDescriptions(payload) {
 }
 
 function hashStringToUint32(seed) {
-  const str = String(seed ?? '');
+  const str = String(seed ?? "");
   let x = 2166136261;
   for (let i = 0; i < str.length; i += 1) {
     x ^= str.charCodeAt(i);
@@ -148,13 +157,16 @@ function mixByCategoryRoundRobin(products, seed) {
 
   const byCategory = new Map();
   for (const p of list) {
-    const category = String(p?.category ?? '').trim() || '__unknown__';
+    const category = String(p?.category ?? "").trim() || "__unknown__";
     if (!byCategory.has(category)) byCategory.set(category, []);
     byCategory.get(category).push(p);
   }
 
   const categories = Array.from(byCategory.keys());
-  const shuffledCategories = shuffleDeterministic(categories, `categories:${seed}`);
+  const shuffledCategories = shuffleDeterministic(
+    categories,
+    `categories:${seed}`
+  );
   for (const c of shuffledCategories) {
     const items = byCategory.get(c) || [];
     byCategory.set(c, shuffleDeterministic(items, `category:${c}:${seed}`));
@@ -187,18 +199,22 @@ function mixByCategoryRoundRobin(products, seed) {
 let cachedBotUsername = null;
 
 async function getBotUsername(botToken) {
-  const fromEnv = String(process.env.BOT_USERNAME || '').trim().replace(/^@/, '');
+  const fromEnv = String(process.env.BOT_USERNAME || "")
+    .trim()
+    .replace(/^@/, "");
   if (fromEnv) return fromEnv;
   if (cachedBotUsername) return cachedBotUsername;
 
   try {
     const url = `https://api.telegram.org/bot${botToken}/getMe`;
     const resp = await axios.get(url);
-    const username = resp?.data?.result?.username ? String(resp.data.result.username) : '';
+    const username = resp?.data?.result?.username
+      ? String(resp.data.result.username)
+      : "";
     cachedBotUsername = username;
     return username;
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -207,22 +223,26 @@ function buildProductStartParam(productId) {
 }
 
 function buildMiniAppLink(botUsername, startParam) {
-  const safeUsername = String(botUsername || '').replace(/^@/, '').trim();
+  const safeUsername = String(botUsername || "")
+    .replace(/^@/, "")
+    .trim();
   if (!safeUsername) return null;
-  return `https://t.me/${safeUsername}?startapp=${encodeURIComponent(String(startParam || ''))}`;
+  return `https://t.me/${safeUsername}?startapp=${encodeURIComponent(
+    String(startParam || "")
+  )}`;
 }
 
 function splitTelegramMessage(text, maxLen = 3500) {
-  const raw = String(text ?? '');
+  const raw = String(text ?? "");
   if (raw.length <= maxLen) return [raw];
 
-  const lines = raw.split('\n');
+  const lines = raw.split("\n");
   const parts = [];
-  let current = '';
+  let current = "";
 
   const pushCurrent = () => {
     if (current) parts.push(current);
-    current = '';
+    current = "";
   };
 
   for (const line of lines) {
@@ -246,7 +266,7 @@ function splitTelegramMessage(text, maxLen = 3500) {
   }
 
   pushCurrent();
-  return parts.length ? parts : [''];
+  return parts.length ? parts : [""];
 }
 
 function buildCartKeyboardAiogram3() {
@@ -301,8 +321,10 @@ def build_cart_keyboard(
 }
 
 // Middleware
-const corsAllowList = String(process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || '')
-  .split(',')
+const corsAllowList = String(
+  process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || ""
+)
+  .split(",")
   .map((v) => v.trim())
   .filter(Boolean);
 
@@ -312,8 +334,8 @@ app.use(
       if (!origin) return callback(null, true);
       if (corsAllowList.length === 0) return callback(null, true);
       const ok = corsAllowList.includes(origin);
-      return callback(ok ? null : new Error('Not allowed by CORS'), ok);
-    }
+      return callback(ok ? null : new Error("Not allowed by CORS"), ok);
+    },
   })
 );
 app.use(express.json());
@@ -323,7 +345,7 @@ let lastGoodAllActiveProducts = null;
 const pbSnapshotCache = new NodeCache({ stdTTL: 5 * 60 });
 
 function setCatalogCacheHeaders(res) {
-  res.set('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+  res.set("Cache-Control", "s-maxage=60, stale-while-revalidate=30");
 }
 
 async function getAllActiveProductsSafe(perPage) {
@@ -341,7 +363,9 @@ async function getAllActiveProductsSafe(perPage) {
     return pbAll;
   } catch (err) {
     if (lastGoodAllActiveProducts) {
-      console.warn('PocketBase unavailable, serving last known products snapshot');
+      console.warn(
+        "PocketBase unavailable, serving last known products snapshot"
+      );
       return lastGoodAllActiveProducts;
     }
     throw err;
@@ -349,7 +373,7 @@ async function getAllActiveProductsSafe(perPage) {
 }
 
 async function handleCatalogFilters(req, res) {
-  const cacheKey = 'catalog-filters:v1';
+  const cacheKey = "catalog-filters:v1";
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
     setCatalogCacheHeaders(res);
@@ -364,8 +388,8 @@ async function handleCatalogFilters(req, res) {
   const brandsByCategory = {};
 
   for (const p of items) {
-    const category = String(p?.category || '').trim();
-    const brand = String(p?.brand || '').trim();
+    const category = String(p?.category || "").trim();
+    const brand = String(p?.brand || "").trim();
 
     if (category) categoriesSet.add(category);
     if (brand) brandsSet.add(brand);
@@ -376,13 +400,22 @@ async function handleCatalogFilters(req, res) {
     }
   }
 
-  const categories = Array.from(categoriesSet).sort((a, b) => a.localeCompare(b));
+  const categories = Array.from(categoriesSet).sort((a, b) =>
+    a.localeCompare(b)
+  );
   const brands = Array.from(brandsSet).sort((a, b) => a.localeCompare(b));
   const brandsByCategoryPlain = Object.fromEntries(
-    Object.entries(brandsByCategory).map(([cat, set]) => [cat, Array.from(set).sort((a, b) => a.localeCompare(b))])
+    Object.entries(brandsByCategory).map(([cat, set]) => [
+      cat,
+      Array.from(set).sort((a, b) => a.localeCompare(b)),
+    ])
   );
 
-  const payload = { categories, brands, brandsByCategory: brandsByCategoryPlain };
+  const payload = {
+    categories,
+    brands,
+    brandsByCategory: brandsByCategoryPlain,
+  };
   externalProductsCache.set(cacheKey, payload);
   setCatalogCacheHeaders(res);
   return res.json(payload);
@@ -393,18 +426,21 @@ async function loadProductsFromSheets() {
   try {
     const pbProducts = await listActiveProducts();
     return pbProducts.map((p) => ({
-      id: String(p.id || '').trim(),
-      title: String(p.title || p.name || ''),
-      brand: String(p.brand || ''),
+      id: String(p.id || "").trim(),
+      title: String(p.title || p.name || ""),
+      brand: String(p.brand || ""),
       price: Number(p.price) || 0,
-      description: String(p.description || ''),
+      description: String(p.description || ""),
       images: Array.isArray(p.images) ? p.images : [],
-      category: String(p.category || ''),
-      seo_title: '',
+      category: String(p.category || ""),
+      seo_title: "",
       inStock: true,
     }));
   } catch (error) {
-    console.error('Error loading products from PocketBase:', error?.message || error);
+    console.error(
+      "Error loading products from PocketBase:",
+      error?.message || error
+    );
     return null;
   }
 }
@@ -412,11 +448,13 @@ async function loadProductsFromSheets() {
 async function handleExternalProducts(req, res) {
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.max(1, Math.min(200, Number(req.query.perPage) || 40));
-  const seed = String(req.query.seed || '').trim();
+  const seed = String(req.query.seed || "").trim();
 
-  const search = String(req.query.search || '').replace(/\s+/g, ' ').trim();
-  const brand = String(req.query.brand || '').trim();
-  const category = String(req.query.category || '').trim();
+  const search = String(req.query.search || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const brand = String(req.query.brand || "").trim();
+  const category = String(req.query.category || "").trim();
 
   const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}:${seed}`;
   const cached = externalProductsCache.get(cacheKey);
@@ -425,18 +463,32 @@ async function handleExternalProducts(req, res) {
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const pbAll = await getAllActiveProductsSafe(2000);
+  const { listActiveProducts } = require("../src/pocketbaseClient");
+
+  let filterParts = ['status = "active"'];
+  if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
+  if (category)
+    filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
+  const filter = filterParts.join(" && ");
+
+  const pbResult = await listActiveProducts(page, perPage, filter);
+
+  const items = Array.isArray(pbResult?.items) ? pbResult.items : [];
 
   const q = search.toLowerCase();
-  const tokens = q ? q.split(' ').map((t) => t.trim()).filter(Boolean) : [];
-  const items = Array.isArray(pbAll?.items) ? pbAll.items : [];
+  const tokens = q
+    ? q
+        .split(" ")
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : [];
   const filtered = items.filter((p) => {
-    if (brand && String(p.brand || '') !== brand) return false;
-    if (category && String(p.category || '') !== category) return false;
     if (tokens.length) {
-      const title = String(p.title || p.name || p.product_id || p.id || '').toLowerCase();
-      const desc = String(p.description || '').toLowerCase();
-      const pid = String(p.product_id || p.id || '').toLowerCase();
+      const title = String(
+        p.title || p.name || p.product_id || p.id || ""
+      ).toLowerCase();
+      const desc = String(p.description || "").toLowerCase();
+      const pid = String(p.product_id || p.id || "").toLowerCase();
       const hay = `${title} ${desc} ${pid}`;
       for (const tok of tokens) {
         if (!hay.includes(tok)) return false;
@@ -446,16 +498,14 @@ async function handleExternalProducts(req, res) {
   });
 
   const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
-  const mixed = mixByCategoryRoundRobin(shuffled, seed || '');
+  const mixed = mixByCategoryRoundRobin(shuffled, seed || "");
 
-  const totalItems = mixed.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
-  const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * perPage;
-  const end = start + perPage;
-  const pageItems = mixed.slice(start, end).map((p) => {
-    const thumb = typeof p?.thumb === 'string' ? String(p.thumb).trim() : '';
-    const firstImage = Array.isArray(p?.images) && p.images.length ? String(p.images[0]).trim() : '';
+  const pageItems = mixed.map((p) => {
+    const thumb = typeof p?.thumb === "string" ? String(p.thumb).trim() : "";
+    const firstImage =
+      Array.isArray(p?.images) && p.images.length
+        ? String(p.images[0]).trim()
+        : "";
     const preview = thumb || firstImage;
     return {
       ...p,
@@ -465,11 +515,11 @@ async function handleExternalProducts(req, res) {
 
   const payload = {
     products: pageItems,
-    page: safePage,
+    page,
     perPage,
-    totalPages,
-    totalItems,
-    hasNextPage: safePage < totalPages,
+    totalPages: pbResult?.totalPages || 1,
+    totalItems: pbResult?.totalItems || 0,
+    hasNextPage: page < (pbResult?.totalPages || 1),
   };
 
   externalProductsCache.set(cacheKey, payload);
@@ -478,13 +528,13 @@ async function handleExternalProducts(req, res) {
 }
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 // External products endpoint
 app.get(
-  '/api/external-products',
+  "/api/external-products",
   asyncRoute(async (req, res) => {
     return handleExternalProducts(req, res);
   })
@@ -492,7 +542,7 @@ app.get(
 
 // Versioned external products endpoint (alias for Telegram frontend)
 app.get(
-  '/api/:version/:shop/external-products',
+  "/api/:version/:shop/external-products",
   asyncRoute(async (req, res) => {
     return handleExternalProducts(req, res);
   })
@@ -500,7 +550,7 @@ app.get(
 
 // Catalog filters endpoint (categories, brands, brandsByCategory)
 app.get(
-  '/api/catalog-filters',
+  "/api/catalog-filters",
   asyncRoute(async (req, res) => {
     return handleCatalogFilters(req, res);
   })
@@ -508,33 +558,35 @@ app.get(
 
 // Versioned catalog filters endpoint (alias for Telegram frontend)
 app.get(
-  '/api/:version/:shop/catalog-filters',
+  "/api/:version/:shop/catalog-filters",
   asyncRoute(async (req, res) => {
     return handleCatalogFilters(req, res);
   })
 );
 
-app.get('/api/products', async (req, res) => {
+app.get("/api/products", async (req, res) => {
   try {
     const pb = await listActiveProducts(1, 2000);
     const products = pb.items;
     const result = products.map((p) => ({
-      product_id: String(p.product_id || p.id || '').trim(),
+      product_id: String(p.product_id || p.id || "").trim(),
       description: normalizeDescription(p.description),
-      category: String(p.category || ''),
-      season_title: String(p.season_title || p.brand || ''),
-      status: String(p.status || ''),
+      category: String(p.category || ""),
+      season_title: String(p.season_title || p.brand || ""),
+      status: String(p.status || ""),
       images: Array.isArray(p.images) ? p.images : [],
-      thumb: String(p.thumb || ''),
+      thumb: String(p.thumb || ""),
     }));
 
     return res.json({ products: result });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to load products', message: error?.message });
+    return res
+      .status(500)
+      .json({ error: "Failed to load products", message: error?.message });
   }
 });
 
-app.get('/products', async (req, res) => {
+app.get("/products", async (req, res) => {
   try {
     const pb = await listActiveProducts(1, 2000);
     const products = pb.items;
@@ -545,50 +597,66 @@ app.get('/products', async (req, res) => {
       const searchTerm = String(req.query.search).toLowerCase();
       filteredProducts = filteredProducts.filter(
         (p) =>
-          String(p.title || '').toLowerCase().includes(searchTerm) ||
-          String(p.description || '').toLowerCase().includes(searchTerm)
+          String(p.title || "")
+            .toLowerCase()
+            .includes(searchTerm) ||
+          String(p.description || "")
+            .toLowerCase()
+            .includes(searchTerm)
       );
     }
 
     if (req.query.category) {
-      filteredProducts = filteredProducts.filter((p) => String(p.category || '') === String(req.query.category));
+      filteredProducts = filteredProducts.filter(
+        (p) => String(p.category || "") === String(req.query.category)
+      );
     }
 
     if (req.query.brand) {
-      filteredProducts = filteredProducts.filter((p) => String(p.brand || '') === String(req.query.brand));
+      filteredProducts = filteredProducts.filter(
+        (p) => String(p.brand || "") === String(req.query.brand)
+      );
     }
 
     return res.json(
       filteredProducts.map((p) => ({
         ...p,
         description: normalizeDescription(p?.description),
-        photos: (Array.isArray(p.images) ? p.images : []).map((url) => ({ url })),
+        photos: (Array.isArray(p.images) ? p.images : []).map((url) => ({
+          url,
+        })),
       }))
     );
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to load products', message: error?.message });
+    return res
+      .status(500)
+      .json({ error: "Failed to load products", message: error?.message });
   }
 });
 
-app.get(['/api/products/:id', '/products/:id'], async (req, res) => {
+app.get(["/api/products/:id", "/products/:id"], async (req, res) => {
   try {
-    const id = String(req.params.id || '').trim();
+    const id = String(req.params.id || "").trim();
     const product = await getActiveProductById(id);
     if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
+      return res.status(404).json({ error: "Product not found" });
     }
 
     return res.json({
       ...product,
       description: normalizeDescription(product?.description),
-      photos: (Array.isArray(product.images) ? product.images : []).map((url) => ({ url })),
+      photos: (Array.isArray(product.images) ? product.images : []).map(
+        (url) => ({ url })
+      ),
     });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to load product', message: error?.message });
+    return res
+      .status(500)
+      .json({ error: "Failed to load product", message: error?.message });
   }
 });
 
-app.get(['/api/profile/state', '/profile/state'], async (req, res) => {
+app.get(["/api/profile/state", "/profile/state"], async (req, res) => {
   try {
     const auth = telegramAuthFromRequest(req);
     if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
@@ -603,26 +671,28 @@ app.get(['/api/profile/state', '/profile/state'], async (req, res) => {
       profileExists: Boolean(profile),
       cart: Array.isArray(profile?.cart) ? profile.cart : [],
       favorites: Array.isArray(profile?.favorites) ? profile.favorites : [],
-      nickname: typeof profile?.nickname === 'string' ? profile.nickname : '',
+      nickname: typeof profile?.nickname === "string" ? profile.nickname : "",
     };
     profilesCache.set(cacheKey, payload);
     return res.json(payload);
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to load profile state', message: error?.message });
+    return res
+      .status(500)
+      .json({ error: "Failed to load profile state", message: error?.message });
   }
 });
 
-app.post(['/api/profile/state', '/profile/state'], async (req, res) => {
+app.post(["/api/profile/state", "/profile/state"], async (req, res) => {
   try {
     const auth = telegramAuthFromRequest(req);
     if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
 
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const body = req.body && typeof req.body === "object" ? req.body : {};
     const cart = Array.isArray(body.cart) ? body.cart : [];
     const favorites = Array.isArray(body.favorites) ? body.favorites : [];
     const fallback = buildProfileFieldsFromTelegramUser(auth.user);
-    const nickname = String(body.nickname || fallback.nickname || '').trim();
-    const username = String(body.username || fallback.username || '').trim();
+    const nickname = String(body.nickname || fallback.nickname || "").trim();
+    const username = String(body.username || fallback.username || "").trim();
 
     const updated = await updateProfileCartAndFavorites({
       telegramId: auth.telegramId,
@@ -639,60 +709,75 @@ app.post(['/api/profile/state', '/profile/state'], async (req, res) => {
       profileExists: true,
       cart: Array.isArray(updated?.cart) ? updated.cart : [],
       favorites: Array.isArray(updated?.favorites) ? updated.favorites : [],
-      nickname: typeof updated?.nickname === 'string' ? updated.nickname : nickname,
-      username: typeof updated?.username === 'string' ? updated.username : username,
+      nickname:
+        typeof updated?.nickname === "string" ? updated.nickname : nickname,
+      username:
+        typeof updated?.username === "string" ? updated.username : username,
     });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to update profile state', message: error?.message });
+    return res
+      .status(500)
+      .json({
+        error: "Failed to update profile state",
+        message: error?.message,
+      });
   }
 });
 
-app.post(['/orders', '/api/orders'], async (req, res) => {
+app.post(["/orders", "/api/orders"], async (req, res) => {
   try {
     const botToken = process.env.BOT_TOKEN;
     const managerChatId = process.env.MANAGER_CHAT_ID;
 
     // ...
     if (!botToken || !managerChatId) {
-      return res.status(500).json({ error: 'Бот не сконфигурирован' });
+      return res.status(500).json({ error: "Бот не сконфигурирован" });
     }
 
     const { initData, items, comment } = req.body;
-    const safeCommentRaw = typeof comment === 'string' ? comment.trim() : '';
+    const safeCommentRaw = typeof comment === "string" ? comment.trim() : "";
     const safeComment = safeCommentRaw.slice(0, 1000);
 
     const auth = validateTelegramInitData(initData, botToken, {
-      maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 86400)
+      maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 86400),
     });
     if (!auth.ok) {
-      console.warn('initData validation failed', {
+      console.warn("initData validation failed", {
         error: auth.error,
         debug: auth.debug,
-        initDataLen: String(initData ?? '').length,
-        hasHashParam: String(initData ?? '').includes('hash='),
-        hasSignatureParam: String(initData ?? '').includes('signature='),
+        initDataLen: String(initData ?? "").length,
+        hasHashParam: String(initData ?? "").includes("hash="),
+        hasSignatureParam: String(initData ?? "").includes("signature="),
       });
-      return res.status(401).json({ error: auth.error || 'initData невалиден' });
+      return res
+        .status(401)
+        .json({ error: auth.error || "initData невалиден" });
     }
 
     const user = auth.user || null;
-    const telegramUserId = user?.id ? String(user.id) : '';
-    const username = user?.username ? String(user.username) : '';
-    const firstname = user?.first_name ? String(user.first_name) : '';
-    const lastname = user?.last_name ? String(user.last_name) : '';
+    const telegramUserId = user?.id ? String(user.id) : "";
+    const username = user?.username ? String(user.username) : "";
+    const firstname = user?.first_name ? String(user.first_name) : "";
+    const lastname = user?.last_name ? String(user.last_name) : "";
 
     if (!telegramUserId) {
-      return res.status(400).json({ error: 'Некорректные данные пользователя Telegram' });
+      return res
+        .status(400)
+        .json({ error: "Некорректные данные пользователя Telegram" });
     }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Некорректные данные заказа' });
+      return res.status(400).json({ error: "Некорректные данные заказа" });
     }
 
     const normalizedItems = items
       .map((it) => {
-        const id = String(it?.id ?? '').trim().slice(0, 80);
-        const title = String(it?.title ?? '').trim().slice(0, 120);
+        const id = String(it?.id ?? "")
+          .trim()
+          .slice(0, 80);
+        const title = String(it?.title ?? "")
+          .trim()
+          .slice(0, 120);
         const quantity = Math.min(99, Math.max(1, Number(it?.quantity) || 1));
         const hasPrice = it?.hasPrice === false ? false : true;
         const price = hasPrice ? Number(it?.price) : NaN;
@@ -708,7 +793,7 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       .filter((it) => it.id && it.title);
 
     if (normalizedItems.length === 0) {
-      return res.status(400).json({ error: 'Некорректные данные заказа' });
+      return res.status(400).json({ error: "Некорректные данные заказа" });
     }
 
     let hasUnknownPrice = false;
@@ -724,30 +809,30 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
     }, 0);
 
     const escapeHtml = (value) => {
-      return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
     };
 
-    const safeFirst = escapeHtml((firstname || '').trim());
-    const safeLast = escapeHtml((lastname || '').trim());
-    const safeUsername = escapeHtml((username || '').trim());
+    const safeFirst = escapeHtml((firstname || "").trim());
+    const safeLast = escapeHtml((lastname || "").trim());
+    const safeUsername = escapeHtml((username || "").trim());
     const safeTelegramId = escapeHtml(String(telegramUserId));
 
     const botUsername = await getBotUsername(botToken);
 
     const orderText = [
-      '🆕 Новый заказ из Telegram Mini App',
-      '',
+      "🆕 Новый заказ из Telegram Mini App",
+      "",
       `👤 Клиент: ${`${safeFirst} ${safeLast}`.trim()}`.trim(),
-      safeUsername ? `@${safeUsername}` : 'username: отсутствует',
+      safeUsername ? `@${safeUsername}` : "username: отсутствует",
       `Telegram ID: <code>${safeTelegramId}</code>`,
-      safeComment ? `Комментарий: ${escapeHtml(safeComment)}` : '',
-      '',
-      '🛒 Товары:'
+      safeComment ? `Комментарий: ${escapeHtml(safeComment)}` : "",
+      "",
+      "🛒 Товары:",
     ]
       .filter(Boolean)
       .concat(
@@ -755,8 +840,10 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
           const qty = Number(it?.quantity) || 1;
           const hasPrice = it?.hasPrice === false ? false : true;
           const price = Number(it?.price);
-          const titleText = escapeHtml(String(it?.title || '').trim() || 'Без названия');
-          const id = escapeHtml(String(it?.id || '').trim() || '-');
+          const titleText = escapeHtml(
+            String(it?.title || "").trim() || "Без названия"
+          );
+          const id = escapeHtml(String(it?.id || "").trim() || "-");
 
           const titleWithId = `${titleText} <code>${id}</code>`;
 
@@ -765,18 +852,20 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
           }
 
           const lineTotal = price * qty;
-          return `${idx + 1}. ${titleWithId} | ${qty} шт | ${price} ₽ | ${lineTotal} ₽`;
+          return `${
+            idx + 1
+          }. ${titleWithId} | ${qty} шт | ${price} ₽ | ${lineTotal} ₽`;
         })
       )
       .concat([
-        '',
+        "",
         total > 0
           ? `💰 Итого: ${escapeHtml(String(total))} ₽`
-          : '💰 Итого: Цена по запросу',
-        '',
-        'Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.'
+          : "💰 Итого: Цена по запросу",
+        "",
+        "Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.",
       ])
-      .join('\n');
+      .join("\n");
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
@@ -786,20 +875,28 @@ app.post(['/orders', '/api/orders'], async (req, res) => {
       await axios.post(url, {
         chat_id: managerChatId,
         text: part,
-        parse_mode: 'HTML',
+        parse_mode: "HTML",
         disable_web_page_preview: true,
       });
     }
 
-    console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: normalizedItems.length });
+    console.log("Заказ отправлен менеджеру", {
+      telegramUserId,
+      itemsCount: normalizedItems.length,
+    });
 
     return res.json({
       ok: true,
-      orderId: Date.now().toString()
+      orderId: Date.now().toString(),
     });
   } catch (error) {
-    console.error('Ошибка отправки заказа менеджеру', error?.response?.data || error.message);
-    return res.status(500).json({ error: 'Не удалось отправить заказ менеджеру' });
+    console.error(
+      "Ошибка отправки заказа менеджеру",
+      error?.response?.data || error.message
+    );
+    return res
+      .status(500)
+      .json({ error: "Не удалось отправить заказ менеджеру" });
   }
 });
 
@@ -808,7 +905,7 @@ app.use((err, req, res, next) => {
     const status = extractAxiosStatus(err);
     const message = extractAxiosMessage(err);
 
-    console.error('Unhandled API error', {
+    console.error("Unhandled API error", {
       path: req?.path,
       method: req?.method,
       upstreamStatus: status,
@@ -817,12 +914,20 @@ app.use((err, req, res, next) => {
 
     if (!res.headersSent) {
       if (status === 401 || status === 403) {
-        return res.status(502).json({ error: 'Upstream authorization failed', message });
+        return res
+          .status(502)
+          .json({ error: "Upstream authorization failed", message });
       }
       if (status && status >= 400 && status < 600) {
-        return res.status(502).json({ error: 'Upstream request failed', message, upstreamStatus: status });
+        return res
+          .status(502)
+          .json({
+            error: "Upstream request failed",
+            message,
+            upstreamStatus: status,
+          });
       }
-      return res.status(500).json({ error: 'Internal server error', message });
+      return res.status(500).json({ error: "Internal server error", message });
     }
   } catch (e) {
     // fallthrough

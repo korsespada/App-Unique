@@ -1,5 +1,5 @@
 // Load environment variables first
-require('dotenv').config({ path: '.env' });
+require("dotenv").config({ path: ".env" });
 
 // Check for required environment variables
 const checkEnvVars = () => {
@@ -7,25 +7,27 @@ const checkEnvVars = () => {
     // Required for Telegram bot functionality
     BOT_TOKEN: {
       required: false,
-      message: 'Bot token is missing - Telegram bot features will be disabled'
+      message: "Bot token is missing - Telegram bot features will be disabled",
     },
     MANAGER_CHAT_ID: {
       required: false,
-      message: 'Manager chat ID is missing - Order notifications will not be sent'
+      message:
+        "Manager chat ID is missing - Order notifications will not be sent",
     },
     // Required for Google Sheets integration
     PB_URL: {
       required: false,
-      message: 'PB_URL is missing - PocketBase product data will be unavailable'
+      message:
+        "PB_URL is missing - PocketBase product data will be unavailable",
     },
     PB_TOKEN: {
       required: false,
-      message: 'PB_TOKEN is missing - PocketBase requests may fail'
-    }
+      message: "PB_TOKEN is missing - PocketBase requests may fail",
+    },
   };
 
   let hasCriticalError = false;
-  
+
   Object.entries(envVars).forEach(([key, { required, message }]) => {
     if (!process.env[key]) {
       if (required) {
@@ -42,43 +44,60 @@ const checkEnvVars = () => {
 
   return {
     isBotEnabled: !!botToken && !!managerChatId,
-    isGoogleSheetsEnabled: !!String(process.env.PB_URL || '').trim()
+    isGoogleSheetsEnabled: !!String(process.env.PB_URL || "").trim(),
   };
 };
 
 const { isBotEnabled, isGoogleSheetsEnabled } = checkEnvVars();
 
 if (!isBotEnabled) {
-  console.warn('⚠️  Bot functionality is disabled due to missing configuration');
+  console.warn(
+    "⚠️  Bot functionality is disabled due to missing configuration"
+  );
 }
 
 if (!isGoogleSheetsEnabled) {
-  console.warn('⚠️  PocketBase integration is disabled - Using mock data');
+  console.warn("⚠️  PocketBase integration is disabled - Using mock data");
 }
 
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const axios = require('axios');
-const NodeCache = require('node-cache');
-const { listActiveProducts, getProfileByTelegramId, updateProfileCartAndFavorites } = require('./pocketbaseClient');
-const { validateTelegramInitData, parseInitData } = require('./telegramWebAppAuth');
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const axios = require("axios");
+const NodeCache = require("node-cache");
+const {
+  listActiveProducts,
+  getProfileByTelegramId,
+  updateProfileCartAndFavorites,
+} = require("./pocketbaseClient");
+const {
+  validateTelegramInitData,
+  parseInitData,
+} = require("./telegramWebAppAuth");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const ORDER_RATE_WINDOW_MS = Number(process.env.ORDER_RATE_WINDOW_MS || 5 * 60 * 1000);
+const ORDER_RATE_WINDOW_MS = Number(
+  process.env.ORDER_RATE_WINDOW_MS || 5 * 60 * 1000
+);
 const ORDER_RATE_MAX = Number(process.env.ORDER_RATE_MAX || 30);
 const TG_ORDER_INITDATA_MAX_AGE_SECONDS = Number(
-  process.env.TG_ORDER_INITDATA_MAX_AGE_SECONDS || process.env.TG_INITDATA_MAX_AGE_SECONDS || 300
+  process.env.TG_ORDER_INITDATA_MAX_AGE_SECONDS ||
+    process.env.TG_INITDATA_MAX_AGE_SECONDS ||
+    300
 );
-const ORDER_ANTI_REPLAY_TTL_SECONDS = Number(process.env.ORDER_ANTI_REPLAY_TTL_SECONDS || 10 * 60);
+const ORDER_ANTI_REPLAY_TTL_SECONDS = Number(
+  process.env.ORDER_ANTI_REPLAY_TTL_SECONDS || 10 * 60
+);
 
-const usedInitDataHashCache = new NodeCache({ stdTTL: ORDER_ANTI_REPLAY_TTL_SECONDS });
+const usedInitDataHashCache = new NodeCache({
+  stdTTL: ORDER_ANTI_REPLAY_TTL_SECONDS,
+});
 
 const normalizeDescription = (s) =>
-  typeof s === 'string' ? s.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n') : s;
+  typeof s === "string" ? s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n") : s;
 
 function normalizeProductDescriptions(payload) {
   if (!payload) return payload;
@@ -87,7 +106,7 @@ function normalizeProductDescriptions(payload) {
     return payload.map((item) => normalizeProductDescriptions(item));
   }
 
-  if (typeof payload !== 'object') return payload;
+  if (typeof payload !== "object") return payload;
 
   if (Array.isArray(payload.products)) {
     return {
@@ -99,7 +118,7 @@ function normalizeProductDescriptions(payload) {
     };
   }
 
-  if ('description' in payload) {
+  if ("description" in payload) {
     return {
       ...payload,
       description: normalizeDescription(payload.description),
@@ -110,7 +129,7 @@ function normalizeProductDescriptions(payload) {
 }
 
 function hashStringToUint32(seed) {
-  const str = String(seed ?? '');
+  const str = String(seed ?? "");
   let x = 2166136261;
   for (let i = 0; i < str.length; i += 1) {
     x ^= str.charCodeAt(i);
@@ -146,7 +165,7 @@ function mixByBrandRoundRobin(products, seed) {
 
   const byBrand = new Map();
   for (const p of list) {
-    const brand = String(p?.brand ?? '').trim() || '__unknown__';
+    const brand = String(p?.brand ?? "").trim() || "__unknown__";
     if (!byBrand.has(brand)) byBrand.set(brand, []);
     byBrand.get(brand).push(p);
   }
@@ -191,7 +210,10 @@ function buildPagedExternalProductsResponse(allProducts, { page, perPage }) {
   const normalizedPage = Math.min(safePage, totalPages);
   const start = (normalizedPage - 1) * safePerPage;
   const end = start + safePerPage;
-  const products = (Array.isArray(allProducts) ? allProducts : []).slice(start, end);
+  const products = (Array.isArray(allProducts) ? allProducts : []).slice(
+    start,
+    end
+  );
 
   return {
     products,
@@ -205,7 +227,11 @@ function buildPagedExternalProductsResponse(allProducts, { page, perPage }) {
 
 function toProductArray(productsLike) {
   if (Array.isArray(productsLike)) return productsLike;
-  if (productsLike && typeof productsLike === 'object' && Array.isArray(productsLike.items)) {
+  if (
+    productsLike &&
+    typeof productsLike === "object" &&
+    Array.isArray(productsLike.items)
+  ) {
     return productsLike.items;
   }
   return [];
@@ -214,18 +240,22 @@ function toProductArray(productsLike) {
 let cachedBotUsername = null;
 
 async function getBotUsername(botToken) {
-  const fromEnv = String(process.env.BOT_USERNAME || '').trim().replace(/^@/, '');
+  const fromEnv = String(process.env.BOT_USERNAME || "")
+    .trim()
+    .replace(/^@/, "");
   if (fromEnv) return fromEnv;
   if (cachedBotUsername) return cachedBotUsername;
 
   try {
     const url = `https://api.telegram.org/bot${botToken}/getMe`;
     const resp = await axios.get(url);
-    const username = resp?.data?.result?.username ? String(resp.data.result.username) : '';
+    const username = resp?.data?.result?.username
+      ? String(resp.data.result.username)
+      : "";
     cachedBotUsername = username;
     return username;
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -234,22 +264,26 @@ function buildProductStartParam(productId) {
 }
 
 function buildMiniAppLink(botUsername, startParam) {
-  const safeUsername = String(botUsername || '').replace(/^@/, '').trim();
+  const safeUsername = String(botUsername || "")
+    .replace(/^@/, "")
+    .trim();
   if (!safeUsername) return null;
-  return `https://t.me/${safeUsername}?startapp=${encodeURIComponent(String(startParam || ''))}`;
+  return `https://t.me/${safeUsername}?startapp=${encodeURIComponent(
+    String(startParam || "")
+  )}`;
 }
 
 function splitTelegramMessage(text, maxLen = 3500) {
-  const raw = String(text ?? '');
+  const raw = String(text ?? "");
   if (raw.length <= maxLen) return [raw];
 
-  const lines = raw.split('\n');
+  const lines = raw.split("\n");
   const parts = [];
-  let current = '';
+  let current = "";
 
   const pushCurrent = () => {
     if (current) parts.push(current);
-    current = '';
+    current = "";
   };
 
   for (const line of lines) {
@@ -272,7 +306,7 @@ function splitTelegramMessage(text, maxLen = 3500) {
   }
 
   pushCurrent();
-  return parts.length ? parts : [''];
+  return parts.length ? parts : [""];
 }
 
 const externalProductsCache = new NodeCache({ stdTTL: 300 });
@@ -281,18 +315,18 @@ let lastGoodActiveProducts = null;
 const profilesCache = new NodeCache({ stdTTL: 60 });
 
 function buildProfileFieldsFromTelegramUser(user) {
-  if (!user || typeof user !== 'object') return { username: '', nickname: '' };
-  const username = user?.username ? String(user.username).trim() : '';
-  const first = user?.first_name ? String(user.first_name).trim() : '';
-  const last = user?.last_name ? String(user.last_name).trim() : '';
+  if (!user || typeof user !== "object") return { username: "", nickname: "" };
+  const username = user?.username ? String(user.username).trim() : "";
+  const first = user?.first_name ? String(user.first_name).trim() : "";
+  const last = user?.last_name ? String(user.last_name).trim() : "";
   const nickname = `${first} ${last}`.trim();
   return { username, nickname };
 }
 
 function getInitDataFromRequest(req) {
-  const header = req?.headers?.['x-telegram-init-data'];
-  if (typeof header === 'string' && header.trim()) return header;
-  return '';
+  const header = req?.headers?.["x-telegram-init-data"];
+  if (typeof header === "string" && header.trim()) return header;
+  return "";
 }
 
 function telegramAuthFromRequest(req) {
@@ -303,27 +337,37 @@ function telegramAuthFromRequest(req) {
   });
 
   if (!auth.ok) {
-    return { ok: false, status: 401, error: auth.error || 'initData невалиден' };
+    return {
+      ok: false,
+      status: 401,
+      error: auth.error || "initData невалиден",
+    };
   }
 
   const user = auth.user || null;
-  const telegramId = user?.id ? String(user.id) : '';
+  const telegramId = user?.id ? String(user.id) : "";
   if (!telegramId) {
-    return { ok: false, status: 400, error: 'Некорректные данные пользователя Telegram' };
+    return {
+      ok: false,
+      status: 400,
+      error: "Некорректные данные пользователя Telegram",
+    };
   }
 
   return { ok: true, telegramId, user };
 }
 
 // Middleware
-const corsAllowList = String(process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || '')
-  .split(',')
+const corsAllowList = String(
+  process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || ""
+)
+  .split(",")
   .map((v) => v.trim())
   .filter(Boolean);
 
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' }
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 
@@ -333,62 +377,65 @@ app.use(
       if (!origin) return callback(null, true);
       if (corsAllowList.length === 0) return callback(null, true);
       const ok = corsAllowList.includes(origin);
-      return callback(ok ? null : new Error('Not allowed by CORS'), ok);
-    }
+      return callback(ok ? null : new Error("Not allowed by CORS"), ok);
+    },
   })
 );
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static("public"));
 
 const orderRateLimiter = rateLimit({
   windowMs: ORDER_RATE_WINDOW_MS,
   max: ORDER_RATE_MAX,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Слишком много запросов. Попробуйте позже.' }
+  message: { error: "Слишком много запросов. Попробуйте позже." },
 });
 
 // Simple health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
   res.json({
-    status: 'ok',
-    message: 'Backend is running',
+    status: "ok",
+    message: "Backend is running",
     endpoints: {
-      health: '/health',
-      api: '/api'
-    }
+      health: "/health",
+      api: "/api",
+    },
   });
 });
 
 // Middleware to load products and photos for each request
 async function loadData() {
   try {
-    console.log('Loading data from PocketBase...');
+    console.log("Loading data from PocketBase...");
     const products = await getCachedActiveProducts();
-    console.log('Successfully loaded data from PocketBase');
+    console.log("Successfully loaded data from PocketBase");
     return { products };
   } catch (error) {
-    console.error('Error loading data from PocketBase:', error.message);
+    console.error("Error loading data from PocketBase:", error.message);
     throw error;
   }
 }
 
 async function getCachedActiveProducts() {
-  const cacheKey = 'pb:active-products';
+  const cacheKey = "pb:active-products";
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
     return cached;
   }
 
   const pbUrlRaw = process.env.PB_URL;
-  if (typeof pbUrlRaw === 'string' && /\s/.test(pbUrlRaw)) {
-    console.warn('PB_URL contains whitespace. Please remove spaces/newlines in .env', {
-      pbUrlPreview: pbUrlRaw.slice(0, 80),
-    });
+  if (typeof pbUrlRaw === "string" && /\s/.test(pbUrlRaw)) {
+    console.warn(
+      "PB_URL contains whitespace. Please remove spaces/newlines in .env",
+      {
+        pbUrlPreview: pbUrlRaw.slice(0, 80),
+      }
+    );
     process.env.PB_URL = pbUrlRaw.trim();
   }
 
@@ -399,7 +446,9 @@ async function getCachedActiveProducts() {
     return products;
   } catch (err) {
     if (lastGoodActiveProducts) {
-      console.warn('PocketBase unavailable, serving last known products snapshot');
+      console.warn(
+        "PocketBase unavailable, serving last known products snapshot"
+      );
       return lastGoodActiveProducts;
     }
     throw err;
@@ -407,13 +456,15 @@ async function getCachedActiveProducts() {
 }
 
 // Routes
-app.get('/api/:version/:shop/external-products', async (req, res) => {
+app.get("/api/:version/:shop/external-products", async (req, res) => {
   const { version, shop } = req.params;
-  const search = String(req.query.search || '').replace(/\s+/g, ' ').trim();
-  const productId = String(req.query.productId || '').trim();
-  const brand = String(req.query.brand || '').trim();
-  const category = String(req.query.category || '').trim();
-  const seed = String(req.query.seed || '').trim();
+  const search = String(req.query.search || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const productId = String(req.query.productId || "").trim();
+  const brand = String(req.query.brand || "").trim();
+  const category = String(req.query.category || "").trim();
+  const seed = String(req.query.seed || "").trim();
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.max(1, Math.min(2000, Number(req.query.perPage) || 200));
 
@@ -425,21 +476,32 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
   }
 
   try {
-    const products = await getCachedActiveProducts();
+    let filterParts = ['status = "active"'];
+    if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
+    if (category)
+      filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
+    const filter = filterParts.join(" && ");
+
+    const products = await listActiveProducts(page, perPage, filter);
     const baseList = toProductArray(products);
     const q = search.toLowerCase();
-    const tokens = q ? q.split(' ').map((t) => t.trim()).filter(Boolean) : [];
+    const tokens = q
+      ? q
+          .split(" ")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
     const filtered = baseList.filter((p) => {
-      if (brand && String(p.brand || '') !== brand) return false;
-      if (category && String(p.category || '') !== category) return false;
       if (productId) {
-        const id = String(p.id || p.product_id || '').trim();
+        const id = String(p.id || p.product_id || "").trim();
         return id === productId;
       }
       if (tokens.length) {
-        const title = String(p.title || p.name || p.product_id || '').toLowerCase();
-        const desc = String(p.description || '').toLowerCase();
-        const pid = String(p.product_id || p.id || '').toLowerCase();
+        const title = String(
+          p.title || p.name || p.product_id || ""
+        ).toLowerCase();
+        const desc = String(p.description || "").toLowerCase();
+        const pid = String(p.product_id || p.id || "").toLowerCase();
         const hay = `${title} ${desc} ${pid}`;
         for (const tok of tokens) {
           if (!hay.includes(tok)) return false;
@@ -451,7 +513,7 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
     const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
     const mixed = seed
       ? mixByBrandRoundRobin(shuffled, seed)
-      : mixByBrandRoundRobin(shuffled, '');
+      : mixByBrandRoundRobin(shuffled, "");
     const payload = normalizeProductDescriptions(
       buildPagedExternalProductsResponse(mixed, { page, perPage })
     );
@@ -459,18 +521,20 @@ app.get('/api/:version/:shop/external-products', async (req, res) => {
     return res.json(payload);
   } catch (error) {
     return res.status(500).json({
-      error: 'Failed to load products',
+      error: "Failed to load products",
       message: error?.message,
     });
   }
 });
 
-app.get('/api/external-products', async (req, res) => {
-  const search = String(req.query.search || '').replace(/\s+/g, ' ').trim();
-  const productId = String(req.query.productId || '').trim();
-  const brand = String(req.query.brand || '').trim();
-  const category = String(req.query.category || '').trim();
-  const seed = String(req.query.seed || '').trim();
+app.get("/api/external-products", async (req, res) => {
+  const search = String(req.query.search || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const productId = String(req.query.productId || "").trim();
+  const brand = String(req.query.brand || "").trim();
+  const category = String(req.query.category || "").trim();
+  const seed = String(req.query.seed || "").trim();
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.max(1, Math.min(2000, Number(req.query.perPage) || 200));
   const cacheKey = `external-products:default:${search}:${productId}:${brand}:${category}:${seed}:${page}:${perPage}`;
@@ -481,21 +545,32 @@ app.get('/api/external-products', async (req, res) => {
   }
 
   try {
-    const products = await getCachedActiveProducts();
+    let filterParts = ['status = "active"'];
+    if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
+    if (category)
+      filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
+    const filter = filterParts.join(" && ");
+
+    const products = await listActiveProducts(page, perPage, filter);
     const baseList = toProductArray(products);
     const q = search.toLowerCase();
-    const tokens = q ? q.split(' ').map((t) => t.trim()).filter(Boolean) : [];
+    const tokens = q
+      ? q
+          .split(" ")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
     const filtered = baseList.filter((p) => {
-      if (brand && String(p.brand || '') !== brand) return false;
-      if (category && String(p.category || '') !== category) return false;
       if (productId) {
-        const id = String(p.id || p.product_id || '').trim();
+        const id = String(p.id || p.product_id || "").trim();
         return id === productId;
       }
       if (tokens.length) {
-        const title = String(p.title || p.name || p.product_id || '').toLowerCase();
-        const desc = String(p.description || '').toLowerCase();
-        const pid = String(p.product_id || p.id || '').toLowerCase();
+        const title = String(
+          p.title || p.name || p.product_id || ""
+        ).toLowerCase();
+        const desc = String(p.description || "").toLowerCase();
+        const pid = String(p.product_id || p.id || "").toLowerCase();
         const hay = `${title} ${desc} ${pid}`;
         for (const tok of tokens) {
           if (!hay.includes(tok)) return false;
@@ -507,7 +582,7 @@ app.get('/api/external-products', async (req, res) => {
     const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
     const mixed = seed
       ? mixByBrandRoundRobin(shuffled, seed)
-      : mixByBrandRoundRobin(shuffled, '');
+      : mixByBrandRoundRobin(shuffled, "");
     const payload = normalizeProductDescriptions({
       ...buildPagedExternalProductsResponse(mixed, { page, perPage }),
     });
@@ -515,57 +590,58 @@ app.get('/api/external-products', async (req, res) => {
     return res.json(payload);
   } catch (error) {
     return res.status(500).json({
-      error: 'Failed to load products',
+      error: "Failed to load products",
       message: error?.message,
     });
   }
 });
 
-app.get('/api/products', async (req, res) => {
+app.get("/api/products", async (req, res) => {
   try {
     const products = await getCachedActiveProducts();
     const result = products.map((p) => ({
-      product_id: String(p.product_id || p.id || '').trim(),
+      product_id: String(p.product_id || p.id || "").trim(),
       description: normalizeDescription(p.description),
-      category: String(p.category || ''),
-      season_title: String(p.season_title || p.brand || ''),
-      status: String(p.status || ''),
+      category: String(p.category || ""),
+      season_title: String(p.season_title || p.brand || ""),
+      status: String(p.status || ""),
       images: Array.isArray(p.images) ? p.images : [],
     }));
 
     res.json({ products: result });
   } catch (error) {
-    console.error('Error in /api/products:', error);
-    res.status(500).json({ error: 'Failed to load products' });
+    console.error("Error in /api/products:", error);
+    res.status(500).json({ error: "Failed to load products" });
   }
 });
 
-app.get('/products', async (req, res) => {
+app.get("/products", async (req, res) => {
   try {
     const { products } = await loadData();
     let filteredProducts = [...products];
-    
+
     // Apply filters
     if (req.query.search) {
       const searchTerm = req.query.search.toLowerCase();
       filteredProducts = filteredProducts.filter(
-        p => p.title.toLowerCase().includes(searchTerm) ||
-             p.description?.toLowerCase().includes(searchTerm)
+        (p) =>
+          p.title.toLowerCase().includes(searchTerm) ||
+          p.description?.toLowerCase().includes(searchTerm)
       );
     }
-    
+
     if (req.query.category) {
       filteredProducts = filteredProducts.filter(
-        p => p.category === req.query.category
+        (p) => p.category === req.query.category
       );
     }
-    
+
     if (req.query.brand) {
       filteredProducts = filteredProducts.filter(
-        p => p.brand === req.query.brand
+        (p) => p.brand === req.query.brand
       );
     }
-    
+
     res.json(
       filteredProducts.map((p) => ({
         ...p,
@@ -573,29 +649,33 @@ app.get('/products', async (req, res) => {
       }))
     );
   } catch (error) {
-    console.error('Error in /products:', error);
-    res.status(500).json({ error: 'Failed to load products' });
+    console.error("Error in /products:", error);
+    res.status(500).json({ error: "Failed to load products" });
   }
 });
 
-app.get(['/api/products/:id', '/products/:id'], async (req, res) => {
+app.get(["/api/products/:id", "/products/:id"], async (req, res) => {
   try {
     const { products } = await loadData();
-    const product = products.find((p) => String(p.id || p.product_id || '').trim() === String(req.params.id || '').trim());
+    const product = products.find(
+      (p) =>
+        String(p.id || p.product_id || "").trim() ===
+        String(req.params.id || "").trim()
+    );
     if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
+      return res.status(404).json({ error: "Product not found" });
     }
     res.json({
       ...product,
       description: normalizeDescription(product?.description),
     });
   } catch (error) {
-    console.error('Error in /products/:id:', error);
-    res.status(500).json({ error: 'Failed to load product' });
+    console.error("Error in /products/:id:", error);
+    res.status(500).json({ error: "Failed to load product" });
   }
 });
 
-app.get(['/api/profile/state', '/profile/state'], async (req, res) => {
+app.get(["/api/profile/state", "/profile/state"], async (req, res) => {
   try {
     const auth = telegramAuthFromRequest(req);
     if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
@@ -610,26 +690,28 @@ app.get(['/api/profile/state', '/profile/state'], async (req, res) => {
       profileExists: Boolean(profile),
       cart: Array.isArray(profile?.cart) ? profile.cart : [],
       favorites: Array.isArray(profile?.favorites) ? profile.favorites : [],
-      nickname: typeof profile?.nickname === 'string' ? profile.nickname : '',
+      nickname: typeof profile?.nickname === "string" ? profile.nickname : "",
     };
     profilesCache.set(cacheKey, payload);
     return res.json(payload);
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to load profile state', message: error?.message });
+    return res
+      .status(500)
+      .json({ error: "Failed to load profile state", message: error?.message });
   }
 });
 
-app.post(['/api/profile/state', '/profile/state'], async (req, res) => {
+app.post(["/api/profile/state", "/profile/state"], async (req, res) => {
   try {
     const auth = telegramAuthFromRequest(req);
     if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
 
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const body = req.body && typeof req.body === "object" ? req.body : {};
     const cart = Array.isArray(body.cart) ? body.cart : [];
     const favorites = Array.isArray(body.favorites) ? body.favorites : [];
     const fallback = buildProfileFieldsFromTelegramUser(auth.user);
-    const nickname = String(body.nickname || fallback.nickname || '').trim();
-    const username = String(body.username || fallback.username || '').trim();
+    const nickname = String(body.nickname || fallback.nickname || "").trim();
+    const username = String(body.username || fallback.username || "").trim();
 
     const updated = await updateProfileCartAndFavorites({
       telegramId: auth.telegramId,
@@ -646,53 +728,63 @@ app.post(['/api/profile/state', '/profile/state'], async (req, res) => {
       profileExists: true,
       cart: Array.isArray(updated?.cart) ? updated.cart : [],
       favorites: Array.isArray(updated?.favorites) ? updated.favorites : [],
-      nickname: typeof updated?.nickname === 'string' ? updated.nickname : nickname,
-      username: typeof updated?.username === 'string' ? updated.username : username,
+      nickname:
+        typeof updated?.nickname === "string" ? updated.nickname : nickname,
+      username:
+        typeof updated?.username === "string" ? updated.username : username,
     });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to update profile state', message: error?.message });
+    return res.status(500).json({
+      error: "Failed to update profile state",
+      message: error?.message,
+    });
   }
 });
 
-app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
+app.post(["/orders", "/api/orders"], orderRateLimiter, async (req, res) => {
   try {
     const botToken = process.env.BOT_TOKEN;
     const managerChatId = process.env.MANAGER_CHAT_ID;
 
     if (!botToken || !managerChatId) {
-      return res.status(500).json({ error: 'Бот не сконфигурирован' });
+      return res.status(500).json({ error: "Бот не сконфигурирован" });
     }
 
     const { initData, items, comment } = req.body;
-    const safeCommentRaw = typeof comment === 'string' ? comment.trim() : '';
+    const safeCommentRaw = typeof comment === "string" ? comment.trim() : "";
     const safeComment = safeCommentRaw.slice(0, 1000);
 
-    let initDataHash = '';
+    let initDataHash = "";
     try {
-      initDataHash = String(parseInitData(initData).hash || '').trim();
+      initDataHash = String(parseInitData(initData).hash || "").trim();
     } catch {
-      initDataHash = '';
+      initDataHash = "";
     }
 
     if (initDataHash) {
       const replayKey = `order:initDataHash:${initDataHash}`;
       if (usedInitDataHashCache.get(replayKey)) {
-        return res.status(409).json({ error: 'Повторная отправка заказа. Обновите приложение и попробуйте снова.' });
+        return res.status(409).json({
+          error:
+            "Повторная отправка заказа. Обновите приложение и попробуйте снова.",
+        });
       }
     }
 
     const auth = validateTelegramInitData(initData, botToken, {
-      maxAgeSeconds: TG_ORDER_INITDATA_MAX_AGE_SECONDS
+      maxAgeSeconds: TG_ORDER_INITDATA_MAX_AGE_SECONDS,
     });
     if (!auth.ok) {
-      console.warn('initData validation failed', {
+      console.warn("initData validation failed", {
         error: auth.error,
         debug: auth.debug,
-        initDataLen: String(initData ?? '').length,
-        hasHashParam: String(initData ?? '').includes('hash='),
-        hasSignatureParam: String(initData ?? '').includes('signature='),
+        initDataLen: String(initData ?? "").length,
+        hasHashParam: String(initData ?? "").includes("hash="),
+        hasSignatureParam: String(initData ?? "").includes("signature="),
       });
-      return res.status(401).json({ error: auth.error || 'initData невалиден' });
+      return res
+        .status(401)
+        .json({ error: auth.error || "initData невалиден" });
     }
 
     if (initDataHash) {
@@ -700,23 +792,29 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
     }
 
     const user = auth.user || null;
-    const telegramUserId = user?.id ? String(user.id) : '';
-    const username = user?.username ? String(user.username) : '';
-    const firstname = user?.first_name ? String(user.first_name) : '';
-    const lastname = user?.last_name ? String(user.last_name) : '';
+    const telegramUserId = user?.id ? String(user.id) : "";
+    const username = user?.username ? String(user.username) : "";
+    const firstname = user?.first_name ? String(user.first_name) : "";
+    const lastname = user?.last_name ? String(user.last_name) : "";
 
     if (!telegramUserId) {
-      return res.status(400).json({ error: 'Некорректные данные пользователя Telegram' });
+      return res
+        .status(400)
+        .json({ error: "Некорректные данные пользователя Telegram" });
     }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Некорректные данные заказа' });
+      return res.status(400).json({ error: "Некорректные данные заказа" });
     }
 
     const normalizedItems = items
       .map((it) => {
-        const id = String(it?.id ?? '').trim().slice(0, 80);
-        const title = String(it?.title ?? '').trim().slice(0, 120);
+        const id = String(it?.id ?? "")
+          .trim()
+          .slice(0, 80);
+        const title = String(it?.title ?? "")
+          .trim()
+          .slice(0, 120);
         const quantity = Math.min(99, Math.max(1, Number(it?.quantity) || 1));
         const hasPrice = it?.hasPrice === false ? false : true;
         const price = hasPrice ? Number(it?.price) : NaN;
@@ -732,7 +830,7 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
       .filter((it) => it.id && it.title);
 
     if (normalizedItems.length === 0) {
-      return res.status(400).json({ error: 'Некорректные данные заказа' });
+      return res.status(400).json({ error: "Некорректные данные заказа" });
     }
 
     let hasUnknownPrice = false;
@@ -748,30 +846,30 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
     }, 0);
 
     const escapeHtml = (value) => {
-      return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
     };
 
-    const safeFirst = escapeHtml((firstname || '').trim());
-    const safeLast = escapeHtml((lastname || '').trim());
-    const safeUsername = escapeHtml((username || '').trim());
+    const safeFirst = escapeHtml((firstname || "").trim());
+    const safeLast = escapeHtml((lastname || "").trim());
+    const safeUsername = escapeHtml((username || "").trim());
     const safeTelegramId = escapeHtml(String(telegramUserId));
 
     const botUsername = await getBotUsername(botToken);
 
     const orderText = [
-      '🆕 Новый заказ из Telegram Mini App',
-      '',
+      "🆕 Новый заказ из Telegram Mini App",
+      "",
       `👤 Клиент: ${`${safeFirst} ${safeLast}`.trim()}`.trim(),
-      safeUsername ? `@${safeUsername}` : 'username: отсутствует',
+      safeUsername ? `@${safeUsername}` : "username: отсутствует",
       `Telegram ID: <code>${safeTelegramId}</code>`,
-      safeComment ? `Комментарий: ${escapeHtml(safeComment)}` : '',
-      '',
-      '🛒 Товары:'
+      safeComment ? `Комментарий: ${escapeHtml(safeComment)}` : "",
+      "",
+      "🛒 Товары:",
     ]
       .filter(Boolean)
       .concat(
@@ -779,31 +877,39 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
           const qty = Number(it?.quantity) || 1;
           const hasPrice = it?.hasPrice === false ? false : true;
           const price = Number(it?.price);
-          const titleText = escapeHtml(String(it?.title || '').trim() || 'Без названия');
-          const id = escapeHtml(String(it?.id || '').trim() || '-');
+          const titleText = escapeHtml(
+            String(it?.title || "").trim() || "Без названия"
+          );
+          const id = escapeHtml(String(it?.id || "").trim() || "-");
 
-          const startParam = buildProductStartParam(String(it?.id || '').trim());
+          const startParam = buildProductStartParam(
+            String(it?.id || "").trim()
+          );
           const link = buildMiniAppLink(botUsername, startParam);
           const title = titleText;
-          const linkLine = link ? `\n${escapeHtml(link)}` : '';
+          const linkLine = link ? `\n${escapeHtml(link)}` : "";
 
           if (!hasPrice || !Number.isFinite(price) || price <= 0) {
-            return `${idx + 1}. ${title}${linkLine} (id: <code>${id}</code>) — ${qty} шт — Цена по запросу`;
+            return `${
+              idx + 1
+            }. ${title}${linkLine} (id: <code>${id}</code>) — ${qty} шт — Цена по запросу`;
           }
 
           const lineTotal = price * qty;
-          return `${idx + 1}. ${title}${linkLine} (id: <code>${id}</code>) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
+          return `${
+            idx + 1
+          }. ${title}${linkLine} (id: <code>${id}</code>) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
         })
       )
       .concat([
-        '',
+        "",
         total > 0
           ? `💰 Итого: ${escapeHtml(String(total))} ₽`
-          : '💰 Итого: Цена по запросу',
-        '',
-        'Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.'
+          : "💰 Итого: Цена по запросу",
+        "",
+        "Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.",
       ])
-      .join('\n');
+      .join("\n");
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
@@ -813,20 +919,28 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
       await axios.post(url, {
         chat_id: managerChatId,
         text: part,
-        parse_mode: 'HTML',
+        parse_mode: "HTML",
         disable_web_page_preview: true,
       });
     }
 
-    console.log('Заказ отправлен менеджеру', { telegramUserId, itemsCount: normalizedItems.length });
+    console.log("Заказ отправлен менеджеру", {
+      telegramUserId,
+      itemsCount: normalizedItems.length,
+    });
 
     return res.json({
       ok: true,
-      orderId: Date.now().toString()
+      orderId: Date.now().toString(),
     });
   } catch (error) {
-    console.error('Ошибка отправки заказа менеджеру', error?.response?.data || error.message);
-    return res.status(500).json({ error: 'Не удалось отправить заказ менеджеру' });
+    console.error(
+      "Ошибка отправки заказа менеджеру",
+      error?.response?.data || error.message
+    );
+    return res
+      .status(500)
+      .json({ error: "Не удалось отправить заказ менеджеру" });
   }
 });
 
@@ -834,7 +948,7 @@ app.post(['/orders', '/api/orders'], orderRateLimiter, async (req, res) => {
 async function startServer() {
   const port = await getAvailablePort(PORT);
 
-  const server = require('http').createServer(app);
+  const server = require("http").createServer(app);
 
   server.listen(port, () => {
     console.log(`\n=== Server is running ===`);
@@ -843,8 +957,8 @@ async function startServer() {
     console.log(`Health:  http://localhost:${port}/health\n`);
   });
 
-  server.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
       console.warn(`Port ${port} is in use, trying next port...`);
       try {
         server.close(() => startServer());
@@ -852,7 +966,7 @@ async function startServer() {
         startServer();
       }
     } else {
-      console.error('Server error:', error);
+      console.error("Server error:", error);
       process.exit(1);
     }
   });
@@ -861,17 +975,17 @@ async function startServer() {
 // Helper function to find an available port
 function getAvailablePort(desiredPort) {
   return new Promise((resolve, reject) => {
-    const server = require('http').createServer();
-    
-    server.listen(desiredPort, '0.0.0.0');
-    
-    server.on('listening', () => {
+    const server = require("http").createServer();
+
+    server.listen(desiredPort, "0.0.0.0");
+
+    server.on("listening", () => {
       const port = server.address().port;
       server.close(() => resolve(port));
     });
-    
-    server.on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
+
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
         // Try the next port
         getAvailablePort(0).then(resolve);
       } else {
@@ -884,8 +998,8 @@ function getAvailablePort(desiredPort) {
 // Start the server
 loadData()
   .then(() => startServer())
-  .catch(error => {
-    console.error('Failed to load initial data:', error);
-    console.log('Starting server with mock data...');
+  .catch((error) => {
+    console.error("Failed to load initial data:", error);
+    console.log("Starting server with mock data...");
     startServer(); // Start server anyway with mock data
   });
