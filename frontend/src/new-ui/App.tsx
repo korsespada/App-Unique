@@ -46,12 +46,12 @@ const App: React.FC = () => {
   const buildMergedFavorites = useCallback(
     (a: string[], b: string[]) =>
       Array.from(
-      new Set(
-        [...(a || []), ...(b || [])]
-          .map((x) => String(x).trim())
-          .filter(Boolean)
-      )
-    ),
+        new Set(
+          [...(a || []), ...(b || [])]
+            .map((x) => String(x).trim())
+            .filter(Boolean)
+        )
+      ),
     []
   );
 
@@ -157,8 +157,8 @@ const App: React.FC = () => {
     const id = startParam.startsWith("product__")
       ? startParam.slice("product__".length).trim()
       : startParam.startsWith("product_")
-        ? startParam.slice("product_".length).trim()
-        : "";
+      ? startParam.slice("product_".length).trim()
+      : "";
 
     if (!id) return;
     setSearchQuery("");
@@ -302,7 +302,8 @@ const App: React.FC = () => {
       if (!Array.isArray(parsed)) return;
       const restored = parsed
         .filter(
-          (it) => it && typeof it === "object" && (it as any).id && (it as any).name
+          (it) =>
+            it && typeof it === "object" && (it as any).id && (it as any).name
         )
         .map((it) => ({
           ...(it as any),
@@ -416,11 +417,13 @@ const App: React.FC = () => {
           ? data.brands.map((x) => String(x).trim()).filter(Boolean)
           : [];
         const brandsByCategoryRaw = data?.brandsByCategory;
-        const brandsByCategory =          brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
+        const brandsByCategory =
+          brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
             ? brandsByCategoryRaw
             : {};
 
-        const normalizedBrandsByCategory: Record<string, string[]> =          Object.fromEntries(
+        const normalizedBrandsByCategory: Record<string, string[]> =
+          Object.fromEntries(
             Object.entries(brandsByCategory).map(([k, v]) => {
               const key = String(k).trim();
               const value = Array.isArray(v)
@@ -485,9 +488,11 @@ const App: React.FC = () => {
   }, [currentView, fetchNextPage, hasNextPage, isFetchingNextPage, loadMoreEl]);
 
   const apiProducts = useMemo<Product[]>(() => {
-    const pages = (externalData?.pages
-      || []) as ExternalProductsPagedResponse[];
-    const raw = pages.flatMap((p) => Array.isArray(p?.products) ? p.products : []);
+    const pages = (externalData?.pages ||
+      []) as ExternalProductsPagedResponse[];
+    const raw = pages.flatMap((p) =>
+      Array.isArray(p?.products) ? p.products : []
+    );
 
     return raw
       .map((p) => {
@@ -495,7 +500,8 @@ const App: React.FC = () => {
         const name = String(p.title || p.name || p.product_id || "").trim();
         const brand = String(p.brand || p.season_title || "").trim();
         const category = String(p.category || "Все");
-        const images =          Array.isArray(p.images) && p.images.length ? p.images : [];
+        const images =
+          Array.isArray(p.images) && p.images.length ? p.images : [];
 
         const rawPrice = Number((p as any).price);
         const hasPrice = Number.isFinite(rawPrice) && rawPrice > 0;
@@ -510,8 +516,8 @@ const App: React.FC = () => {
           images: images.length
             ? images
             : [
-              "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
-            ],
+                "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000"
+              ],
           thumb: (p as any).thumb || "",
           description: String(p.description || ""),
           details: Array.isArray((p as any).details) ? (p as any).details : []
@@ -521,8 +527,8 @@ const App: React.FC = () => {
   }, [externalData]);
 
   const totalItems = useMemo(() => {
-    const pages = (externalData?.pages
-      || []) as ExternalProductsPagedResponse[];
+    const pages = (externalData?.pages ||
+      []) as ExternalProductsPagedResponse[];
     const first = pages[0];
     const totalItemsRaw = Number((first as any)?.totalItems);
     return Number.isFinite(totalItemsRaw) && totalItemsRaw >= 0
@@ -703,8 +709,8 @@ const App: React.FC = () => {
     const fromView = lastPushedViewRef.current;
     const state =
       currentView === "product-detail"
-      ? { view: currentView, productId: selectedProduct?.id || "", fromView }
-      : { view: currentView, fromView };
+        ? { view: currentView, productId: selectedProduct?.id || "", fromView }
+        : { view: currentView, fromView };
 
     window.history.pushState(state, "");
     lastPushedViewRef.current = currentView;
@@ -810,12 +816,12 @@ const App: React.FC = () => {
 
     setCart((prev) =>
       prev
-      .map((item) => {
-        if (item.id !== id) return item;
-        const newQty = Math.max(0, item.quantity + delta);
-        return { ...item, quantity: newQty };
-      })
-      .filter((item) => item.quantity > 0)
+        .map((item) => {
+          if (item.id !== id) return item;
+          const newQty = Math.max(0, item.quantity + delta);
+          return { ...item, quantity: newQty };
+        })
+        .filter((item) => item.quantity > 0)
     );
   };
 
@@ -949,10 +955,10 @@ const App: React.FC = () => {
         const fullImages = Array.isArray(rawImages)
           ? rawImages
           : Array.isArray(rawPhotos)
-            ? rawPhotos
+          ? rawPhotos
               .map((x: any) => String(x?.url || "").trim())
               .filter(Boolean)
-            : [];
+          : [];
         if (!fullImages.length) return;
 
         setSelectedProduct((prev) => {
@@ -1045,8 +1051,10 @@ const App: React.FC = () => {
       : [];
     if (images.length < 2) return;
 
-    const nextIndex =      currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
-    const prevIndex =      currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
+    const nextIndex =
+      currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
+    const prevIndex =
+      currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
     const toPrefetch = [images[nextIndex], images[prevIndex]].filter(Boolean);
 
     toPrefetch.forEach((src) => {

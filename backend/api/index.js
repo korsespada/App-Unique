@@ -16,6 +16,8 @@ const {
   getActiveProductById,
   getProfileByTelegramId,
   updateProfileCartAndFavorites,
+  loadProductIdsOnly,
+  loadProductsByIds,
 } = require("../src/pocketbaseClient");
 
 const app = express();
@@ -344,6 +346,9 @@ const externalProductsCache = new NodeCache({ stdTTL: 60 });
 let lastGoodAllActiveProducts = null;
 const pbSnapshotCache = new NodeCache({ stdTTL: 5 * 60 });
 
+const shuffleOrderCache = new NodeCache({ stdTTL: 15 * 60 });
+const pageDataCache = new NodeCache({ stdTTL: 3 * 60 });
+
 function setCatalogCacheHeaders(res) {
   res.set("Cache-Control", "s-maxage=60, stale-while-revalidate=30");
 }
@@ -373,20 +378,28 @@ async function getAllActiveProductsSafe(perPage) {
 }
 
 async function handleCatalogFilters(req, res) {
-  const cacheKey = "catalog-filters:v1";
+  console.time("handleCatalogFilters");
+
+  const cacheKey = "catalog-filters:v2";
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
+    console.log("Using cached catalog filters");
     setCatalogCacheHeaders(res);
+    console.timeEnd("handleCatalogFilters");
     return res.json(cached);
   }
 
+  console.time("loadProductsForFilters");
   const pbAll = await getAllActiveProductsSafe(2000);
+  console.timeEnd("loadProductsForFilters");
+
   const items = Array.isArray(pbAll?.items) ? pbAll.items : [];
 
   const categoriesSet = new Set();
   const brandsSet = new Set();
   const brandsByCategory = {};
 
+  console.time("processFilters");
   for (const p of items) {
     const category = String(p?.category || "").trim();
     const brand = String(p?.brand || "").trim();
@@ -399,6 +412,7 @@ async function handleCatalogFilters(req, res) {
       brandsByCategory[category].add(brand);
     }
   }
+  console.timeEnd("processFilters");
 
   const categories = Array.from(categoriesSet).sort((a, b) =>
     a.localeCompare(b)
@@ -418,6 +432,7 @@ async function handleCatalogFilters(req, res) {
   };
   externalProductsCache.set(cacheKey, payload);
   setCatalogCacheHeaders(res);
+  console.timeEnd("handleCatalogFilters");
   return res.json(payload);
 }
 
@@ -446,6 +461,8 @@ async function loadProductsFromSheets() {
 }
 
 async function handleExternalProducts(req, res) {
+  console.time("handleExternalProducts-total");
+
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.max(1, Math.min(200, Number(req.query.perPage) || 40));
   const seed = String(req.query.seed || "").trim();
@@ -457,75 +474,79 @@ async function handleExternalProducts(req, res) {
   const category = String(req.query.category || "").trim();
 
   const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}:${seed}`;
-  const cached = externalProductsCache.get(cacheKey);
+  const cached = pageDataCache.get(cacheKey);
   if (cached) {
     setCatalogCacheHeaders(res);
+    console.timeEnd("handleExternalProducts-total");
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const {
-    listActiveProducts,
-    listAllActiveProducts,
-  } = require("../src/pocketbaseClient");
-
   const hasFilters = brand || category;
-  let items, totalItems, totalPages;
-
+  let customFilter = null;
   if (hasFilters) {
     let filterParts = ['status = "active"'];
     if (brand) filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
     if (category)
       filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
-    const filter = filterParts.join(" && ");
-
-    console.log("Fetching all with filter:", filter);
-
-    const pbResult = await listActiveProducts(1, 2000, filter);
-    items = Array.isArray(pbResult?.items) ? pbResult.items : [];
-    totalItems = pbResult?.totalItems || 0;
-    totalPages = Math.max(1, Math.ceil(totalItems / perPage));
-
-    console.log("PB result:", {
-      itemsCount: items.length,
-      totalItems,
-      totalPages,
-    });
-  } else {
-    const allProducts = await getAllActiveProductsSafe(2000);
-    items = Array.isArray(allProducts?.items) ? allProducts.items : [];
-    totalItems = items.length;
-    totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+    customFilter = filterParts.join(" && ");
   }
 
-  const q = search.toLowerCase();
-  const tokens = q
-    ? q
+  const orderCacheKey = `order:${seed}:${brand}:${category}`;
+  let orderedIds = shuffleOrderCache.get(orderCacheKey);
+
+  if (!orderedIds) {
+    console.time("1. loadProductIdsOnly");
+    const idRecords = await loadProductIdsOnly(2000, customFilter);
+    console.timeEnd("1. loadProductIdsOnly");
+
+    console.time("2. search-filter");
+    let filteredIds = idRecords;
+    if (search) {
+      const q = search.toLowerCase();
+      const tokens = q
         .split(" ")
         .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
-  const filtered = items.filter((p) => {
-    if (tokens.length) {
-      const title = String(
-        p.title || p.name || p.product_id || p.id || ""
-      ).toLowerCase();
-      const desc = String(p.description || "").toLowerCase();
-      const pid = String(p.product_id || p.id || "").toLowerCase();
-      const hay = `${title} ${desc} ${pid}`;
-      for (const tok of tokens) {
-        if (!hay.includes(tok)) return false;
+        .filter(Boolean);
+      if (tokens.length) {
+        filteredIds = idRecords.filter((p) => {
+          const title = String(
+            p?.title || p?.name || p?.product_id || p?.id || ""
+          ).toLowerCase();
+          const desc = String(p?.description || "").toLowerCase();
+          const pid = String(p?.product_id || p?.id || "").toLowerCase();
+          const hay = `${title} ${desc} ${pid}`;
+          for (const tok of tokens) {
+            if (!hay.includes(tok)) return false;
+          }
+          return true;
+        });
       }
     }
-    return true;
-  });
+    console.timeEnd("2. search-filter");
 
-  const shuffled = seed ? shuffleDeterministic(filtered, seed) : filtered;
-  const mixed = mixByCategoryRoundRobin(shuffled, seed || "");
+    console.time("3. shuffle+mix");
+    let shuffled = seed ? shuffleDeterministic(filteredIds, seed) : filteredIds;
+    let mixed = mixByCategoryRoundRobin(shuffled, seed || "");
+    orderedIds = mixed.map((p) => p.id);
+    console.timeEnd("3. shuffle+mix");
 
+    shuffleOrderCache.set(orderCacheKey, orderedIds);
+  } else {
+    console.log("Using cached order for key:", orderCacheKey);
+  }
+
+  const totalItems = orderedIds.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * perPage;
   const end = start + perPage;
-  const pageItems = mixed.slice(start, end).map((p) => {
+  const pageIds = orderedIds.slice(start, end);
+
+  console.time("4. loadProductsByIds");
+  const pageProducts = await loadProductsByIds(pageIds);
+  console.timeEnd("4. loadProductsByIds");
+
+  const pageItems = pageProducts.map((p) => {
     const thumb = typeof p?.thumb === "string" ? String(p.thumb).trim() : "";
     const firstImage =
       Array.isArray(p?.images) && p.images.length
@@ -547,8 +568,9 @@ async function handleExternalProducts(req, res) {
     hasNextPage: safePage < totalPages,
   };
 
-  externalProductsCache.set(cacheKey, payload);
+  pageDataCache.set(cacheKey, payload);
   setCatalogCacheHeaders(res);
+  console.timeEnd("handleExternalProducts-total");
   return res.json(normalizeProductDescriptions(payload));
 }
 

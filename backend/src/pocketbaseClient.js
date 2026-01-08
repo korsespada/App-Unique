@@ -383,6 +383,103 @@ async function getActiveProductById(productId) {
   return mapped && mapped.id ? mapped : null;
 }
 
+async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
+  const api = pbApi();
+  const safePerPage = Math.max(1, Math.min(2000, Number(perPage) || 2000));
+
+  let allIds = [];
+  let page = 1;
+  let totalPages = 1;
+
+  try {
+    while (page <= totalPages) {
+      const filter = customFilter || 'status = "active"';
+      const resp = await api.get("/api/collections/products/records", {
+        params: {
+          page,
+          perPage: safePerPage,
+          filter,
+          sort: "-updated",
+          fields: "id,category",
+        },
+      });
+
+      const data = resp?.data;
+      if (!data) break;
+
+      const items = Array.isArray(data.items) ? data.items : [];
+      allIds.push(...items);
+
+      totalPages = Number(data.totalPages) || 1;
+      page = page + 1;
+    }
+  } catch (err) {
+    const status = err?.response?.status;
+    const msg =
+      typeof err?.response?.data === "string"
+        ? err.response.data
+        : err?.response?.data?.message ||
+          err?.message ||
+          "PocketBase request failed";
+
+    console.error("PocketBase loadProductIdsOnly failed", {
+      status,
+      message: msg,
+    });
+
+    const statusText = Number.isFinite(status) ? String(status) : "unknown";
+    throw new Error(`PocketBase error ${statusText}: ${msg}`);
+  }
+
+  return allIds;
+}
+
+async function loadProductsByIds(ids) {
+  const api = pbApi();
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+
+  const filter = ids
+    .map((id) => `id = "${safeString(id).replace(/"/g, '\\"')}"`)
+    .join(" || ");
+
+  try {
+    const resp = await api.get("/api/collections/products/records", {
+      params: {
+        page: 1,
+        perPage: ids.length,
+        filter,
+        sort: "-updated",
+        fields:
+          "id,name,description,photos,thumb,price,brand,category,expand.brand,expand.category,updated",
+        expand: "brand,category",
+      },
+    });
+
+    const data = resp?.data;
+    const items = Array.isArray(data?.items) ? data.items : [];
+    const mapped = items.map(mapPbProductToExternal).filter((p) => p.id);
+
+    const idMap = new Map(mapped.map((p) => [p.id, p]));
+    return ids.map((id) => idMap.get(id)).filter(Boolean);
+  } catch (err) {
+    const status = err?.response?.status;
+    const msg =
+      typeof err?.response?.data === "string"
+        ? err.response.data
+        : err?.response?.data?.message ||
+          err?.message ||
+          "PocketBase request failed";
+
+    console.error("PocketBase loadProductsByIds failed", {
+      status,
+      message: msg,
+    });
+
+    const statusText = Number.isFinite(status) ? String(status) : "unknown";
+    throw new Error(`PocketBase error ${statusText}: ${msg}`);
+  }
+}
+
 module.exports = {
   listActiveProducts,
   getProfileByTelegramId,
@@ -390,4 +487,6 @@ module.exports = {
   updateProfileCartAndFavorites,
   listAllActiveProducts,
   getActiveProductById,
+  loadProductIdsOnly,
+  loadProductsByIds,
 };

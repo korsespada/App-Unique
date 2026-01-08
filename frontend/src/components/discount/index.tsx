@@ -6,6 +6,7 @@ import useTelegramUser from "@hooks/useTelegramUser";
 import {
   Alert,
   Button,
+  DatePicker,
   Divider,
   Form,
   InputNumber,
@@ -13,10 +14,11 @@ import {
   Popconfirm
 } from "antd";
 import type { RangePickerProps } from "antd/es/date-picker";
-import { DatePicker, useJalaliLocaleListener } from "antd-jalali";
 import dayjs from "dayjs";
-import moment from "jalali-moment";
+import "dayjs/locale/ru";
 import { useState } from "react";
+
+dayjs.locale("ru");
 
 interface Props {
   type: "product" | "category";
@@ -31,18 +33,15 @@ function Discount({ type, id, data }: Props) {
     discount_id: data?.discount_Id || ""
   });
   const deleteMutation = useDeleteDiscount();
-  const [checked, setChecked] = useState<boolean>(false);
+
   const disabledDate: RangePickerProps["disabledDate"] = (current) =>
-    // Can not select days before today and today
     current && current < dayjs().endOf("day");
-  useJalaliLocaleListener();
-  // dayjs.calendar("jalali");
 
   const handleDeleteDiscount = () => {
     deleteMutation.mutate(
       {
         discount_id: data?.discount_Id,
-        user_id: userId.toString()
+        user_id: userId?.toString() || ""
       },
       {
         onSuccess: () => {
@@ -73,27 +72,32 @@ function Discount({ type, id, data }: Props) {
           const values = {
             category_id: type === "category" ? parseInt(id, 10) : null,
             product_id: type === "product" ? parseInt(id, 10) : null,
-            discount_type: "percent",
+            discount_type: "percent" as const,
             discount_value: percent,
-            discount_start_date: moment(discount_start_date.$d).format() || "",
-            discount_end_date: moment(discount_end_date.$d).format() || "",
-            user_id: userId.toString()
+            discount_start_date:
+              dayjs(discount_start_date.$d).toISOString() || "",
+            discount_end_date: dayjs(discount_end_date.$d).toISOString() || "",
+            user_id: userId?.toString() || ""
           };
           if (data) {
-            updateMutation.mutate(values, {
-              onSuccess: () => {
-                message.success("Скидка сохранена");
-                // window.location.reload();
+            updateMutation.mutate(
+              {
+                ...values,
+                discount_Id: data.discount_Id
               },
-              onError: () => {
-                message.error("Не удалось сохранить скидку");
+              {
+                onSuccess: () => {
+                  message.success("Скидка сохранена");
+                },
+                onError: () => {
+                  message.error("Не удалось сохранить скидку");
+                }
               }
-            });
+            );
           } else {
             mutation.mutate(values, {
               onSuccess: () => {
                 message.success("Скидка сохранена");
-                // window.location.reload();
               },
               onError: () => {
                 message.error("Не удалось сохранить скидку");
@@ -141,7 +145,6 @@ function Discount({ type, id, data }: Props) {
             style={{ width: data ? "65%" : "100%" }}
             size="large"
             ghost
-            // className="sticky bottom-3"
             htmlType="submit">
             Сохранить
           </Button>
