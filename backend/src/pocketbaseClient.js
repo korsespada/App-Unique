@@ -391,17 +391,33 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
   let page = 1;
   let totalPages = 1;
 
+  console.time("loadProductIdsOnly-total");
+
   try {
     while (page <= totalPages) {
       const filter = customFilter || 'status = "active"';
+      const hasBrandFilter = filter.includes("brand.name");
+      const hasCategoryFilter = filter.includes("category.name");
+
+      const params = {
+        page,
+        perPage: safePerPage,
+        filter,
+        sort: "-updated",
+        fields: hasBrandFilter ? "id,category,brand" : "id,category",
+      };
+
+      if (hasBrandFilter || hasCategoryFilter) {
+        params.expand =
+          hasBrandFilter && hasCategoryFilter
+            ? "brand,category"
+            : hasBrandFilter
+            ? "brand"
+            : "category";
+      }
+
       const resp = await api.get("/api/collections/products/records", {
-        params: {
-          page,
-          perPage: safePerPage,
-          filter,
-          sort: "-updated",
-          fields: "id,category",
-        },
+        params,
       });
 
       const data = resp?.data;
@@ -431,6 +447,10 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
     throw new Error(`PocketBase error ${statusText}: ${msg}`);
   }
 
+  console.timeEnd("loadProductIdsOnly-total");
+  console.log(
+    `loadProductIdsOnly loaded ${allIds.length} items in ${totalPages} pages`
+  );
   return allIds;
 }
 
