@@ -425,12 +425,18 @@ async function handleCatalogFilters(req, res) {
     throw new Error("PB_URL is not configured");
   }
 
+  const pbToken = String(process.env.PB_TOKEN || "").trim();
+  const pbHeaders = { Accept: "application/json" };
+  if (pbToken) {
+    pbHeaders.Authorization = pbToken.includes(" ")
+      ? pbToken
+      : `Bearer ${pbToken}`;
+  }
+
   const pb = axios.create({
     baseURL: pbUrl,
     timeout: 15000,
-    headers: {
-      Accept: "application/json",
-    },
+    headers: pbHeaders,
   });
 
   try {
@@ -438,9 +444,7 @@ async function handleCatalogFilters(req, res) {
       const pbProducts = axios.create({
         baseURL: pbUrl,
         timeout: 30000,
-        headers: {
-          Accept: "application/json",
-        },
+        headers: pbHeaders,
       });
 
       const firstResp = await pbProducts.get(
@@ -627,9 +631,7 @@ async function handleCatalogFilters(req, res) {
           const pbProducts = axios.create({
             baseURL: pbUrl,
             timeout: 30000,
-            headers: {
-              Accept: "application/json",
-            },
+            headers: pbHeaders,
           });
 
           const resp = await pbProducts.get(
@@ -840,10 +842,18 @@ app.get(
         throw new Error("PB_URL is not configured");
       }
 
+      const pbToken = String(process.env.PB_TOKEN || "").trim();
+      const pbHeaders = { Accept: "application/json" };
+      if (pbToken) {
+        pbHeaders.Authorization = pbToken.includes(" ")
+          ? pbToken
+          : `Bearer ${pbToken}`;
+      }
+
       const pb = axios.create({
         baseURL: pbUrl,
         timeout: 15000,
-        headers: { Accept: "application/json" },
+        headers: pbHeaders,
       });
 
       const [categoriesResp, brandsResp] = await Promise.all([
