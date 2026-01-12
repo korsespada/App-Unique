@@ -374,13 +374,14 @@ app.use(
 );
 app.use(express.json());
 
-const externalProductsCache = new NodeCache({ stdTTL: 10 * 60 });
+const externalProductsCache = new NodeCache({ stdTTL: 60 });
 let lastGoodAllActiveProducts = null;
 let lastGoodCatalogFilters = null;
-const pbSnapshotCache = new NodeCache({ stdTTL: 10 * 60 });
+let catalogFiltersErrorCount = 0;
+const pbSnapshotCache = new NodeCache({ stdTTL: 5 * 60 });
 
-const shuffleOrderCache = new NodeCache({ stdTTL: 30 * 60 });
-const pageDataCache = new NodeCache({ stdTTL: 10 * 60 });
+const shuffleOrderCache = new NodeCache({ stdTTL: 15 * 60 });
+const pageDataCache = new NodeCache({ stdTTL: 3 * 60 });
 
 function setCatalogCacheHeaders(res) {
   res.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
@@ -562,7 +563,7 @@ async function handleCatalogFilters(req, res) {
       loadNamesFromCollection(["brands", "brand"]),
     ]);
 
-    if (!categories.length || !brands.length) {
+    if (categories.length <= 1 || brands.length <= 1) {
       const fromProducts = await loadFiltersFromProducts();
       const payload = {
         categories: fromProducts.categories,
@@ -596,6 +597,28 @@ async function handleCatalogFilters(req, res) {
       status,
       message: err?.message || err,
     });
+
+    // Rate limit handling - exponential backoff
+    if (status === 403 || status === 429) {
+      catalogFiltersErrorCount++;
+      const backoffSeconds = Math.min(
+        300,
+        Math.pow(2, catalogFiltersErrorCount)
+      );
+      console.log(
+        `Rate limited, backing off for ${backoffSeconds}s (attempt ${catalogFiltersErrorCount})`
+      );
+
+      const fallback = lastGoodCatalogFilters || {
+        categories: [],
+        brands: [],
+        brandsByCategory: {},
+      };
+
+      externalProductsCache.set(cacheKey, fallback, backoffSeconds);
+      setCatalogCacheHeaders(res);
+      return res.json(fallback);
+    }
 
     let fallback = lastGoodCatalogFilters;
     if (!fallback) {
