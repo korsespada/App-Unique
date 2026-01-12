@@ -378,20 +378,15 @@ async function getAllActiveProductsSafe(perPage) {
 }
 
 async function handleCatalogFilters(req, res) {
-  console.time("handleCatalogFilters");
-
   const cacheKey = "catalog-filters:v2";
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
     console.log("Using cached catalog filters");
     setCatalogCacheHeaders(res);
-    console.timeEnd("handleCatalogFilters");
     return res.json(cached);
   }
 
-  console.time("loadProductsForFilters");
   const pbAll = await getAllActiveProductsSafe(2000);
-  console.timeEnd("loadProductsForFilters");
 
   const items = Array.isArray(pbAll?.items) ? pbAll.items : [];
 
@@ -399,7 +394,6 @@ async function handleCatalogFilters(req, res) {
   const brandsSet = new Set();
   const brandsByCategory = {};
 
-  console.time("processFilters");
   for (const p of items) {
     const category = String(p?.category || "").trim();
     const brand = String(p?.brand || "").trim();
@@ -412,7 +406,6 @@ async function handleCatalogFilters(req, res) {
       brandsByCategory[category].add(brand);
     }
   }
-  console.timeEnd("processFilters");
 
   const categories = Array.from(categoriesSet).sort((a, b) =>
     a.localeCompare(b)
@@ -432,7 +425,6 @@ async function handleCatalogFilters(req, res) {
   };
   externalProductsCache.set(cacheKey, payload);
   setCatalogCacheHeaders(res);
-  console.timeEnd("handleCatalogFilters");
   return res.json(payload);
 }
 
