@@ -462,16 +462,21 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
     }
   } catch (err) {
     const status = err?.response?.status;
+    const responseData = err?.response?.data;
     const msg =
-      typeof err?.response?.data === "string"
-        ? err.response.data
-        : err?.response?.data?.message ||
-          err?.message ||
-          "PocketBase request failed";
+      typeof responseData === "string" && responseData.trim()
+        ? responseData
+        : responseData && typeof responseData === "object"
+        ? JSON.stringify(responseData)
+        : err?.message
+        ? String(err.message)
+        : "PocketBase request failed";
 
     console.error("PocketBase loadProductIdsOnly failed", {
       status,
       message: msg,
+      responseData,
+      filter: customFilter,
     });
 
     const statusText = Number.isFinite(status) ? String(status) : "unknown";
