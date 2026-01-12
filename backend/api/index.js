@@ -386,42 +386,58 @@ async function handleCatalogFilters(req, res) {
     return res.json(cached);
   }
 
-  const pbAll = await getAllActiveProductsSafe(2000);
-
-  const items = Array.isArray(pbAll?.items) ? pbAll.items : [];
-
-  const categoriesSet = new Set();
-  const brandsSet = new Set();
-  const brandsByCategory = {};
-
-  for (const p of items) {
-    const category = String(p?.category || "").trim();
-    const brand = String(p?.brand || "").trim();
-
-    if (category) categoriesSet.add(category);
-    if (brand) brandsSet.add(brand);
-
-    if (category && brand) {
-      if (!brandsByCategory[category]) brandsByCategory[category] = new Set();
-      brandsByCategory[category].add(brand);
-    }
+  const pbUrl = String(process.env.PB_URL || "").trim();
+  if (!pbUrl) {
+    throw new Error("PB_URL is not configured");
   }
 
-  const categories = Array.from(categoriesSet).sort((a, b) =>
-    a.localeCompare(b)
-  );
-  const brands = Array.from(brandsSet).sort((a, b) => a.localeCompare(b));
-  const brandsByCategoryPlain = Object.fromEntries(
-    Object.entries(brandsByCategory).map(([cat, set]) => [
-      cat,
-      Array.from(set).sort((a, b) => a.localeCompare(b)),
-    ])
-  );
+  const pb = axios.create({
+    baseURL: pbUrl,
+    timeout: 15000,
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  const [categoriesResp, brandsResp] = await Promise.all([
+    pb.get("/api/collections/categories/records", {
+      params: {
+        page: 1,
+        perPage: 2000,
+        sort: "name",
+        fields: "id,name",
+      },
+    }),
+    pb.get("/api/collections/brands/records", {
+      params: {
+        page: 1,
+        perPage: 2000,
+        sort: "name",
+        fields: "id,name",
+      },
+    }),
+  ]);
+
+  const categoriesItems = Array.isArray(categoriesResp?.data?.items)
+    ? categoriesResp.data.items
+    : [];
+  const brandsItems = Array.isArray(brandsResp?.data?.items)
+    ? brandsResp.data.items
+    : [];
+
+  const categories = categoriesItems
+    .map((x) => String(x?.name || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  const brands = brandsItems
+    .map((x) => String(x?.name || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
 
   const payload = {
     categories,
     brands,
-    brandsByCategory: brandsByCategoryPlain,
+    brandsByCategory: {},
   };
   externalProductsCache.set(cacheKey, payload);
   setCatalogCacheHeaders(res);
