@@ -461,8 +461,6 @@ async function loadProductsFromSheets() {
 }
 
 async function handleExternalProducts(req, res) {
-  console.time("handleExternalProducts-total");
-
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.max(1, Math.min(200, Number(req.query.perPage) || 40));
   const seed = String(req.query.seed || "").trim();
@@ -477,31 +475,21 @@ async function handleExternalProducts(req, res) {
   const cached = pageDataCache.get(cacheKey);
   if (cached) {
     setCatalogCacheHeaders(res);
-    console.timeEnd("handleExternalProducts-total");
     return res.json(normalizeProductDescriptions(cached));
   }
 
   let filterParts = ['status = "active"'];
-  if (brand) filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
+  if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
   if (category)
-    filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
+    filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
   const customFilter = filterParts.join(" && ");
 
   const orderCacheKey = `order:${seed}:${brand}:${category}`;
   let orderedIds = shuffleOrderCache.get(orderCacheKey);
 
-  console.log("Cache check:", {
-    orderCacheKey,
-    hasOrderCache: !!orderedIds,
-    pageCacheKey: cacheKey,
-  });
-
   if (!orderedIds) {
-    console.time("1. loadProductIdsOnly");
     const idRecords = await loadProductIdsOnly(2000, customFilter);
-    console.timeEnd("1. loadProductIdsOnly");
 
-    console.time("2. search-filter");
     let filteredIds = idRecords;
     if (search) {
       const q = search.toLowerCase();
@@ -524,17 +512,12 @@ async function handleExternalProducts(req, res) {
         });
       }
     }
-    console.timeEnd("2. search-filter");
 
-    console.time("3. shuffle+mix");
     let shuffled = seed ? shuffleDeterministic(filteredIds, seed) : filteredIds;
     let mixed = mixByCategoryRoundRobin(shuffled, seed || "");
     orderedIds = mixed.map((p) => p.id);
-    console.timeEnd("3. shuffle+mix");
 
     shuffleOrderCache.set(orderCacheKey, orderedIds);
-  } else {
-    console.log("Using cached order for key:", orderCacheKey);
   }
 
   const totalItems = orderedIds.length;
@@ -544,9 +527,7 @@ async function handleExternalProducts(req, res) {
   const end = start + perPage;
   const pageIds = orderedIds.slice(start, end);
 
-  console.time("4. loadProductsByIds");
   const pageProducts = await loadProductsByIds(pageIds);
-  console.timeEnd("4. loadProductsByIds");
 
   const pageItems = pageProducts.map((p) => {
     const thumb = typeof p?.thumb === "string" ? String(p.thumb).trim() : "";
@@ -572,7 +553,6 @@ async function handleExternalProducts(req, res) {
 
   pageDataCache.set(cacheKey, payload);
   setCatalogCacheHeaders(res);
-  console.timeEnd("handleExternalProducts-total");
   return res.json(normalizeProductDescriptions(payload));
 }
 
