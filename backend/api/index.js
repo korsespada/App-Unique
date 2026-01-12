@@ -487,11 +487,20 @@ async function handleCatalogFilters(req, res) {
 
       const categoriesSet = new Set();
       const brandsSet = new Set();
+      const brandsByCategorySet = new Map();
 
       for (const p of items) {
         const categoryName = String(p?.expand?.category?.name || "").trim();
         const brandName = String(p?.expand?.brand?.name || "").trim();
-        if (categoryName) categoriesSet.add(categoryName);
+        if (categoryName) {
+          categoriesSet.add(categoryName);
+          if (!brandsByCategorySet.has(categoryName)) {
+            brandsByCategorySet.set(categoryName, new Set());
+          }
+          if (brandName) {
+            brandsByCategorySet.get(categoryName).add(brandName);
+          }
+        }
         if (brandName) brandsSet.add(brandName);
       }
 
@@ -500,99 +509,27 @@ async function handleCatalogFilters(req, res) {
       );
       const brands = Array.from(brandsSet).sort((a, b) => a.localeCompare(b));
       const brandsByCategory = Object.fromEntries(
-        categories.map((c) => [c, brands])
+        categories.map((c) => {
+          const set = brandsByCategorySet.get(c);
+          const arr = set ? Array.from(set) : [];
+          arr.sort((a, b) => a.localeCompare(b));
+          return [c, arr];
+        })
       );
 
       return { categories, brands, brandsByCategory };
     }
 
-    async function loadNamesFromCollection(collectionNames) {
-      let lastErr = null;
-
-      for (const collection of collectionNames) {
-        try {
-          const firstResp = await pb.get(
-            `/api/collections/${collection}/records`,
-            {
-              params: {
-                page: 1,
-                perPage: 2000,
-                sort: "name",
-                fields: "id,name",
-              },
-            }
-          );
-
-          const firstData = firstResp?.data;
-          const totalPages = Math.max(1, Number(firstData?.totalPages) || 1);
-          const items = Array.isArray(firstData?.items) ? firstData.items : [];
-
-          if (totalPages > 1) {
-            for (let page = 2; page <= totalPages; page += 1) {
-              const resp = await pb.get(
-                `/api/collections/${collection}/records`,
-                {
-                  params: {
-                    page,
-                    perPage: 2000,
-                    sort: "name",
-                    fields: "id,name",
-                  },
-                }
-              );
-              const data = resp?.data;
-              if (data && Array.isArray(data.items)) items.push(...data.items);
-            }
-          }
-
-          return items
-            .map((x) => String(x?.name || "").trim())
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b));
-        } catch (err) {
-          lastErr = err;
-          const status = extractAxiosStatus(err);
-          if (status && status !== 404) {
-            throw err;
-          }
-        }
-      }
-
-      if (lastErr) throw lastErr;
-      return [];
-    }
-
-    const [categories, brands] = await Promise.all([
-      loadNamesFromCollection(["categories", "category"]),
-      loadNamesFromCollection(["brands", "brand"]),
-    ]);
-
-    if (categories.length <= 1 || brands.length <= 1) {
-      const fromProducts = await loadFiltersFromProducts();
-      const payload = {
-        categories: fromProducts.categories,
-        brands: fromProducts.brands,
-        brandsByCategory: fromProducts.brandsByCategory,
-      };
-
-      lastGoodCatalogFilters = payload;
-      externalProductsCache.set(cacheKey, payload, 6 * 60 * 60);
-      setCatalogCacheHeaders(res);
-      return res.json(payload);
-    }
-
-    const brandsByCategory = Object.fromEntries(
-      categories.map((c) => [c, brands])
-    );
-
+    const fromProducts = await loadFiltersFromProducts();
     const payload = {
-      categories,
-      brands,
-      brandsByCategory,
+      categories: fromProducts.categories,
+      brands: fromProducts.brands,
+      brandsByCategory: fromProducts.brandsByCategory,
     };
 
+    catalogFiltersErrorCount = 0;
     lastGoodCatalogFilters = payload;
-    externalProductsCache.set(cacheKey, payload, 6 * 60 * 60);
+    externalProductsCache.set(cacheKey, payload, 12 * 60 * 60);
     setCatalogCacheHeaders(res);
     return res.json(payload);
   } catch (err) {
@@ -726,6 +663,56 @@ async function handleExternalProducts(req, res) {
   if (cached) {
     setCatalogCacheHeaders(res);
     return res.json(normalizeProductDescriptions(cached));
+  }
+
+  const isHomeUnfiltered = !search && !brand && !category;
+  if (isHomeUnfiltered) {
+    const orderCacheKey = `order:home:${seed || "default"}`;
+    let orderedIds = shuffleOrderCache.get(orderCacheKey);
+
+    if (!orderedIds) {
+      const idRecords = await loadProductIdsOnly(2000, 'status = "active"');
+      const shuffled = seed
+        ? shuffleDeterministic(idRecords, `home:${seed}`)
+        : shuffleDeterministic(idRecords, "home:default");
+      const mixed = mixByCategoryRoundRobin(shuffled, seed || "default");
+      orderedIds = mixed.map((p) => p.id);
+      shuffleOrderCache.set(orderCacheKey, orderedIds);
+    }
+
+    const totalItems = orderedIds.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * perPage;
+    const end = start + perPage;
+    const pageIds = orderedIds.slice(start, end);
+
+    const pageProducts = await loadProductsByIds(pageIds);
+    const pageItems = pageProducts.map((p) => {
+      const thumb = typeof p?.thumb === "string" ? String(p.thumb).trim() : "";
+      const firstImage =
+        Array.isArray(p?.images) && p.images.length
+          ? String(p.images[0]).trim()
+          : "";
+      const preview = thumb || firstImage;
+      return {
+        ...p,
+        thumb: preview,
+      };
+    });
+
+    const payload = {
+      products: pageItems,
+      page: safePage,
+      perPage,
+      totalPages,
+      totalItems,
+      hasNextPage: safePage < totalPages,
+    };
+
+    pageDataCache.set(cacheKey, payload);
+    setCatalogCacheHeaders(res);
+    return res.json(normalizeProductDescriptions(payload));
   }
 
   let filterParts = ['status = "active"'];
