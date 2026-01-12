@@ -10,6 +10,7 @@ import React, {
   useRef,
   useState
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import BottomNav from "./components/BottomNav";
 import TopNav from "./components/TopNav";
@@ -25,6 +26,7 @@ import HomeView from "./views/HomeView";
 import ProductDetailView from "./views/ProductDetailView";
 
 const App: React.FC = () => {
+  const queryClient = useQueryClient();
   const [currentView, setCurrentView] = useState<AppView>("home");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [pendingOpenProductId, setPendingOpenProductId] = useState<string>("");
@@ -399,6 +401,10 @@ const App: React.FC = () => {
     brand: activeBrand === "Все" ? undefined : activeBrand,
     category: activeCategory === "Все" ? undefined : activeCategory
   });
+
+  useEffect(() => {
+    queryClient.invalidateQueries(["external-products"]);
+  }, [searchQuery, activeBrand, activeCategory, queryClient]);
 
   useEffect(() => {
     let cancelled = false;
