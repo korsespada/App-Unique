@@ -1,5 +1,6 @@
 // Serverless function wrapper for Vercel
 const path = require("path");
+const { promises: fs } = require("fs");
 
 // Set the correct path for .env file
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
@@ -23,6 +24,37 @@ const {
 const app = express();
 
 const profilesCache = new NodeCache({ stdTTL: 60 });
+
+const CACHE_DIR = path.join(__dirname, "..", ".cache");
+const PRODUCTS_CACHE_FILE = path.join(CACHE_DIR, "products.json");
+const CATALOG_FILTERS_CACHE_FILE = path.join(CACHE_DIR, "catalog-filters.json");
+
+async function ensureCacheDir() {
+  try {
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+  } catch (err) {
+    console.warn("Failed to create cache directory:", err.message);
+  }
+}
+
+async function saveToFile(filePath, data) {
+  try {
+    await fs.writeFile(filePath, JSON.stringify(data));
+  } catch (err) {
+    console.warn(`Failed to save cache to ${filePath}:`, err.message);
+  }
+}
+
+async function loadFromFile(filePath) {
+  try {
+    const data = await fs.readFile(filePath, "utf-8");
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
+ensureCacheDir();
 
 function buildProfileFieldsFromTelegramUser(user) {
   if (!user || typeof user !== "object") return { username: "", nickname: "" };
@@ -342,16 +374,16 @@ app.use(
 );
 app.use(express.json());
 
-const externalProductsCache = new NodeCache({ stdTTL: 60 });
+const externalProductsCache = new NodeCache({ stdTTL: 10 * 60 });
 let lastGoodAllActiveProducts = null;
 let lastGoodCatalogFilters = null;
-const pbSnapshotCache = new NodeCache({ stdTTL: 5 * 60 });
+const pbSnapshotCache = new NodeCache({ stdTTL: 10 * 60 });
 
-const shuffleOrderCache = new NodeCache({ stdTTL: 15 * 60 });
-const pageDataCache = new NodeCache({ stdTTL: 3 * 60 });
+const shuffleOrderCache = new NodeCache({ stdTTL: 30 * 60 });
+const pageDataCache = new NodeCache({ stdTTL: 10 * 60 });
 
 function setCatalogCacheHeaders(res) {
-  res.set("Cache-Control", "s-maxage=60, stale-while-revalidate=30");
+  res.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
 }
 
 async function getAllActiveProductsSafe(perPage) {
@@ -401,6 +433,74 @@ async function handleCatalogFilters(req, res) {
   });
 
   try {
+    async function loadFiltersFromProducts() {
+      const pbProducts = axios.create({
+        baseURL: pbUrl,
+        timeout: 30000,
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      const firstResp = await pbProducts.get(
+        "/api/collections/products/records",
+        {
+          params: {
+            page: 1,
+            perPage: 2000,
+            filter: 'status = "active"',
+            sort: "-updated",
+            fields: "id,brand,category,expand.brand,expand.category",
+            expand: "brand,category",
+          },
+        }
+      );
+
+      const firstData = firstResp?.data;
+      const totalPages = Math.max(1, Number(firstData?.totalPages) || 1);
+      const items = Array.isArray(firstData?.items) ? firstData.items : [];
+
+      if (totalPages > 1) {
+        for (let page = 2; page <= totalPages; page += 1) {
+          const resp = await pbProducts.get(
+            "/api/collections/products/records",
+            {
+              params: {
+                page,
+                perPage: 2000,
+                filter: 'status = "active"',
+                sort: "-updated",
+                fields: "id,brand,category,expand.brand,expand.category",
+                expand: "brand,category",
+              },
+            }
+          );
+          const data = resp?.data;
+          if (data && Array.isArray(data.items)) items.push(...data.items);
+        }
+      }
+
+      const categoriesSet = new Set();
+      const brandsSet = new Set();
+
+      for (const p of items) {
+        const categoryName = String(p?.expand?.category?.name || "").trim();
+        const brandName = String(p?.expand?.brand?.name || "").trim();
+        if (categoryName) categoriesSet.add(categoryName);
+        if (brandName) brandsSet.add(brandName);
+      }
+
+      const categories = Array.from(categoriesSet).sort((a, b) =>
+        a.localeCompare(b)
+      );
+      const brands = Array.from(brandsSet).sort((a, b) => a.localeCompare(b));
+      const brandsByCategory = Object.fromEntries(
+        categories.map((c) => [c, brands])
+      );
+
+      return { categories, brands, brandsByCategory };
+    }
+
     async function loadNamesFromCollection(collectionNames) {
       let lastErr = null;
 
@@ -462,6 +562,20 @@ async function handleCatalogFilters(req, res) {
       loadNamesFromCollection(["brands", "brand"]),
     ]);
 
+    if (!categories.length || !brands.length) {
+      const fromProducts = await loadFiltersFromProducts();
+      const payload = {
+        categories: fromProducts.categories,
+        brands: fromProducts.brands,
+        brandsByCategory: fromProducts.brandsByCategory,
+      };
+
+      lastGoodCatalogFilters = payload;
+      externalProductsCache.set(cacheKey, payload, 6 * 60 * 60);
+      setCatalogCacheHeaders(res);
+      return res.json(payload);
+    }
+
     const brandsByCategory = Object.fromEntries(
       categories.map((c) => [c, brands])
     );
@@ -483,11 +597,63 @@ async function handleCatalogFilters(req, res) {
       message: err?.message || err,
     });
 
-    const fallback = lastGoodCatalogFilters || {
-      categories: [],
-      brands: [],
-      brandsByCategory: {},
-    };
+    let fallback = lastGoodCatalogFilters;
+    if (!fallback) {
+      try {
+        fallback = await (async () => {
+          const pbProducts = axios.create({
+            baseURL: pbUrl,
+            timeout: 30000,
+            headers: {
+              Accept: "application/json",
+            },
+          });
+
+          const resp = await pbProducts.get(
+            "/api/collections/products/records",
+            {
+              params: {
+                page: 1,
+                perPage: 2000,
+                filter: 'status = "active"',
+                sort: "-updated",
+                fields: "id,brand,category,expand.brand,expand.category",
+                expand: "brand,category",
+              },
+            }
+          );
+
+          const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
+          const categoriesSet = new Set();
+          const brandsSet = new Set();
+
+          for (const p of items) {
+            const categoryName = String(p?.expand?.category?.name || "").trim();
+            const brandName = String(p?.expand?.brand?.name || "").trim();
+            if (categoryName) categoriesSet.add(categoryName);
+            if (brandName) brandsSet.add(brandName);
+          }
+
+          const categories = Array.from(categoriesSet).sort((a, b) =>
+            a.localeCompare(b)
+          );
+          const brands = Array.from(brandsSet).sort((a, b) =>
+            a.localeCompare(b)
+          );
+          const brandsByCategory = Object.fromEntries(
+            categories.map((c) => [c, brands])
+          );
+
+          return { categories, brands, brandsByCategory };
+        })();
+      } catch {
+        fallback = {
+          categories: [],
+          brands: [],
+          brandsByCategory: {},
+        };
+      }
+    }
 
     externalProductsCache.set(cacheKey, fallback, 60);
     setCatalogCacheHeaders(res);
@@ -543,13 +709,10 @@ async function handleExternalProducts(req, res) {
     filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
   const customFilter = filterParts.join(" && ");
 
-  const orderCacheKey = `order:${seed}:${brand}:${category}`;
-  let orderedIds = shuffleOrderCache.get(orderCacheKey);
+  try {
+    const pbResult = await listActiveProducts(page, perPage, customFilter);
+    let products = pbResult.items;
 
-  if (!orderedIds) {
-    const idRecords = await loadProductIdsOnly(2000, customFilter);
-
-    let filteredIds = idRecords;
     if (search) {
       const q = search.toLowerCase();
       const tokens = q
@@ -557,7 +720,7 @@ async function handleExternalProducts(req, res) {
         .map((t) => t.trim())
         .filter(Boolean);
       if (tokens.length) {
-        filteredIds = idRecords.filter((p) => {
+        products = products.filter((p) => {
           const title = String(
             p?.title || p?.name || p?.product_id || p?.id || ""
           ).toLowerCase();
@@ -572,53 +735,134 @@ async function handleExternalProducts(req, res) {
       }
     }
 
-    let shuffled = seed ? shuffleDeterministic(filteredIds, seed) : filteredIds;
-    let mixed = mixByCategoryRoundRobin(shuffled, seed || "");
-    orderedIds = mixed.map((p) => p.id);
+    if (seed) {
+      products = shuffleDeterministic(products, seed);
+    }
 
-    shuffleOrderCache.set(orderCacheKey, orderedIds);
-  }
+    const totalItems = pbResult.totalItems || products.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
 
-  const totalItems = orderedIds.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
-  const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * perPage;
-  const end = start + perPage;
-  const pageIds = orderedIds.slice(start, end);
+    const pageItems = products.map((p) => {
+      const thumb = typeof p?.thumb === "string" ? String(p.thumb).trim() : "";
+      const firstImage =
+        Array.isArray(p?.images) && p.images.length
+          ? String(p.images[0]).trim()
+          : "";
+      const preview = thumb || firstImage;
+      return {
+        ...p,
+        thumb: preview,
+      };
+    });
 
-  const pageProducts = await loadProductsByIds(pageIds);
-
-  const pageItems = pageProducts.map((p) => {
-    const thumb = typeof p?.thumb === "string" ? String(p.thumb).trim() : "";
-    const firstImage =
-      Array.isArray(p?.images) && p.images.length
-        ? String(p.images[0]).trim()
-        : "";
-    const preview = thumb || firstImage;
-    return {
-      ...p,
-      thumb: preview,
+    const payload = {
+      products: pageItems,
+      page,
+      perPage,
+      totalPages,
+      totalItems,
+      hasNextPage: page < totalPages,
     };
-  });
 
-  const payload = {
-    products: pageItems,
-    page: safePage,
-    perPage,
-    totalPages,
-    totalItems,
-    hasNextPage: safePage < totalPages,
-  };
-
-  pageDataCache.set(cacheKey, payload);
-  setCatalogCacheHeaders(res);
-  return res.json(normalizeProductDescriptions(payload));
+    pageDataCache.set(cacheKey, payload);
+    setCatalogCacheHeaders(res);
+    return res.json(normalizeProductDescriptions(payload));
+  } catch (err) {
+    console.error("handleExternalProducts error:", err.message);
+    throw err;
+  }
 }
 
 // Health check
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
+
+// ISR endpoint for products with file caching
+app.get(
+  "/api/products/isr",
+  asyncRoute(async (req, res) => {
+    const cached = await loadFromFile(PRODUCTS_CACHE_FILE);
+    if (cached) {
+      res.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+      return res.json(normalizeProductDescriptions(cached));
+    }
+
+    try {
+      const products = await listActiveProducts(1, 200);
+      await saveToFile(PRODUCTS_CACHE_FILE, products);
+
+      res.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+      return res.json(normalizeProductDescriptions(products));
+    } catch (err) {
+      console.error("ISR products error:", err.message);
+      return res.status(500).json({ error: "Failed to load products" });
+    }
+  })
+);
+
+// ISR endpoint for catalog filters with file caching
+app.get(
+  "/api/catalog-filters/isr",
+  asyncRoute(async (req, res) => {
+    const cached = await loadFromFile(CATALOG_FILTERS_CACHE_FILE);
+    if (cached) {
+      res.set("Cache-Control", "s-maxage=600, stale-while-revalidate=1200");
+      return res.json(cached);
+    }
+
+    try {
+      const pbUrl = String(process.env.PB_URL || "").trim();
+      if (!pbUrl) {
+        throw new Error("PB_URL is not configured");
+      }
+
+      const pb = axios.create({
+        baseURL: pbUrl,
+        timeout: 15000,
+        headers: { Accept: "application/json" },
+      });
+
+      const [categoriesResp, brandsResp] = await Promise.all([
+        pb.get("/api/collections/categories/records", {
+          params: { page: 1, perPage: 2000, sort: "name", fields: "id,name" },
+        }),
+        pb.get("/api/collections/brands/records", {
+          params: { page: 1, perPage: 2000, sort: "name", fields: "id,name" },
+        }),
+      ]);
+
+      const categoriesItems = Array.isArray(categoriesResp?.data?.items)
+        ? categoriesResp.data.items
+        : [];
+      const brandsItems = Array.isArray(brandsResp?.data?.items)
+        ? brandsResp.data.items
+        : [];
+
+      const categories = categoriesItems
+        .map((x) => String(x?.name || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+      const brands = brandsItems
+        .map((x) => String(x?.name || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+
+      const brandsByCategory = Object.fromEntries(
+        categories.map((c) => [c, brands])
+      );
+
+      const payload = { categories, brands, brandsByCategory };
+      await saveToFile(CATALOG_FILTERS_CACHE_FILE, payload);
+
+      res.set("Cache-Control", "s-maxage=600, stale-while-revalidate=1200");
+      return res.json(payload);
+    } catch (err) {
+      console.error("ISR catalog filters error:", err.message);
+      return res.status(500).json({ error: "Failed to load catalog filters" });
+    }
+  })
+);
 
 // External products endpoint
 app.get(
