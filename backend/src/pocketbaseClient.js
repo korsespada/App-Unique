@@ -405,21 +405,26 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
     const hasBrandFilter = filter.includes("brand.name");
     const hasCategoryFilter = filter.includes("category.name");
 
+    const requestedExpands = [];
+    if (hasBrandFilter) requestedExpands.push("brand");
+    if (hasCategoryFilter) requestedExpands.push("category");
+
+    const fieldsParts = ["id", "category"];
+    if (hasBrandFilter) fieldsParts.push("brand");
+    if (requestedExpands.includes("brand")) fieldsParts.push("expand.brand");
+    if (requestedExpands.includes("category"))
+      fieldsParts.push("expand.category");
+
     const params = {
       page: 1,
       perPage: safePerPage,
       filter,
       sort: "-updated",
-      fields: hasBrandFilter ? "id,category,brand" : "id,category",
+      fields: fieldsParts.join(","),
     };
 
     if (hasBrandFilter || hasCategoryFilter) {
-      params.expand =
-        hasBrandFilter && hasCategoryFilter
-          ? "brand,category"
-          : hasBrandFilter
-          ? "brand"
-          : "category";
+      params.expand = requestedExpands.join(",");
     }
 
     console.log("PocketBase request params:", JSON.stringify(params, null, 2));
@@ -430,7 +435,6 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
 
     const firstData = firstResp?.data;
     if (!firstData) {
-      console.timeEnd("loadProductIdsOnly-total");
       return [];
     }
 
