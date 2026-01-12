@@ -473,6 +473,7 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
     });
 
     const statusText = Number.isFinite(status) ? String(status) : "unknown";
+    console.timeEnd("loadProductIdsOnly-total");
     throw new Error(`PocketBase error ${statusText}: ${msg}`);
   }
 
