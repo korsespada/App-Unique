@@ -479,9 +479,9 @@ async function handleExternalProducts(req, res) {
   }
 
   let filterParts = ['status = "active"'];
-  if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
+  if (brand) filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
   if (category)
-    filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
+    filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
   const customFilter = filterParts.join(" && ");
 
   const orderCacheKey = `order:${seed}:${brand}:${category}`;

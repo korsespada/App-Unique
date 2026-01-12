@@ -481,9 +481,10 @@ app.get("/api/:version/:shop/external-products", async (req, res) => {
 
     if (hasFilters) {
       let filterParts = ['status = "active"'];
-      if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
+      if (brand)
+        filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
       if (category)
-        filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
+        filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
       const filter = filterParts.join(" && ");
 
       const products = await listActiveProducts(page, perPage, filter);
@@ -562,9 +563,9 @@ app.get("/api/external-products", async (req, res) => {
 
   try {
     let filterParts = ['status = "active"'];
-    if (brand) filterParts.push(`brand = "${brand.replace(/"/g, '\\"')}"`);
+    if (brand) filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
     if (category)
-      filterParts.push(`category = "${category.replace(/"/g, '\\"')}"`);
+      filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
     const filter = filterParts.join(" && ");
 
     const products = await listActiveProducts(page, perPage, filter);
@@ -963,6 +964,27 @@ app.post(["/orders", "/api/orders"], orderRateLimiter, async (req, res) => {
 // Start server
 async function startServer() {
   const port = await getAvailablePort(PORT);
+
+  // Preload cache for faster first request
+  console.log("Preloading product order cache...");
+  try {
+    const { loadProductIdsOnly } = require("./pocketbaseClient");
+    const idRecords = await loadProductIdsOnly(2000, null);
+
+    // Shuffle and mix for default order (no seed, no filters)
+    const {
+      shuffleDeterministic,
+      mixByCategoryRoundRobin,
+    } = require("../api/index");
+    const shuffled = shuffleDeterministic(idRecords, "");
+    const mixed = mixByCategoryRoundRobin(shuffled, "");
+    const orderedIds = mixed.map((p) => p.id);
+
+    shuffleOrderCache.set("order:::", orderedIds);
+    console.log(`Preloaded ${orderedIds.length} product IDs to cache`);
+  } catch (err) {
+    console.warn("Failed to preload cache:", err.message);
+  }
 
   const server = require("http").createServer(app);
 
