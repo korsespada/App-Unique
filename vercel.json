@@ -8,5 +8,31 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
+  ],
+  "routes": [
+    {
+      "src": "/api/external-products",
+      "headers": {
+        "Cache-Control": "s-maxage=60, stale-while-revalidate=120"
+      }
+    },
+    {
+      "src": "/api/catalog-filters",
+      "headers": {
+        "Cache-Control": "s-maxage=300, stale-while-revalidate=600"
+      }
+    },
+    {
+      "src": "/api/products/isr",
+      "headers": {
+        "Cache-Control": "s-maxage=300, stale-while-revalidate=600"
+      }
+    },
+    {
+      "src": "/api/catalog-filters/isr",
+      "headers": {
+        "Cache-Control": "s-maxage=600, stale-while-revalidate=1200"
+      }
+    }
   ]
 }

@@ -105,12 +105,14 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
     fetcher,
     {
       getNextPageParam,
-      retry: 1,
+      retry: 2,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
       refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
+      refetchOnReconnect: true,
       refetchOnMount: false,
-      staleTime: 2 * 60 * 1000, // 2 минуты
-      cacheTime: 5 * 60 * 1000 // 5 минут
+      staleTime: 5 * 60 * 1000,
+      cacheTime: 10 * 60 * 1000,
+      keepPreviousData: true
     }
   );
 }

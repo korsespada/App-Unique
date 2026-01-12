@@ -1,9 +1,7 @@
-import {
- ArrowLeft, ChevronDown, Heart, Share 
-} from "lucide-react";
+import { ArrowLeft, ChevronDown, Heart, Share } from "lucide-react";
 import React from "react";
 
-import tgIcon from "../tg.svg";
+import tgIcon from "@/assets/images/tg.svg";
 import { Product } from "../types";
 
 type Props = {
@@ -292,7 +290,9 @@ export default function ProductDetailView({
 
             <button
               type="button"
-              onClick={() => toggleFavorite(selectedProduct.id, selectedProduct)}
+              onClick={() =>
+                toggleFavorite(selectedProduct.id, selectedProduct)
+              }
               aria-label={
                 isFavorited ? "Убрать из избранного" : "Добавить в избранное"
               }

@@ -1,0 +1,17 @@
+name: Warmup Vercel Functions
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # Каждые 5 минут
+  workflow_dispatch:
+
+jobs:
+  warmup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Warmup API endpoints
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" "https://your-app.vercel.app/api/external-products?page=1&perPage=1"
+          curl -s -o /dev/null -w "%{http_code}" "https://your-app.vercel.app/api/catalog-filters"
+          curl -s -o /dev/null -w "%{http_code}" "https://your-app.vercel.app/health"
+          echo "Warmup completed"
