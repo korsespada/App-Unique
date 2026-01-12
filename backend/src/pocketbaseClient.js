@@ -424,6 +424,8 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
           : "category";
     }
 
+    console.log("PocketBase request params:", JSON.stringify(params, null, 2));
+
     const firstResp = await api.get("/api/collections/products/records", {
       params,
     });
