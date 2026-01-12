@@ -400,8 +400,6 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
   let page = 1;
   let totalPages = 1;
 
-  console.time("loadProductIdsOnly-total");
-
   try {
     const filter = customFilter || 'status = "active"';
     const hasBrandFilter = filter.includes("brand.name");
@@ -480,11 +478,9 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
     });
 
     const statusText = Number.isFinite(status) ? String(status) : "unknown";
-    console.timeEnd("loadProductIdsOnly-total");
     throw new Error(`PocketBase error ${statusText}: ${msg}`);
   }
 
-  console.timeEnd("loadProductIdsOnly-total");
   console.log(
     `loadProductIdsOnly loaded ${allIds.length} items in ${totalPages} pages`
   );
