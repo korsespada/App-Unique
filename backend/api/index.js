@@ -401,40 +401,66 @@ async function handleCatalogFilters(req, res) {
   });
 
   try {
-    const [categoriesResp, brandsResp] = await Promise.all([
-      pb.get("/api/collections/categories/records", {
-        params: {
-          page: 1,
-          perPage: 2000,
-          sort: "name",
-          fields: "id,name",
-        },
-      }),
-      pb.get("/api/collections/brands/records", {
-        params: {
-          page: 1,
-          perPage: 2000,
-          sort: "name",
-          fields: "id,name",
-        },
-      }),
+    async function loadNamesFromCollection(collectionNames) {
+      let lastErr = null;
+
+      for (const collection of collectionNames) {
+        try {
+          const firstResp = await pb.get(
+            `/api/collections/${collection}/records`,
+            {
+              params: {
+                page: 1,
+                perPage: 2000,
+                sort: "name",
+                fields: "id,name",
+              },
+            }
+          );
+
+          const firstData = firstResp?.data;
+          const totalPages = Math.max(1, Number(firstData?.totalPages) || 1);
+          const items = Array.isArray(firstData?.items) ? firstData.items : [];
+
+          if (totalPages > 1) {
+            for (let page = 2; page <= totalPages; page += 1) {
+              const resp = await pb.get(
+                `/api/collections/${collection}/records`,
+                {
+                  params: {
+                    page,
+                    perPage: 2000,
+                    sort: "name",
+                    fields: "id,name",
+                  },
+                }
+              );
+              const data = resp?.data;
+              if (data && Array.isArray(data.items)) items.push(...data.items);
+            }
+          }
+
+          return items
+            .map((x) => String(x?.name || "").trim())
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b));
+        } catch (err) {
+          lastErr = err;
+          const status = extractAxiosStatus(err);
+          if (status && status !== 404) {
+            throw err;
+          }
+        }
+      }
+
+      if (lastErr) throw lastErr;
+      return [];
+    }
+
+    const [categories, brands] = await Promise.all([
+      loadNamesFromCollection(["categories", "category"]),
+      loadNamesFromCollection(["brands", "brand"]),
     ]);
-
-    const categoriesItems = Array.isArray(categoriesResp?.data?.items)
-      ? categoriesResp.data.items
-      : [];
-    const brandsItems = Array.isArray(brandsResp?.data?.items)
-      ? brandsResp.data.items
-      : [];
-
-    const categories = categoriesItems
-      .map((x) => String(x?.name || "").trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b));
-    const brands = brandsItems
-      .map((x) => String(x?.name || "").trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b));
 
     const brandsByCategory = Object.fromEntries(
       categories.map((c) => [c, brands])
