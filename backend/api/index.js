@@ -344,6 +344,7 @@ app.use(express.json());
 
 const externalProductsCache = new NodeCache({ stdTTL: 60 });
 let lastGoodAllActiveProducts = null;
+let lastGoodCatalogFilters = null;
 const pbSnapshotCache = new NodeCache({ stdTTL: 5 * 60 });
 
 const shuffleOrderCache = new NodeCache({ stdTTL: 15 * 60 });
@@ -399,49 +400,73 @@ async function handleCatalogFilters(req, res) {
     },
   });
 
-  const [categoriesResp, brandsResp] = await Promise.all([
-    pb.get("/api/collections/categories/records", {
-      params: {
-        page: 1,
-        perPage: 2000,
-        sort: "name",
-        fields: "id,name",
-      },
-    }),
-    pb.get("/api/collections/brands/records", {
-      params: {
-        page: 1,
-        perPage: 2000,
-        sort: "name",
-        fields: "id,name",
-      },
-    }),
-  ]);
+  try {
+    const [categoriesResp, brandsResp] = await Promise.all([
+      pb.get("/api/collections/categories/records", {
+        params: {
+          page: 1,
+          perPage: 2000,
+          sort: "name",
+          fields: "id,name",
+        },
+      }),
+      pb.get("/api/collections/brands/records", {
+        params: {
+          page: 1,
+          perPage: 2000,
+          sort: "name",
+          fields: "id,name",
+        },
+      }),
+    ]);
 
-  const categoriesItems = Array.isArray(categoriesResp?.data?.items)
-    ? categoriesResp.data.items
-    : [];
-  const brandsItems = Array.isArray(brandsResp?.data?.items)
-    ? brandsResp.data.items
-    : [];
+    const categoriesItems = Array.isArray(categoriesResp?.data?.items)
+      ? categoriesResp.data.items
+      : [];
+    const brandsItems = Array.isArray(brandsResp?.data?.items)
+      ? brandsResp.data.items
+      : [];
 
-  const categories = categoriesItems
-    .map((x) => String(x?.name || "").trim())
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b));
-  const brands = brandsItems
-    .map((x) => String(x?.name || "").trim())
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b));
+    const categories = categoriesItems
+      .map((x) => String(x?.name || "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    const brands = brandsItems
+      .map((x) => String(x?.name || "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
 
-  const payload = {
-    categories,
-    brands,
-    brandsByCategory: {},
-  };
-  externalProductsCache.set(cacheKey, payload);
-  setCatalogCacheHeaders(res);
-  return res.json(payload);
+    const brandsByCategory = Object.fromEntries(
+      categories.map((c) => [c, brands])
+    );
+
+    const payload = {
+      categories,
+      brands,
+      brandsByCategory,
+    };
+
+    lastGoodCatalogFilters = payload;
+    externalProductsCache.set(cacheKey, payload, 6 * 60 * 60);
+    setCatalogCacheHeaders(res);
+    return res.json(payload);
+  } catch (err) {
+    const status = extractAxiosStatus(err);
+    console.error("Catalog filters load failed", {
+      status,
+      message: err?.message || err,
+    });
+
+    const fallback = lastGoodCatalogFilters || {
+      categories: [],
+      brands: [],
+      brandsByCategory: {},
+    };
+
+    externalProductsCache.set(cacheKey, fallback, 60);
+    setCatalogCacheHeaders(res);
+    return res.json(fallback);
+  }
 }
 
 // Legacy name kept, but source is now PocketBase
