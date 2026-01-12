@@ -722,36 +722,83 @@ async function handleExternalProducts(req, res) {
   const customFilter = filterParts.join(" && ");
 
   try {
+    let totalItems = 0;
+    let allIds = [];
+
+    if (search || brand || category) {
+      const idRecords = await loadProductIdsOnly(2000, customFilter);
+      allIds = idRecords;
+
+      if (search) {
+        const q = search.toLowerCase();
+        const tokens = q
+          .split(" ")
+          .map((t) => t.trim())
+          .filter(Boolean);
+        if (tokens.length) {
+          allIds = idRecords.filter((p) => {
+            const title = String(
+              p?.title || p?.name || p?.product_id || p?.id || ""
+            ).toLowerCase();
+            const desc = String(p?.description || "").toLowerCase();
+            const pid = String(p?.product_id || p?.id || "").toLowerCase();
+            const hay = `${title} ${desc} ${pid}`;
+            for (const tok of tokens) {
+              if (!hay.includes(tok)) return false;
+            }
+            return true;
+          });
+        }
+      }
+
+      if (seed) {
+        allIds = shuffleDeterministic(allIds, seed);
+      }
+
+      totalItems = allIds.length;
+      const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+      const safePage = Math.min(page, totalPages);
+      const start = (safePage - 1) * perPage;
+      const end = start + perPage;
+      const pageIds = allIds.slice(start, end);
+
+      const pageProducts = await loadProductsByIds(pageIds);
+      const pageItems = pageProducts.map((p) => {
+        const thumb =
+          typeof p?.thumb === "string" ? String(p.thumb).trim() : "";
+        const firstImage =
+          Array.isArray(p?.images) && p.images.length
+            ? String(p.images[0]).trim()
+            : "";
+        const preview = thumb || firstImage;
+        return {
+          ...p,
+          thumb: preview,
+        };
+      });
+
+      const payload = {
+        products: pageItems,
+        page: safePage,
+        perPage,
+        totalPages,
+        totalItems,
+        hasNextPage: safePage < totalPages,
+      };
+
+      pageDataCache.set(cacheKey, payload);
+      setCatalogCacheHeaders(res);
+      return res.json(normalizeProductDescriptions(payload));
+    }
+
     const pbResult = await listActiveProducts(page, perPage, customFilter);
     let products = pbResult.items;
-
-    if (search) {
-      const q = search.toLowerCase();
-      const tokens = q
-        .split(" ")
-        .map((t) => t.trim())
-        .filter(Boolean);
-      if (tokens.length) {
-        products = products.filter((p) => {
-          const title = String(
-            p?.title || p?.name || p?.product_id || p?.id || ""
-          ).toLowerCase();
-          const desc = String(p?.description || "").toLowerCase();
-          const pid = String(p?.product_id || p?.id || "").toLowerCase();
-          const hay = `${title} ${desc} ${pid}`;
-          for (const tok of tokens) {
-            if (!hay.includes(tok)) return false;
-          }
-          return true;
-        });
-      }
-    }
 
     if (seed) {
       products = shuffleDeterministic(products, seed);
     }
 
-    const totalItems = pbResult.totalItems || products.length;
+    totalItems = pbResult.totalItems || products.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
 
     const pageItems = products.map((p) => {
