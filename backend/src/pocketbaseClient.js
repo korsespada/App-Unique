@@ -25,7 +25,7 @@ function pbApi() {
   return axios.create({
     baseURL: url,
     headers,
-    timeout: 10000,
+    timeout: 60000,
   });
 }
 
@@ -335,13 +335,22 @@ async function listAllActiveProducts(perPage = 2000) {
   const safePerPage = Math.max(1, Math.min(2000, Number(perPage) || 2000));
 
   const first = await listActiveProducts(1, safePerPage);
-  const all = [...(first.items || [])];
-
   const totalPages = Math.max(1, Number(first.totalPages) || 1);
+
+  if (totalPages <= 1) {
+    return first;
+  }
+
+  const pagePromises = [];
   for (let page = 2; page <= totalPages; page += 1) {
-    const next = await listActiveProducts(page, safePerPage);
-    if (Array.isArray(next?.items) && next.items.length) {
-      all.push(...next.items);
+    pagePromises.push(listActiveProducts(page, safePerPage));
+  }
+
+  const remainingPages = await Promise.all(pagePromises);
+  const all = [...(first.items || [])];
+  for (const page of remainingPages) {
+    if (Array.isArray(page?.items) && page.items.length) {
+      all.push(...page.items);
     }
   }
 
@@ -394,40 +403,60 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
   console.time("loadProductIdsOnly-total");
 
   try {
-    while (page <= totalPages) {
-      const filter = customFilter || 'status = "active"';
-      const hasBrandFilter = filter.includes("brand.name");
-      const hasCategoryFilter = filter.includes("category.name");
+    const filter = customFilter || 'status = "active"';
+    const hasBrandFilter = filter.includes("brand.name");
+    const hasCategoryFilter = filter.includes("category.name");
 
-      const params = {
-        page,
-        perPage: safePerPage,
-        filter,
-        sort: "-updated",
-        fields: hasBrandFilter ? "id,category,brand" : "id,category",
-      };
+    const params = {
+      page: 1,
+      perPage: safePerPage,
+      filter,
+      sort: "-updated",
+      fields: hasBrandFilter ? "id,category,brand" : "id,category",
+    };
 
-      if (hasBrandFilter || hasCategoryFilter) {
-        params.expand =
-          hasBrandFilter && hasCategoryFilter
-            ? "brand,category"
-            : hasBrandFilter
-            ? "brand"
-            : "category";
+    if (hasBrandFilter || hasCategoryFilter) {
+      params.expand =
+        hasBrandFilter && hasCategoryFilter
+          ? "brand,category"
+          : hasBrandFilter
+          ? "brand"
+          : "category";
+    }
+
+    const firstResp = await api.get("/api/collections/products/records", {
+      params,
+    });
+
+    const firstData = firstResp?.data;
+    if (!firstData) {
+      console.timeEnd("loadProductIdsOnly-total");
+      return [];
+    }
+
+    const firstItems = Array.isArray(firstData.items) ? firstData.items : [];
+    allIds.push(...firstItems);
+    totalPages = Number(firstData.totalPages) || 1;
+
+    if (totalPages > 1) {
+      const pagePromises = [];
+      for (let p = 2; p <= totalPages; p += 1) {
+        const pageParams = {
+          ...params,
+          page: p,
+        };
+        pagePromises.push(
+          api.get("/api/collections/products/records", { params: pageParams })
+        );
       }
 
-      const resp = await api.get("/api/collections/products/records", {
-        params,
-      });
-
-      const data = resp?.data;
-      if (!data) break;
-
-      const items = Array.isArray(data.items) ? data.items : [];
-      allIds.push(...items);
-
-      totalPages = Number(data.totalPages) || 1;
-      page = page + 1;
+      const remainingPages = await Promise.all(pagePromises);
+      for (const resp of remainingPages) {
+        const data = resp?.data;
+        if (data && Array.isArray(data.items)) {
+          allIds.push(...data.items);
+        }
+      }
     }
   } catch (err) {
     const status = err?.response?.status;

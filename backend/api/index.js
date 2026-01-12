@@ -481,18 +481,20 @@ async function handleExternalProducts(req, res) {
     return res.json(normalizeProductDescriptions(cached));
   }
 
-  const hasFilters = brand || category;
-  let customFilter = null;
-  if (hasFilters) {
-    let filterParts = ['status = "active"'];
-    if (brand) filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
-    if (category)
-      filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
-    customFilter = filterParts.join(" && ");
-  }
+  let filterParts = ['status = "active"'];
+  if (brand) filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
+  if (category)
+    filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
+  const customFilter = filterParts.join(" && ");
 
   const orderCacheKey = `order:${seed}:${brand}:${category}`;
   let orderedIds = shuffleOrderCache.get(orderCacheKey);
+
+  console.log("Cache check:", {
+    orderCacheKey,
+    hasOrderCache: !!orderedIds,
+    pageCacheKey: cacheKey,
+  });
 
   if (!orderedIds) {
     console.time("1. loadProductIdsOnly");
@@ -555,7 +557,7 @@ async function handleExternalProducts(req, res) {
     const preview = thumb || firstImage;
     return {
       ...p,
-      images: preview ? [preview] : [],
+      thumb: preview,
     };
   });
 
@@ -981,3 +983,7 @@ app.use((err, req, res, next) => {
 
 // Export for Vercel serverless
 module.exports = app;
+
+// Export utility functions for cache preloading
+module.exports.shuffleDeterministic = shuffleDeterministic;
+module.exports.mixByCategoryRoundRobin = mixByCategoryRoundRobin;
