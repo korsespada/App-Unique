@@ -96,6 +96,8 @@ const usedInitDataHashCache = new NodeCache({
   stdTTL: ORDER_ANTI_REPLAY_TTL_SECONDS,
 });
 
+const relationNameToIdCache = new NodeCache({ stdTTL: 6 * 60 * 60 });
+
 const normalizeDescription = (s) =>
   typeof s === "string" ? s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n") : s;
 
@@ -455,6 +457,55 @@ async function getCachedActiveProducts() {
   }
 }
 
+async function resolveRelationIdByNameSafe(collection, name) {
+  const safeName = String(name || "").trim();
+  if (!safeName) return "";
+
+  const cacheKey = `relid:${collection}:${safeName.toLowerCase()}`;
+  const cached = relationNameToIdCache.get(cacheKey);
+  if (typeof cached === "string") return cached;
+
+  const api = axios.create({
+    baseURL: String(process.env.PB_URL || "")
+      .trim()
+      .replace(/\/+$/, ""),
+    timeout: 30000,
+    headers: {
+      Accept: "application/json",
+      ...(String(process.env.PB_TOKEN || "").trim()
+        ? {
+            Authorization: String(process.env.PB_TOKEN || "")
+              .trim()
+              .includes(" ")
+              ? String(process.env.PB_TOKEN || "").trim()
+              : `Bearer ${String(process.env.PB_TOKEN || "").trim()}`,
+          }
+        : {}),
+    },
+  });
+
+  const resp = await api.get(`/api/collections/${collection}/records`, {
+    params: {
+      page: 1,
+      perPage: 2000,
+      fields: "id,name",
+      sort: "name",
+    },
+  });
+
+  const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
+  const found = items.find((it) => String(it?.name || "").trim() === safeName);
+  const id = found?.id ? String(found.id).trim() : "";
+
+  if (!id) {
+    relationNameToIdCache.set(cacheKey, "", 5 * 60);
+    return "";
+  }
+
+  relationNameToIdCache.set(cacheKey, id);
+  return id;
+}
+
 // Routes
 app.get("/api/:version/:shop/external-products", async (req, res) => {
   const { version, shop } = req.params;
@@ -481,10 +532,22 @@ app.get("/api/:version/:shop/external-products", async (req, res) => {
 
     if (hasFilters) {
       let filterParts = ['status = "active"'];
-      if (brand)
-        filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
+      let brandId = "";
+      let categoryId = "";
+      if (brand) brandId = await resolveRelationIdByNameSafe("brands", brand);
       if (category)
-        filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
+        categoryId = await resolveRelationIdByNameSafe("categories", category);
+
+      if ((brand && !brandId) || (category && !categoryId)) {
+        const payload = normalizeProductDescriptions(
+          buildPagedExternalProductsResponse([], { page, perPage })
+        );
+        externalProductsCache.set(cacheKey, payload);
+        return res.json(payload);
+      }
+
+      if (brandId) filterParts.push(`brand = "${brandId}"`);
+      if (categoryId) filterParts.push(`category = "${categoryId}"`);
       const filter = filterParts.join(" && ");
 
       const products = await listActiveProducts(page, perPage, filter);
@@ -563,9 +626,22 @@ app.get("/api/external-products", async (req, res) => {
 
   try {
     let filterParts = ['status = "active"'];
-    if (brand) filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
+    let brandId = "";
+    let categoryId = "";
+    if (brand) brandId = await resolveRelationIdByNameSafe("brands", brand);
     if (category)
-      filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
+      categoryId = await resolveRelationIdByNameSafe("categories", category);
+
+    if ((brand && !brandId) || (category && !categoryId)) {
+      const payload = normalizeProductDescriptions({
+        ...buildPagedExternalProductsResponse([], { page, perPage }),
+      });
+      externalProductsCache.set(cacheKey, payload);
+      return res.json(payload);
+    }
+
+    if (brandId) filterParts.push(`brand = "${brandId}"`);
+    if (categoryId) filterParts.push(`category = "${categoryId}"`);
     const filter = filterParts.join(" && ");
 
     const products = await listActiveProducts(page, perPage, filter);
