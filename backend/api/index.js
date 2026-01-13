@@ -382,9 +382,39 @@ const pbSnapshotCache = new NodeCache({ stdTTL: 5 * 60 });
 
 const shuffleOrderCache = new NodeCache({ stdTTL: 15 * 60 });
 const pageDataCache = new NodeCache({ stdTTL: 3 * 60 });
+const relationNameToIdCache = new NodeCache({ stdTTL: 6 * 60 * 60 });
 
 function setCatalogCacheHeaders(res) {
   res.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+}
+
+async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
+  const safeName = String(name || "").trim();
+  if (!safeName) return "";
+
+  const cacheKey = `relid:${collection}:${safeName.toLowerCase()}`;
+  const cached = relationNameToIdCache.get(cacheKey);
+  if (typeof cached === "string") return cached;
+
+  const pb = axios.create({
+    baseURL: pbUrl,
+    timeout: 15000,
+    headers: pbHeaders,
+  });
+
+  const resp = await pb.get(`/api/collections/${collection}/records`, {
+    params: {
+      page: 1,
+      perPage: 1,
+      filter: `name = "${safeName.replace(/"/g, '\\"')}"`,
+      fields: "id",
+    },
+  });
+
+  const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
+  const id = items[0]?.id ? String(items[0].id).trim() : "";
+  relationNameToIdCache.set(cacheKey, id);
+  return id;
 }
 
 async function getAllActiveProductsSafe(perPage) {
@@ -440,6 +470,60 @@ async function handleCatalogFilters(req, res) {
   });
 
   try {
+    async function loadNamesFromCollection(
+      collection,
+      fallbackCollections = []
+    ) {
+      const collections = [collection, ...(fallbackCollections || [])];
+      let lastErr = null;
+
+      for (const col of collections) {
+        try {
+          const firstResp = await pb.get(`/api/collections/${col}/records`, {
+            params: {
+              page: 1,
+              perPage: 2000,
+              sort: "name",
+              fields: "id,name",
+            },
+          });
+
+          const firstData = firstResp?.data;
+          const totalPages = Math.max(1, Number(firstData?.totalPages) || 1);
+          const items = Array.isArray(firstData?.items) ? firstData.items : [];
+
+          if (totalPages > 1) {
+            for (let page = 2; page <= totalPages; page += 1) {
+              const resp = await pb.get(`/api/collections/${col}/records`, {
+                params: {
+                  page,
+                  perPage: 2000,
+                  sort: "name",
+                  fields: "id,name",
+                },
+              });
+              const data = resp?.data;
+              if (data && Array.isArray(data.items)) items.push(...data.items);
+            }
+          }
+
+          return items
+            .map((x) => String(x?.name || "").trim())
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b));
+        } catch (err) {
+          lastErr = err;
+          const status = extractAxiosStatus(err);
+          if (status && status !== 404) {
+            throw err;
+          }
+        }
+      }
+
+      if (lastErr) throw lastErr;
+      return [];
+    }
+
     async function loadFiltersFromProducts() {
       const pbProducts = axios.create({
         baseURL: pbUrl,
@@ -520,12 +604,26 @@ async function handleCatalogFilters(req, res) {
       return { categories, brands, brandsByCategory };
     }
 
-    const fromProducts = await loadFiltersFromProducts();
-    const payload = {
-      categories: fromProducts.categories,
-      brands: fromProducts.brands,
-      brandsByCategory: fromProducts.brandsByCategory,
-    };
+    const [allCategories, allBrands, fromProducts] = await Promise.all([
+      loadNamesFromCollection("categories", ["category"]),
+      loadNamesFromCollection("brands", ["brand"]),
+      loadFiltersFromProducts(),
+    ]);
+
+    const categories = allCategories.length
+      ? allCategories
+      : fromProducts.categories;
+    const brands = allBrands.length ? allBrands : fromProducts.brands;
+
+    const brandsByCategory = Object.fromEntries(
+      categories.map((c) => {
+        const list = fromProducts.brandsByCategory?.[c];
+        const arr = Array.isArray(list) ? list : [];
+        return [c, arr];
+      })
+    );
+
+    const payload = { categories, brands, brandsByCategory };
 
     catalogFiltersErrorCount = 0;
     lastGoodCatalogFilters = payload;
@@ -715,10 +813,56 @@ async function handleExternalProducts(req, res) {
     return res.json(normalizeProductDescriptions(payload));
   }
 
+  const pbUrl = String(process.env.PB_URL || "").trim();
+  if (!pbUrl) {
+    throw new Error("PB_URL is not configured");
+  }
+
+  const pbToken = String(process.env.PB_TOKEN || "").trim();
+  const pbHeaders = { Accept: "application/json" };
+  if (pbToken) {
+    pbHeaders.Authorization = pbToken.includes(" ")
+      ? pbToken
+      : `Bearer ${pbToken}`;
+  }
+
+  let brandId = "";
+  let categoryId = "";
+  if (brand) {
+    brandId = await resolveRelationIdByName({
+      collection: "brands",
+      name: brand,
+      pbUrl,
+      pbHeaders,
+    });
+  }
+  if (category) {
+    categoryId = await resolveRelationIdByName({
+      collection: "categories",
+      name: category,
+      pbUrl,
+      pbHeaders,
+    });
+  }
+
+  if ((brand && !brandId) || (category && !categoryId)) {
+    const payload = {
+      products: [],
+      page: 1,
+      perPage,
+      totalPages: 1,
+      totalItems: 0,
+      hasNextPage: false,
+    };
+    pageDataCache.set(cacheKey, payload);
+    setCatalogCacheHeaders(res);
+    return res.json(normalizeProductDescriptions(payload));
+  }
+
   let filterParts = ['status = "active"'];
-  if (brand) filterParts.push(`brand.name = "${brand.replace(/"/g, '\\"')}"`);
-  if (category)
-    filterParts.push(`category.name = "${category.replace(/"/g, '\\"')}"`);
+  if (brandId) filterParts.push(`brand = "${brandId.replace(/"/g, '\\"')}"`);
+  if (categoryId)
+    filterParts.push(`category = "${categoryId.replace(/"/g, '\\"')}"`);
   const customFilter = filterParts.join(" && ");
 
   try {
