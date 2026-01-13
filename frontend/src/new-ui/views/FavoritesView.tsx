@@ -45,6 +45,8 @@ export default function FavoritesView({
           {favoriteProducts.map((product) => {
             const isFavorited = favorites.includes(String(product.id));
             const isBumping = favoriteBumpId === String(product.id);
+            const thumbUrl = getThumbUrl(String(product.thumb || ""));
+            const image0Url = getThumbUrl(String(product.images?.[0] || ""));
 
             return (
               <div
@@ -59,13 +61,13 @@ export default function FavoritesView({
                 }}>
                 <div className="premium-shadow group-hover:bg-white/7 relative mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-white/5 transition-all duration-300 ease-out">
                   <img
-                    src={product.thumb || getThumbUrl(product.images[0])}
+                    src={thumbUrl || image0Url}
                     alt={product.name}
                     loading="lazy"
                     decoding="async"
                     className="h-full w-full object-cover"
                     onError={(e) => {
-                      const fallback = getThumbUrl(product.images[0]);
+                      const fallback = image0Url;
                       if (fallback && e.currentTarget.src !== fallback) {
                         e.currentTarget.src = fallback;
                       }

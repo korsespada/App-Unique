@@ -60,84 +60,92 @@ export default function CartView({
       ) : (
         <>
           <div className="mb-16 space-y-8">
-            {cart.map((item) => (
-              <div
-                key={item.id}
-                className="group flex cursor-pointer items-center gap-8"
-                onClick={() => navigateToProduct(item)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                }}>
-                <div className="premium-shadow h-32 w-28 flex-shrink-0 overflow-hidden rounded-[1.25rem] bg-white/5 transition-transform duration-500 ease-out group-hover:scale-[1.03]">
-                  <img
-                    src={item.thumb || getThumbUrl(item.images[0], "240x320")}
-                    alt={item.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover"
-                    onError={(e) => {
-                      const fallback = getThumbUrl(item.images[0], "240x320");
-                      if (fallback && e.currentTarget.src !== fallback) {
-                        e.currentTarget.src = fallback;
-                      }
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                    }}
-                  />
-                </div>
-                <div className="flex flex-1 flex-col gap-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="mb-1 text-[9px] font-light uppercase tracking-[0.34em] text-white/40">
-                        {item.brand}
-                      </p>
-                      <h4 className="mb-1 text-[15px] font-semibold leading-tight text-white">
-                        {item.name}
-                      </h4>
-                      {item.hasPrice !== false && Number(item.price) > 0 ? (
-                        <p className="text-sm font-bold text-white/80">
-                          {Number(item.price).toLocaleString()} ₽
+            {cart.map((item) => {
+              const thumbUrl = getThumbUrl(String(item.thumb || ""), "240x320");
+              const image0Url = getThumbUrl(
+                String(item.images?.[0] || ""),
+                "240x320"
+              );
+
+              return (
+                <div
+                  key={item.id}
+                  className="group flex cursor-pointer items-center gap-8"
+                  onClick={() => navigateToProduct(item)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                  }}>
+                  <div className="premium-shadow h-32 w-28 flex-shrink-0 overflow-hidden rounded-[1.25rem] bg-white/5 transition-transform duration-500 ease-out group-hover:scale-[1.03]">
+                    <img
+                      src={thumbUrl || image0Url}
+                      alt={item.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        const fallback = image0Url;
+                        if (fallback && e.currentTarget.src !== fallback) {
+                          e.currentTarget.src = fallback;
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="mb-1 text-[9px] font-light uppercase tracking-[0.34em] text-white/40">
+                          {item.brand}
                         </p>
-                      ) : (
-                        <p className="text-white/55 text-[12px] font-semibold">
-                          Цена по запросу
-                        </p>
-                      )}
+                        <h4 className="mb-1 text-[15px] font-semibold leading-tight text-white">
+                          {item.name}
+                        </h4>
+                        {item.hasPrice !== false && Number(item.price) > 0 ? (
+                          <p className="text-sm font-bold text-white/80">
+                            {Number(item.price).toLocaleString()} ₽
+                          </p>
+                        ) : (
+                          <p className="text-white/55 text-[12px] font-semibold">
+                            Цена по запросу
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateQuantity(item.id, -item.quantity);
+                        }}
+                        className="p-2 text-white/60 transition-colors hover:text-red-400">
+                        <Trash2 size={20} />
+                      </button>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        updateQuantity(item.id, -item.quantity);
-                      }}
-                      className="p-2 text-white/60 transition-colors hover:text-red-400">
-                      <Trash2 size={20} />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-4 self-start rounded-2xl border border-white/10 bg-white/5 px-2 py-1.5">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (item.quantity > 1) updateQuantity(item.id, -1);
-                      }}
-                      className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]">
-                      <Minus size={14} />
-                    </button>
-                    <span className="min-w-[20px] text-center text-xs font-semibold text-white/80">
-                      {item.quantity}
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        updateQuantity(item.id, 1);
-                      }}
-                      className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]">
-                      <Plus size={14} />
-                    </button>
+                    <div className="flex items-center gap-4 self-start rounded-2xl border border-white/10 bg-white/5 px-2 py-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (item.quantity > 1) updateQuantity(item.id, -1);
+                        }}
+                        className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]">
+                        <Minus size={14} />
+                      </button>
+                      <span className="min-w-[20px] text-center text-xs font-semibold text-white/80">
+                        {item.quantity}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateQuantity(item.id, 1);
+                        }}
+                        className="rounded-xl p-2 transition-all duration-200 ease-out hover:bg-white/10 active:scale-[0.98]">
+                        <Plus size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mb-10 w-full rounded-[3.5rem] border border-white/10 bg-white/5 p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl">
