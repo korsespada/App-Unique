@@ -144,6 +144,7 @@ export default function ProductDetailView({
         </button>
 
         <img
+          key={`layer-a:${detailLayerASrc || "empty"}`}
           src={detailLayerASrc}
           alt={selectedProduct.name}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
@@ -153,6 +154,7 @@ export default function ProductDetailView({
         />
 
         <img
+          key={`layer-b:${detailLayerBSrc || "empty"}`}
           src={detailLayerBSrc}
           alt={selectedProduct.name}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
