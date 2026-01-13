@@ -1,6 +1,4 @@
-import {
- Minus, Plus, ShoppingBag, Trash2 
-} from "lucide-react";
+import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import React from "react";
 
 import { CartItem, Product } from "../types";
@@ -78,7 +76,10 @@ export default function CartView({
                     decoding="async"
                     className="h-full w-full object-cover"
                     onError={(e) => {
-                      e.currentTarget.src = item.images[0];
+                      const fallback = getThumbUrl(item.images[0], "240x320");
+                      if (fallback && e.currentTarget.src !== fallback) {
+                        e.currentTarget.src = fallback;
+                      }
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();

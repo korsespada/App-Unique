@@ -65,7 +65,10 @@ export default function FavoritesView({
                     decoding="async"
                     className="h-full w-full object-cover"
                     onError={(e) => {
-                      e.currentTarget.src = product.images[0];
+                      const fallback = getThumbUrl(product.images[0]);
+                      if (fallback && e.currentTarget.src !== fallback) {
+                        e.currentTarget.src = fallback;
+                      }
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();

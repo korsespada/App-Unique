@@ -1,4 +1,8 @@
 export const VKCLOUD_HOST = "hb.ru-msk.vkcloud-storage.ru";
+export const VKCLOUD_HOST_ALIASES = [
+  "hb.ru-msk.vkcloud-storage.ru",
+  "yeezy-app.hb.ru-msk.vkcloud-storage.ru"
+];
 export const VKCLOUD_ORIG_BUCKET = "yeezy-app";
 export const VKCLOUD_THUMBS_BUCKET = "yeezy-app-thumbs";
 
@@ -16,7 +20,7 @@ export function getThumbUrl(url: string, thumb = "400x500") {
     const u = new URL(raw);
 
     if (
-      u.hostname === VKCLOUD_HOST &&
+      VKCLOUD_HOST_ALIASES.includes(u.hostname) &&
       (u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`) ||
         u.pathname.startsWith(`/${VKCLOUD_THUMBS_BUCKET}/`))
     ) {
@@ -62,7 +66,7 @@ export function getDetailImageUrl(url: string) {
   try {
     const u = new URL(raw);
     if (
-      u.hostname === VKCLOUD_HOST &&
+      VKCLOUD_HOST_ALIASES.includes(u.hostname) &&
       u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`)
     ) {
       return toProxyUrl(u.toString());

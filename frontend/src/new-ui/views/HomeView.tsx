@@ -183,7 +183,10 @@ export default function HomeView({
                     className="pointer-events-none h-full w-full select-none object-cover"
                     draggable={false}
                     onError={(e) => {
-                      e.currentTarget.src = product.images[0];
+                      const fallback = getThumbUrl(product.images[0]);
+                      if (fallback && e.currentTarget.src !== fallback) {
+                        e.currentTarget.src = fallback;
+                      }
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
