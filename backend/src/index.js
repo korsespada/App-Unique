@@ -395,7 +395,13 @@ app.get("/health", (req, res) => {
   res.json({ 
     status: "ok", 
     timestamp: new Date().toISOString(),
-    cache: cacheHealth
+    cache: cacheHealth,
+    version: "2026-01-13-auth-fix",
+    authConfig: {
+      maxAgeSeconds: TG_ORDER_INITDATA_MAX_AGE_SECONDS,
+      orderRateMax: ORDER_RATE_MAX,
+      orderRateWindow: ORDER_RATE_WINDOW_MS,
+    }
   });
 });
 
@@ -424,6 +430,31 @@ app.post("/api/cache/invalidate", (req, res) => {
   }
   
   res.json({ success: true, invalidated: type });
+});
+
+// Debug endpoint for testing Telegram auth (remove in production)
+app.post("/api/debug/auth", (req, res) => {
+  const botToken = process.env.BOT_TOKEN;
+  const { initData } = req.body;
+  
+  if (!botToken) {
+    return res.status(500).json({ error: "BOT_TOKEN not configured" });
+  }
+  
+  const auth = validateTelegramInitData(initData, botToken, {
+    maxAgeSeconds: 300,
+  });
+  
+  res.json({
+    ok: auth.ok,
+    error: auth.error,
+    debug: auth.debug,
+    user: auth.user ? {
+      id: auth.user.id,
+      first_name: auth.user.first_name,
+      username: auth.user.username,
+    } : null,
+  });
 });
 
 app.get("/", (req, res) => {

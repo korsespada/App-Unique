@@ -88,6 +88,16 @@ function validateTelegramInitData(initData, botToken, options = {}) {
     const botIdFromToken = String(botTokenStr).split(':')[0] || '';
     const botTokenSha256Prefix = crypto.createHash('sha256').update(botTokenStr).digest('hex').slice(0, 12);
     
+    // Детальное логирование для отладки
+    console.error('[TG Auth] Signature validation failed:', {
+      receivedHash: String(hash || '').slice(0, 20) + '...',
+      calculatedV2: String(calculatedHashV2 || '').slice(0, 20) + '...',
+      calculatedV1: String(calculatedHashV1 || '').slice(0, 20) + '...',
+      botIdFromToken,
+      keysInData: Object.keys(dataWithoutSignature).sort(),
+      dataCheckStringPreview: dataCheckString.slice(0, 100) + '...',
+    });
+    
     return {
       ok: false,
       error: 'initData не прошёл проверку подписи',
