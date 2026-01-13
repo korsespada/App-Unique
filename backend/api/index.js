@@ -9,7 +9,6 @@ require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const NodeCache = require("node-cache");
 const { validateTelegramInitData } = require("../src/telegramWebAppAuth");
 const {
   listActiveProducts,
@@ -20,10 +19,9 @@ const {
   loadProductIdsOnly,
   loadProductsByIds,
 } = require("../src/pocketbaseClient");
+const cacheManager = require("../src/cacheManager");
 
 const app = express();
-
-const profilesCache = new NodeCache({ stdTTL: 60 });
 
 const CACHE_DIR = path.join(__dirname, "..", ".cache");
 const PRODUCTS_CACHE_FILE = path.join(CACHE_DIR, "products.json");
@@ -374,15 +372,10 @@ app.use(
 );
 app.use(express.json());
 
-const externalProductsCache = new NodeCache({ stdTTL: 60 });
+// Caches are now managed by cacheManager
 let lastGoodAllActiveProducts = null;
 let lastGoodCatalogFilters = null;
 let catalogFiltersErrorCount = 0;
-const pbSnapshotCache = new NodeCache({ stdTTL: 5 * 60 });
-
-const shuffleOrderCache = new NodeCache({ stdTTL: 15 * 60 });
-const pageDataCache = new NodeCache({ stdTTL: 3 * 60 });
-const relationNameToIdCache = new NodeCache({ stdTTL: 6 * 60 * 60 });
 
 function setCatalogCacheHeaders(res) {
   res.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
@@ -402,7 +395,7 @@ async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
   if (!safeName) return "";
 
   const cacheKey = `relid:${collection}:${safeName.toLowerCase()}`;
-  const cached = relationNameToIdCache.get(cacheKey);
+  const cached = cacheManager.get("relations", cacheKey);
   if (typeof cached === "string") return cached;
 
   const pb = axios.create({
@@ -442,17 +435,17 @@ async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
 
   // cache misses shortly to avoid repeated PB calls for non-existing names
   if (!id) {
-    relationNameToIdCache.set(cacheKey, "", 5 * 60);
+    cacheManager.set("relations", cacheKey, "", 5 * 60);
     return "";
   }
 
-  relationNameToIdCache.set(cacheKey, id);
+  cacheManager.set("relations", cacheKey, id);
   return id;
 }
 
 async function getAllActiveProductsSafe(perPage) {
   const snapshotCacheKey = `pb:all-active:${Number(perPage) || 2000}`;
-  const cached = pbSnapshotCache.get(snapshotCacheKey);
+  const cached = cacheManager.get("pbSnapshot", snapshotCacheKey);
   if (cached) {
     lastGoodAllActiveProducts = cached;
     return cached;
@@ -461,7 +454,7 @@ async function getAllActiveProductsSafe(perPage) {
   try {
     const pbAll = await listAllActiveProducts(perPage);
     lastGoodAllActiveProducts = pbAll;
-    pbSnapshotCache.set(snapshotCacheKey, pbAll);
+    cacheManager.set("pbSnapshot", snapshotCacheKey, pbAll);
     return pbAll;
   } catch (err) {
     if (lastGoodAllActiveProducts) {
@@ -476,7 +469,7 @@ async function getAllActiveProductsSafe(perPage) {
 
 async function handleCatalogFilters(req, res) {
   const cacheKey = "catalog-filters:v3";
-  const cached = externalProductsCache.get(cacheKey);
+  const cached = cacheManager.get("products", cacheKey);
   if (cached) {
     console.log("Using cached catalog filters");
     setCatalogCacheHeaders(res);
@@ -646,7 +639,7 @@ async function handleCatalogFilters(req, res) {
 
     catalogFiltersErrorCount = 0;
     lastGoodCatalogFilters = payload;
-    externalProductsCache.set(cacheKey, payload, 12 * 60 * 60);
+    cacheManager.set("products", cacheKey, payload, 12 * 60 * 60);
     setCatalogCacheHeaders(res);
     return res.json(payload);
   } catch (err) {
@@ -673,7 +666,7 @@ async function handleCatalogFilters(req, res) {
         brandsByCategory: {},
       };
 
-      externalProductsCache.set(cacheKey, fallback, backoffSeconds);
+      cacheManager.set("products", cacheKey, fallback, backoffSeconds);
       setCatalogCacheHeaders(res);
       return res.json(fallback);
     }
@@ -734,7 +727,7 @@ async function handleCatalogFilters(req, res) {
       }
     }
 
-    externalProductsCache.set(cacheKey, fallback, 60);
+    cacheManager.set("products", cacheKey, fallback, 60);
     setCatalogCacheHeaders(res);
     return res.json(fallback);
   }
@@ -776,7 +769,7 @@ async function handleExternalProducts(req, res) {
   const category = String(req.query.category || "").trim();
 
   const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}:${seed}`;
-  const cached = pageDataCache.get(cacheKey);
+  const cached = cacheManager.get("pages", cacheKey);
   if (cached) {
     setCatalogCacheHeaders(res);
     return res.json(normalizeProductDescriptions(cached));
@@ -785,7 +778,7 @@ async function handleExternalProducts(req, res) {
   const isHomeUnfiltered = !search && !brand && !category;
   if (isHomeUnfiltered) {
     const orderCacheKey = `order:home:${seed || "default"}`;
-    let orderedIds = shuffleOrderCache.get(orderCacheKey);
+    let orderedIds = cacheManager.get("shuffle", orderCacheKey);
 
     if (!orderedIds) {
       const idRecords = await loadProductIdsOnly(2000, 'status = "active"');
@@ -794,7 +787,7 @@ async function handleExternalProducts(req, res) {
         : shuffleDeterministic(idRecords, "home:default");
       const mixed = mixByCategoryRoundRobin(shuffled, seed || "default");
       orderedIds = mixed.map((p) => p.id);
-      shuffleOrderCache.set(orderCacheKey, orderedIds);
+      cacheManager.set("shuffle", orderCacheKey, orderedIds);
     }
 
     const totalItems = orderedIds.length;
@@ -827,7 +820,7 @@ async function handleExternalProducts(req, res) {
       hasNextPage: safePage < totalPages,
     };
 
-    pageDataCache.set(cacheKey, payload);
+    cacheManager.set("pages", cacheKey, payload);
     setCatalogCacheHeaders(res);
     return res.json(normalizeProductDescriptions(payload));
   }
@@ -873,7 +866,7 @@ async function handleExternalProducts(req, res) {
       totalItems: 0,
       hasNextPage: false,
     };
-    pageDataCache.set(cacheKey, payload);
+    cacheManager.set("pages", cacheKey, payload);
     setCatalogCacheHeaders(res);
     return res.json(normalizeProductDescriptions(payload));
   }
@@ -892,7 +885,7 @@ async function handleExternalProducts(req, res) {
         totalItems: 0,
         hasNextPage: false,
       };
-      pageDataCache.set(cacheKey, payload);
+      cacheManager.set("pages", cacheKey, payload);
       setCatalogCacheHeaders(res);
       return res.json(normalizeProductDescriptions(payload));
     }
@@ -910,7 +903,7 @@ async function handleExternalProducts(req, res) {
         totalItems: 0,
         hasNextPage: false,
       };
-      pageDataCache.set(cacheKey, payload);
+      cacheManager.set("pages", cacheKey, payload);
       setCatalogCacheHeaders(res);
       return res.json(normalizeProductDescriptions(payload));
     }
@@ -987,7 +980,7 @@ async function handleExternalProducts(req, res) {
         hasNextPage: safePage < totalPages,
       };
 
-      pageDataCache.set(cacheKey, payload);
+      cacheManager.set("pages", cacheKey, payload);
       setCatalogCacheHeaders(res);
       return res.json(normalizeProductDescriptions(payload));
     }
@@ -1024,7 +1017,7 @@ async function handleExternalProducts(req, res) {
       hasNextPage: page < totalPages,
     };
 
-    pageDataCache.set(cacheKey, payload);
+    cacheManager.set("pages", cacheKey, payload);
     setCatalogCacheHeaders(res);
     return res.json(normalizeProductDescriptions(payload));
   } catch (err) {
@@ -1337,7 +1330,7 @@ app.get(["/api/profile/state", "/profile/state"], async (req, res) => {
     if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
 
     const cacheKey = `profile:${auth.telegramId}`;
-    const cached = profilesCache.get(cacheKey);
+    const cached = cacheManager.get("profiles", cacheKey);
     if (cached) return res.json(cached);
 
     const profile = await getProfileByTelegramId(auth.telegramId);
@@ -1348,7 +1341,7 @@ app.get(["/api/profile/state", "/profile/state"], async (req, res) => {
       favorites: Array.isArray(profile?.favorites) ? profile.favorites : [],
       nickname: typeof profile?.nickname === "string" ? profile.nickname : "",
     };
-    profilesCache.set(cacheKey, payload);
+    cacheManager.set("profiles", cacheKey, payload);
     return res.json(payload);
   } catch (error) {
     return res
@@ -1377,7 +1370,7 @@ app.post(["/api/profile/state", "/profile/state"], async (req, res) => {
       favorites,
     });
 
-    profilesCache.del(`profile:${auth.telegramId}`);
+    cacheManager.del("profiles", `profile:${auth.telegramId}`);
 
     return res.json({
       ok: true,
