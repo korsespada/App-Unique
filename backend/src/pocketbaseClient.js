@@ -425,7 +425,7 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
     if (hasBrandFilter) requestedExpands.push("brand");
     if (hasCategoryFilter) requestedExpands.push("category");
 
-    const fieldsParts = ["id", "category"];
+    const fieldsParts = ["id", "name", "description", "category"];
     if (hasBrandFilter) fieldsParts.push("brand");
     if (requestedExpands.includes("brand")) fieldsParts.push("expand.brand");
     if (requestedExpands.includes("category"))

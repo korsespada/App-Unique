@@ -143,7 +143,9 @@ export default function HomeView({
 
       <div className="mb-4 px-4">
         <p className="text-white/55 text-[12px] font-medium tracking-normal [font-kerning:normal]">
-          Товаров: {totalItems}
+          Товаров: 
+{' '}
+{totalItems}
         </p>
       </div>
 

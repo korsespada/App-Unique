@@ -173,12 +173,12 @@ function Checkout() {
                     {!images.length && (
     <div className="mb-5 flex h-[60px]  w-full">
                         <button
-        style={isDragging ? { color: "red" } : undefined}
-        onClick={onImageUpload}
-        type="button"
-        className="h-full w-full border-[1px] border-dashed"
-        {...dragProps}>
-        Добавить фото
+                          style={isDragging ? { color: "red" } : undefined}
+                          onClick={onImageUpload}
+                          type="button"
+                          className="h-full w-full border-[1px] border-dashed"
+                          {...dragProps}>
+                          Добавить фото
                         </button>
                       </div>
     )}

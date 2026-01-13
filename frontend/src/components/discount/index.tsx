@@ -1,3 +1,5 @@
+import "dayjs/locale/ru";
+
 import useAddDiscounts from "@framework/api/discount/add";
 import useDeleteDiscount from "@framework/api/discount/delete";
 import useUpdateDiscount from "@framework/api/discount/update";
@@ -15,7 +17,6 @@ import {
 } from "antd";
 import type { RangePickerProps } from "antd/es/date-picker";
 import dayjs from "dayjs";
-import "dayjs/locale/ru";
 import { useState } from "react";
 
 dayjs.locale("ru");
