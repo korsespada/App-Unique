@@ -2,6 +2,12 @@ export const VKCLOUD_HOST = "hb.ru-msk.vkcloud-storage.ru";
 export const VKCLOUD_ORIG_BUCKET = "yeezy-app";
 export const VKCLOUD_THUMBS_BUCKET = "yeezy-app-thumbs";
 
+function toProxyUrl(original: string) {
+  const raw = String(original || "").trim();
+  if (!raw) return raw;
+  return `/api/img?u=${encodeURIComponent(raw)}`;
+}
+
 export function getThumbUrl(url: string, thumb = "400x500") {
   const raw = String(url || "").trim();
   if (!raw) return raw;
@@ -19,9 +25,9 @@ export function getThumbUrl(url: string, thumb = "400x500") {
         ? u.pathname.slice(`/${VKCLOUD_ORIG_BUCKET}/`.length)
         : (() => {
             const parts = u.pathname
-            .slice(`/${VKCLOUD_THUMBS_BUCKET}/`.length)
-            .split("/")
-            .filter(Boolean);
+              .slice(`/${VKCLOUD_THUMBS_BUCKET}/`.length)
+              .split("/")
+              .filter(Boolean);
             // Если уже содержит размер в пути, удаляем его
             if (parts.length >= 1 && /^\d+x\d+$/.test(parts[0])) {
               return parts.slice(1).join("/");
@@ -32,7 +38,7 @@ export function getThumbUrl(url: string, thumb = "400x500") {
       // Формируем новый путь к thumb с правильной структурой
       u.pathname = `/${VKCLOUD_THUMBS_BUCKET}/${thumb}/${rest}`;
       u.search = "";
-      return u.toString();
+      return toProxyUrl(u.toString());
     }
 
     if (!u.searchParams.has("thumb") && u.pathname.includes("/api/files/")) {
@@ -56,10 +62,10 @@ export function getDetailImageUrl(url: string) {
   try {
     const u = new URL(raw);
     if (
-      u.hostname === VKCLOUD_HOST
-      && u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`)
+      u.hostname === VKCLOUD_HOST &&
+      u.pathname.startsWith(`/${VKCLOUD_ORIG_BUCKET}/`)
     ) {
-      return u.toString();
+      return toProxyUrl(u.toString());
     }
   } catch {
     // ignore

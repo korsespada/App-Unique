@@ -990,6 +990,81 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+async function handleImageProxy(req, res) {
+  const rawUrl = String(req.query.u || "").trim();
+  if (!rawUrl) {
+    return res.status(400).json({ error: "Missing u" });
+  }
+
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return res.status(400).json({ error: "Invalid u" });
+  }
+
+  const allowedHosts = new Set([
+    "hb.ru-msk.vkcloud-storage.ru",
+    "yeezy-app.hb.ru-msk.vkcloud-storage.ru",
+  ]);
+  if (!allowedHosts.has(url.hostname)) {
+    return res.status(400).json({ error: "Host not allowed" });
+  }
+
+  const clientEtag = String(req.headers["if-none-match"] || "").trim();
+
+  const upstream = axios.create({
+    timeout: 30000,
+    responseType: "arraybuffer",
+    maxRedirects: 2,
+    validateStatus: (s) => s >= 200 && s < 400,
+  });
+
+  const upstreamResp = await upstream.get(url.toString());
+  const upstreamEtag = upstreamResp?.headers?.etag
+    ? String(upstreamResp.headers.etag).trim()
+    : "";
+
+  if (clientEtag && upstreamEtag && clientEtag === upstreamEtag) {
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.set("ETag", upstreamEtag);
+    return res.status(304).end();
+  }
+
+  const contentTypeRaw = upstreamResp?.headers?.["content-type"]
+    ? String(upstreamResp.headers["content-type"]).trim()
+    : "";
+  const contentType = contentTypeRaw || "image/jpeg";
+
+  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  if (upstreamEtag) res.set("ETag", upstreamEtag);
+  if (upstreamResp?.headers?.["last-modified"]) {
+    res.set(
+      "Last-Modified",
+      String(upstreamResp.headers["last-modified"]).trim()
+    );
+  }
+  res.set("Content-Type", contentType);
+
+  return res.status(200).send(upstreamResp.data);
+}
+
+// Image proxy (adds proper cache headers for VKCloud)
+app.get(
+  "/api/img",
+  asyncRoute(async (req, res) => {
+    return handleImageProxy(req, res);
+  })
+);
+
+// Versioned image proxy (alias for Telegram frontend)
+app.get(
+  "/api/:version/:shop/img",
+  asyncRoute(async (req, res) => {
+    return handleImageProxy(req, res);
+  })
+);
+
 // ISR endpoint for products with file caching
 app.get(
   "/api/products/isr",
