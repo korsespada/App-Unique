@@ -330,7 +330,7 @@ function telegramAuthFromRequest(req) {
   const botToken = process.env.BOT_TOKEN;
   const initData = getInitDataFromRequest(req);
   const auth = validateTelegramInitData(initData, botToken, {
-    maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 86400),
+    maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 300),
   });
 
   if (!auth.ok) {

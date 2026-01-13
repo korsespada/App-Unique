@@ -44,7 +44,8 @@ function safeHexEqual(hexA, hexB) {
 }
 
 function validateTelegramInitData(initData, botToken, options = {}) {
-  const maxAgeSeconds = Number(options.maxAgeSeconds ?? 86400);
+  // Строгая валидация: только 300 секунд (5 минут) по умолчанию
+  const maxAgeSeconds = Number(options.maxAgeSeconds ?? 300);
 
   const initDataStr = normalizeEnvString(initData);
   const botTokenStr = normalizeEnvString(botToken);
@@ -62,75 +63,59 @@ function validateTelegramInitData(initData, botToken, options = {}) {
     return { ok: false, error: 'hash отсутствует' };
   }
 
-  const dataWithSignature = data;
-  const dataWithoutSignature = { ...dataWithSignature };
+  // Используем только актуальную версию подписи (v2 без signature)
+  // Это предотвращает downgrade атаки
+  const dataWithoutSignature = { ...data };
   delete dataWithoutSignature.signature;
 
-  const dataCheckStringWithSignature = buildDataCheckString(dataWithSignature);
-  const dataCheckStringWithoutSignature = buildDataCheckString(dataWithoutSignature);
+  const dataCheckString = buildDataCheckString(dataWithoutSignature);
 
-  const botIdFromToken = String(botTokenStr).split(':')[0] || '';
-  const botTokenSha256Prefix = crypto.createHash('sha256').update(botTokenStr).digest('hex').slice(0, 12);
+  // Только v2 (актуальная версия Telegram WebApp)
+  const secretKey = crypto.createHmac('sha256', botTokenStr).update('WebAppData').digest();
+  const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
 
-  const secretKeyV1 = crypto.createHmac('sha256', 'WebAppData').update(botTokenStr).digest();
-  const secretKeyV2 = crypto.createHmac('sha256', botTokenStr).update('WebAppData').digest();
-
-  const candidates = [
-    {
-      secret: 'v1',
-      dcs: 'withSignature',
-      value: crypto.createHmac('sha256', secretKeyV1).update(dataCheckStringWithSignature).digest('hex'),
-    },
-    {
-      secret: 'v1',
-      dcs: 'withoutSignature',
-      value: crypto.createHmac('sha256', secretKeyV1).update(dataCheckStringWithoutSignature).digest('hex'),
-    },
-    {
-      secret: 'v2',
-      dcs: 'withSignature',
-      value: crypto.createHmac('sha256', secretKeyV2).update(dataCheckStringWithSignature).digest('hex'),
-    },
-    {
-      secret: 'v2',
-      dcs: 'withoutSignature',
-      value: crypto.createHmac('sha256', secretKeyV2).update(dataCheckStringWithoutSignature).digest('hex'),
-    },
-  ];
-
-  const matched = candidates.find((c) => safeHexEqual(c.value, hash)) || null;
-
-  if (!matched) {
+  if (!safeHexEqual(calculatedHash, hash)) {
+    const botIdFromToken = String(botTokenStr).split(':')[0] || '';
+    const botTokenSha256Prefix = crypto.createHash('sha256').update(botTokenStr).digest('hex').slice(0, 12);
+    
     return {
       ok: false,
       error: 'initData не прошёл проверку подписи',
       debug: {
         botIdFromToken,
         botTokenSha256Prefix,
-        hasSignatureParam: Boolean(signature) || String(initDataStr).includes('signature='),
-        keysWithSignature: Object.keys(dataWithSignature).sort(),
-        keysWithoutSignature: Object.keys(dataWithoutSignature).sort(),
         receivedHashPrefix: String(hash || '').slice(0, 12),
-        calculatedPrefixes: {
-          v1WithSignature: String(candidates[0].value || '').slice(0, 12),
-          v1WithoutSignature: String(candidates[1].value || '').slice(0, 12),
-          v2WithSignature: String(candidates[2].value || '').slice(0, 12),
-          v2WithoutSignature: String(candidates[3].value || '').slice(0, 12),
-        },
-        dcsSha256Prefixes: {
-          withSignature: crypto.createHash('sha256').update(dataCheckStringWithSignature).digest('hex').slice(0, 12),
-          withoutSignature: crypto.createHash('sha256').update(dataCheckStringWithoutSignature).digest('hex').slice(0, 12),
-        }
+        calculatedHashPrefix: String(calculatedHash || '').slice(0, 12),
+        keysUsed: Object.keys(dataWithoutSignature).sort(),
       },
     };
   }
 
+  // Проверка времени жизни (строгая)
   const authDate = Number(data.auth_date);
-  if (Number.isFinite(authDate) && authDate > 0 && Number.isFinite(maxAgeSeconds) && maxAgeSeconds > 0) {
+  if (Number.isFinite(authDate) && authDate > 0) {
     const now = Math.floor(Date.now() / 1000);
-    if (now - authDate > maxAgeSeconds) {
-      return { ok: false, error: 'initData устарел' };
+    const age = now - authDate;
+    
+    if (age > maxAgeSeconds) {
+      return { 
+        ok: false, 
+        error: `initData устарел (${age}с > ${maxAgeSeconds}с)` 
+      };
     }
+    
+    // Защита от атак с будущим временем
+    if (age < -60) {
+      return { 
+        ok: false, 
+        error: 'initData из будущего (возможная атака)' 
+      };
+    }
+  } else {
+    return { 
+      ok: false, 
+      error: 'auth_date отсутствует или некорректен' 
+    };
   }
 
   let user = null;
@@ -138,18 +123,22 @@ function validateTelegramInitData(initData, botToken, options = {}) {
     try {
       user = JSON.parse(data.user);
     } catch {
-      user = null;
+      return { ok: false, error: 'Некорректные данные пользователя' };
     }
   }
+
+  const botIdFromToken = String(botTokenStr).split(':')[0] || '';
+  const botTokenSha256Prefix = crypto.createHash('sha256').update(botTokenStr).digest('hex').slice(0, 12);
 
   return {
     ok: true,
     data,
     user,
     debug: {
-      matched: `${matched.secret}:${matched.dcs}`,
+      version: 'v2-strict',
       botIdFromToken,
       botTokenSha256Prefix,
+      age: Math.floor(Date.now() / 1000) - authDate,
     }
   };
 }
