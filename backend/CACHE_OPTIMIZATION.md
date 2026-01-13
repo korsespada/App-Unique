@@ -91,17 +91,42 @@ cacheManager.flushAll();
 - `backend/migrations/add_remaining_indexes.sql`
 - `backend/migrations/create-indexes.js`
 
-#### Новые индексы:
+#### Оптимальный набор индексов:
 
 ```sql
--- Часто используемые поля
-CREATE INDEX idx_products_status ON products(status);
-CREATE INDEX idx_products_updated ON products(updated DESC);
-CREATE INDEX idx_profiles_telegramid ON profiles(telegramid);
+-- Brands & Categories
+CREATE INDEX idx_brands_name ON brands(name);
+CREATE INDEX idx_categories_name ON categories(name);
 
--- Составные индексы для оптимизации запросов
-CREATE INDEX idx_products_status_updated ON products(status, updated DESC);
+-- Profiles (UNIQUE)
+CREATE UNIQUE INDEX idx_profiles_telegramid ON profiles(telegramid);
+
+-- Products (составные индексы)
+CREATE INDEX idx_products_status_updated ON products(status, updated);
+CREATE INDEX idx_products_status_name ON products(status, name);
+CREATE INDEX idx_products_brand_status_updated ON products(brand, status, updated);
+CREATE INDEX idx_products_category_status_updated ON products(category, status, updated);
 ```
+
+#### Почему эти индексы оптимальны:
+
+**Составные индексы работают слева направо:**
+```sql
+-- Индекс: (brand, status, updated)
+✅ WHERE brand = 'Nike'                          -- использует
+✅ WHERE brand = 'Nike' AND status = 'active'    -- использует
+✅ WHERE brand = 'Nike' AND status = 'active' ORDER BY updated -- использует
+
+-- Поэтому НЕ нужны:
+❌ (brand)           -- покрывается составным
+❌ (brand, status)   -- покрывается составным
+```
+
+**Удалены избыточные индексы:**
+- `idx_products_id` — уже есть PRIMARY KEY
+- `idx_products_brand` — покрывается `brand_status_updated`
+- `idx_products_category` — покрывается `category_status_updated`
+- `idx_products_status` — покрывается `status_updated`
 
 #### Запуск миграции:
 

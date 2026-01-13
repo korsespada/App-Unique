@@ -36,16 +36,13 @@ ORDER BY tbl_name, name;
 ```
 
 Должны быть созданы:
-- ✅ idx_brands_name_id
-- ✅ idx_categories_name_id
-- ✅ idx_products_brand
-- ✅ idx_products_category
-- ✅ idx_products_status
-- ✅ idx_products_updated
-- ✅ idx_profiles_telegramid
-- ✅ idx_products_status_brand
-- ✅ idx_products_status_category
+- ✅ idx_brands_name
+- ✅ idx_categories_name
+- ✅ idx_profiles_telegramid (UNIQUE)
 - ✅ idx_products_status_updated
+- ✅ idx_products_status_name
+- ✅ idx_products_brand_status_updated
+- ✅ idx_products_category_status_updated
 
 ## Влияние на производительность
 
@@ -68,14 +65,33 @@ SELECT * FROM products WHERE status = 'active';
 ## Откат (если нужно)
 
 ```sql
-DROP INDEX IF EXISTS idx_brands_name_id;
-DROP INDEX IF EXISTS idx_categories_name_id;
-DROP INDEX IF EXISTS idx_products_brand;
-DROP INDEX IF EXISTS idx_products_category;
-DROP INDEX IF EXISTS idx_products_status;
-DROP INDEX IF EXISTS idx_products_updated;
+DROP INDEX IF EXISTS idx_brands_name;
+DROP INDEX IF EXISTS idx_categories_name;
 DROP INDEX IF EXISTS idx_profiles_telegramid;
-DROP INDEX IF EXISTS idx_products_status_brand;
-DROP INDEX IF EXISTS idx_products_status_category;
 DROP INDEX IF EXISTS idx_products_status_updated;
+DROP INDEX IF EXISTS idx_products_status_name;
+DROP INDEX IF EXISTS idx_products_brand_status_updated;
+DROP INDEX IF EXISTS idx_products_category_status_updated;
 ```
+
+## Почему эти индексы оптимальны?
+
+### Составные индексы покрывают простые:
+```sql
+-- Индекс: (brand, status, updated)
+✅ WHERE brand = 'Nike'                          -- использует индекс
+✅ WHERE brand = 'Nike' AND status = 'active'    -- использует индекс
+✅ WHERE brand = 'Nike' AND status = 'active' ORDER BY updated -- использует индекс
+
+-- Поэтому НЕ нужны отдельные индексы:
+❌ (brand)           -- покрывается (brand, status, updated)
+❌ (brand, status)   -- покрывается (brand, status, updated)
+```
+
+### Избыточные индексы удалены:
+- ❌ `idx_products_id` — уже есть PRIMARY KEY
+- ❌ `idx_products_brand` — покрывается `idx_products_brand_status_updated`
+- ❌ `idx_products_category` — покрывается `idx_products_category_status_updated`
+- ❌ `idx_products_status` — покрывается `idx_products_status_updated`
+- ❌ `idx_brands_name_id` — достаточно `idx_brands_name`
+- ❌ `idx_categories_name_id` — достаточно `idx_categories_name`

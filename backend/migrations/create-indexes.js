@@ -13,17 +13,20 @@ async function createIndexes() {
     await pb.admins.authWithPassword(pbAdminEmail, pbAdminPassword);
     console.log("Authenticated as admin");
 
+    // Оптимальный набор индексов (без избыточных)
     const sqlStatements = [
-      "CREATE INDEX IF NOT EXISTS idx_brands_name_id ON brands(name, id);",
-      "CREATE INDEX IF NOT EXISTS idx_categories_name_id ON categories(name, id);",
-      "CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand);",
-      "CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);",
-      "CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);",
-      "CREATE INDEX IF NOT EXISTS idx_products_updated ON products(updated);",
-      "CREATE INDEX IF NOT EXISTS idx_profiles_telegramid ON profiles(telegramid);",
-      "CREATE INDEX IF NOT EXISTS idx_products_status_brand ON products(status, brand);",
-      "CREATE INDEX IF NOT EXISTS idx_products_status_category ON products(status, category);",
+      // Brands & Categories
+      "CREATE INDEX IF NOT EXISTS idx_brands_name ON brands(name);",
+      "CREATE INDEX IF NOT EXISTS idx_categories_name ON categories(name);",
+      
+      // Profiles (UNIQUE)
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_telegramid ON profiles(telegramid);",
+      
+      // Products - составные индексы (покрывают простые)
       "CREATE INDEX IF NOT EXISTS idx_products_status_updated ON products(status, updated);",
+      "CREATE INDEX IF NOT EXISTS idx_products_status_name ON products(status, name);",
+      "CREATE INDEX IF NOT EXISTS idx_products_brand_status_updated ON products(brand, status, updated);",
+      "CREATE INDEX IF NOT EXISTS idx_products_category_status_updated ON products(category, status, updated);",
     ];
 
     for (const sql of sqlStatements) {
