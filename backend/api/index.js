@@ -9,19 +9,29 @@ require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const { validateTelegramInitData, parseInitData } = require("../src/telegramWebAppAuth");
+const rateLimit = require("express-rate-limit");
+
+// Shared modules
 const {
   listActiveProducts,
-  listAllActiveProducts,
   getActiveProductById,
-  getProfileByTelegramId,
-  updateProfileCartAndFavorites,
   loadProductIdsOnly,
   loadProductsByIds,
 } = require("../src/pocketbaseClient");
 const cacheManager = require("../src/cacheManager");
-
-const rateLimit = require("express-rate-limit");
+const {
+  normalizeDescription,
+  normalizeProductDescriptions,
+  shuffleDeterministic,
+  mixByCategoryRoundRobin,
+  isValidPocketBaseId,
+} = require("../src/utils/helpers");
+const {
+  telegramAuthFromRequest,
+  buildProfileFieldsFromTelegramUser,
+} = require("../src/utils/telegram");
+const { handleOrderSubmission } = require("../src/handlers/orders");
+const { handleGetProfileState, handleUpdateProfileState } = require("../src/handlers/profile");
 
 const app = express();
 
@@ -68,49 +78,6 @@ async function loadFromFile(filePath) {
 
 ensureCacheDir();
 
-function buildProfileFieldsFromTelegramUser(user) {
-  if (!user || typeof user !== "object") return { username: "", nickname: "" };
-  const username = user?.username ? String(user.username).trim() : "";
-  const first = user?.first_name ? String(user.first_name).trim() : "";
-  const last = user?.last_name ? String(user.last_name).trim() : "";
-  const nickname = `${first} ${last}`.trim();
-  return { username, nickname };
-}
-
-function getInitDataFromRequest(req) {
-  const header = req?.headers?.["x-telegram-init-data"];
-  if (typeof header === "string" && header.trim()) return header;
-  return "";
-}
-
-function telegramAuthFromRequest(req) {
-  const botToken = process.env.BOT_TOKEN;
-  const initData = getInitDataFromRequest(req);
-  const auth = validateTelegramInitData(initData, botToken, {
-    maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 300),
-  });
-
-  if (!auth.ok) {
-    return {
-      ok: false,
-      status: 401,
-      error: auth.error || "initData невалиден",
-    };
-  }
-
-  const user = auth.user || null;
-  const telegramId = user?.id ? String(user.id) : "";
-  if (!telegramId) {
-    return {
-      ok: false,
-      status: 400,
-      error: "Некорректные данные пользователя Telegram",
-    };
-  }
-
-  return { ok: true, telegramId, user };
-}
-
 function asyncRoute(handler) {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
@@ -134,238 +101,6 @@ function extractAxiosMessage(err) {
   return "Request failed";
 }
 
-const normalizeDescription = (s) =>
-  typeof s === "string" ? s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n") : s;
-
-function normalizeProductDescriptions(payload) {
-  if (!payload) return payload;
-
-  if (Array.isArray(payload)) {
-    return payload.map((item) => normalizeProductDescriptions(item));
-  }
-
-  if (typeof payload !== "object") return payload;
-
-  if (Array.isArray(payload.products)) {
-    return {
-      ...payload,
-      products: payload.products.map((p) => ({
-        ...p,
-        description: normalizeDescription(p?.description),
-      })),
-    };
-  }
-
-  if ("description" in payload) {
-    return {
-      ...payload,
-      description: normalizeDescription(payload.description),
-    };
-  }
-
-  return payload;
-}
-
-function hashStringToUint32(seed) {
-  const str = String(seed ?? "");
-  let x = 2166136261;
-  for (let i = 0; i < str.length; i += 1) {
-    x ^= str.charCodeAt(i);
-    x = Math.imul(x, 16777619);
-  }
-  return x >>> 0;
-}
-
-function shuffleDeterministic(items, seed) {
-  const arr = Array.isArray(items) ? items.slice() : [];
-  let x = hashStringToUint32(seed);
-
-  const rand = () => {
-    x ^= x << 13;
-    x ^= x >>> 17;
-    x ^= x << 5;
-    return (x >>> 0) / 4294967296;
-  };
-
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rand() * (i + 1));
-    const tmp = arr[i];
-    arr[i] = arr[j];
-    arr[j] = tmp;
-  }
-
-  return arr;
-}
-
-function mixByCategoryRoundRobin(products, seed) {
-  const list = Array.isArray(products) ? products : [];
-  if (list.length <= 1) return list;
-
-  const byCategory = new Map();
-  for (const p of list) {
-    const category = String(p?.category ?? "").trim() || "__unknown__";
-    if (!byCategory.has(category)) byCategory.set(category, []);
-    byCategory.get(category).push(p);
-  }
-
-  const categories = Array.from(byCategory.keys());
-  const shuffledCategories = shuffleDeterministic(
-    categories,
-    `categories:${seed}`
-  );
-  for (const c of shuffledCategories) {
-    const items = byCategory.get(c) || [];
-    byCategory.set(c, shuffleDeterministic(items, `category:${c}:${seed}`));
-  }
-
-  const pointers = new Map(shuffledCategories.map((c) => [c, 0]));
-  const remaining = new Set(shuffledCategories);
-  const out = [];
-
-  while (remaining.size) {
-    let progressed = false;
-    for (const c of shuffledCategories) {
-      if (!remaining.has(c)) continue;
-      const items = byCategory.get(c) || [];
-      const idx = pointers.get(c) || 0;
-      if (idx >= items.length) {
-        remaining.delete(c);
-        continue;
-      }
-      out.push(items[idx]);
-      pointers.set(c, idx + 1);
-      progressed = true;
-    }
-    if (!progressed) break;
-  }
-
-  return out;
-}
-
-let cachedBotUsername = null;
-
-async function getBotUsername(botToken) {
-  const fromEnv = String(process.env.BOT_USERNAME || "")
-    .trim()
-    .replace(/^@/, "");
-  if (fromEnv) return fromEnv;
-  if (cachedBotUsername) return cachedBotUsername;
-
-  try {
-    const url = `https://api.telegram.org/bot${botToken}/getMe`;
-    const resp = await axios.get(url);
-    const username = resp?.data?.result?.username
-      ? String(resp.data.result.username)
-      : "";
-    cachedBotUsername = username;
-    return username;
-  } catch {
-    return "";
-  }
-}
-
-function buildProductStartParam(productId) {
-  return `product_${String(productId)}`;
-}
-
-function buildMiniAppLink(botUsername, startParam) {
-  const safeUsername = String(botUsername || "")
-    .replace(/^@/, "")
-    .trim();
-  if (!safeUsername) return null;
-  return `https://t.me/${safeUsername}?startapp=${encodeURIComponent(
-    String(startParam || "")
-  )}`;
-}
-
-function splitTelegramMessage(text, maxLen = 3500) {
-  const raw = String(text ?? "");
-  if (raw.length <= maxLen) return [raw];
-
-  const lines = raw.split("\n");
-  const parts = [];
-  let current = "";
-
-  const pushCurrent = () => {
-    if (current) parts.push(current);
-    current = "";
-  };
-
-  for (const line of lines) {
-    const chunk = current ? `${current}\n${line}` : line;
-    if (chunk.length <= maxLen) {
-      current = chunk;
-      continue;
-    }
-
-    pushCurrent();
-
-    if (line.length <= maxLen) {
-      current = line;
-      continue;
-    }
-
-    // Fallback: split a single very long line
-    for (let i = 0; i < line.length; i += maxLen) {
-      parts.push(line.slice(i, i + maxLen));
-    }
-  }
-
-  pushCurrent();
-  return parts.length ? parts : [""];
-}
-
-function buildCartKeyboardAiogram3() {
-  return `from __future__ import annotations
-
-from typing import Iterable, TypedDict
-
-from aiogram.types import InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-
-
-BOT_USERNAME = "YeezyUniqueBot"
-
-
-class CartProduct(TypedDict):
-    name: str
-    price: int | float
-    id: str
-
-
-def build_cart_keyboard(
-    products: Iterable[CartProduct],
-    *,
-    bot_username: str = BOT_USERNAME,
-    row_width: int = 2,
-    checkout_callback: str = "cart:checkout",
-    clear_callback: str = "cart:clear",
-) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-
-    for p in products:
-        name = str(p.get("name", "")).strip() or "Товар"
-        price = p.get("price", None)
-        pid = str(p.get("id", "")).strip()
-
-        if isinstance(price, (int, float)):
-            title = f"{name} — {price:g} ₽"
-        else:
-            title = name
-
-        url = f"https://t.me/{bot_username}?startapp=product__{pid}"
-        kb.button(text=title, url=url)
-
-    kb.adjust(row_width)
-
-    kb.button(text="Оформить", callback_data=checkout_callback)
-    kb.button(text="Очистить", callback_data=clear_callback)
-    kb.adjust(row_width, 2)
-
-    return kb.as_markup()
-`;
-}
-
 // Middleware
 const corsAllowList = String(
   process.env.CORS_ALLOW_ORIGINS || process.env.ALLOWED_ORIGINS || ""
@@ -387,21 +122,11 @@ app.use(
 app.use(express.json());
 
 // Caches are now managed by cacheManager
-let lastGoodAllActiveProducts = null;
 let lastGoodCatalogFilters = null;
 let catalogFiltersErrorCount = 0;
 
 function setCatalogCacheHeaders(res) {
   res.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
-}
-
-/**
- * Validates that a string is a valid PocketBase record ID
- * PocketBase IDs are 15-character alphanumeric strings
- */
-function isValidPocketBaseId(id) {
-  if (typeof id !== "string") return false;
-  return /^[a-z0-9]{15}$/.test(id);
 }
 
 async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
@@ -420,8 +145,6 @@ async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
 
   let resp;
   try {
-    // Load all records and filter in memory to avoid SQL injection
-    // This is safer than building filter strings with user input
     resp = await pb.get(`/api/collections/${collection}/records`, {
       params: {
         page: 1,
@@ -431,7 +154,6 @@ async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
       },
     });
   } catch (err) {
-    // transient network hiccup / PB load: retry once
     resp = await pb.get(`/api/collections/${collection}/records`, {
       params: {
         page: 1,
@@ -443,11 +165,9 @@ async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
   }
 
   const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
-  // Filter in memory - safe from SQL injection
   const found = items.find((it) => String(it?.name || "").trim() === safeName);
   const id = found?.id ? String(found.id).trim() : "";
 
-  // cache misses shortly to avoid repeated PB calls for non-existing names
   if (!id) {
     cacheManager.set("relations", cacheKey, "", 5 * 60);
     return "";
@@ -455,30 +175,6 @@ async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
 
   cacheManager.set("relations", cacheKey, id);
   return id;
-}
-
-async function getAllActiveProductsSafe(perPage) {
-  const snapshotCacheKey = `pb:all-active:${Number(perPage) || 2000}`;
-  const cached = cacheManager.get("pbSnapshot", snapshotCacheKey);
-  if (cached) {
-    lastGoodAllActiveProducts = cached;
-    return cached;
-  }
-
-  try {
-    const pbAll = await listAllActiveProducts(perPage);
-    lastGoodAllActiveProducts = pbAll;
-    cacheManager.set("pbSnapshot", snapshotCacheKey, pbAll);
-    return pbAll;
-  } catch (err) {
-    if (lastGoodAllActiveProducts) {
-      console.warn(
-        "PocketBase unavailable, serving last known products snapshot"
-      );
-      return lastGoodAllActiveProducts;
-    }
-    throw err;
-  }
 }
 
 async function handleCatalogFilters(req, res) {
@@ -1338,269 +1034,12 @@ app.get(["/api/products/:id", "/products/:id"], async (req, res) => {
   }
 });
 
-app.get(["/api/profile/state", "/profile/state"], async (req, res) => {
-  try {
-    const auth = telegramAuthFromRequest(req);
-    if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+// Profile endpoints - use shared handlers
+app.get(["/api/profile/state", "/profile/state"], asyncRoute(handleGetProfileState));
+app.post(["/api/profile/state", "/profile/state"], asyncRoute(handleUpdateProfileState));
 
-    const cacheKey = `profile:${auth.telegramId}`;
-    const cached = cacheManager.get("profiles", cacheKey);
-    if (cached) return res.json(cached);
-
-    const profile = await getProfileByTelegramId(auth.telegramId);
-    const payload = {
-      ok: true,
-      profileExists: Boolean(profile),
-      cart: Array.isArray(profile?.cart) ? profile.cart : [],
-      favorites: Array.isArray(profile?.favorites) ? profile.favorites : [],
-      nickname: typeof profile?.nickname === "string" ? profile.nickname : "",
-    };
-    cacheManager.set("profiles", cacheKey, payload);
-    return res.json(payload);
-  } catch (error) {
-    return res
-      .status(500)
-      .json({ error: "Failed to load profile state", message: error?.message });
-  }
-});
-
-app.post(["/api/profile/state", "/profile/state"], async (req, res) => {
-  try {
-    const auth = telegramAuthFromRequest(req);
-    if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
-
-    const body = req.body && typeof req.body === "object" ? req.body : {};
-    const cart = Array.isArray(body.cart) ? body.cart : [];
-    const favorites = Array.isArray(body.favorites) ? body.favorites : [];
-    const fallback = buildProfileFieldsFromTelegramUser(auth.user);
-    const nickname = String(body.nickname || fallback.nickname || "").trim();
-    const username = String(body.username || fallback.username || "").trim();
-
-    const updated = await updateProfileCartAndFavorites({
-      telegramId: auth.telegramId,
-      username,
-      nickname,
-      cart,
-      favorites,
-    });
-
-    cacheManager.del("profiles", `profile:${auth.telegramId}`);
-
-    return res.json({
-      ok: true,
-      profileExists: true,
-      cart: Array.isArray(updated?.cart) ? updated.cart : [],
-      favorites: Array.isArray(updated?.favorites) ? updated.favorites : [],
-      nickname:
-        typeof updated?.nickname === "string" ? updated.nickname : nickname,
-      username:
-        typeof updated?.username === "string" ? updated.username : username,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: "Failed to update profile state",
-      message: error?.message,
-    });
-  }
-});
-
-app.post(["/orders", "/api/orders"], orderRateLimiter, async (req, res) => {
-  try {
-    const botToken = process.env.BOT_TOKEN;
-    const managerChatId = process.env.MANAGER_CHAT_ID;
-
-    // ...
-    if (!botToken || !managerChatId) {
-      return res.status(500).json({ error: "Бот не сконфигурирован" });
-    }
-
-    const { initData, items, comment } = req.body;
-    const safeCommentRaw = typeof comment === "string" ? comment.trim() : "";
-    const safeComment = safeCommentRaw.slice(0, 1000);
-
-    // Anti-replay protection
-    let initDataHash = "";
-    try {
-      initDataHash = String(parseInitData(initData).hash || "").trim();
-    } catch {
-      initDataHash = "";
-    }
-
-    if (initDataHash) {
-      const replayKey = `order:initDataHash:${initDataHash}`;
-      if (cacheManager.get("antiReplay", replayKey)) {
-        return res.status(409).json({
-          error: "Повторная отправка заказа. Обновите приложение и попробуйте снова.",
-        });
-      }
-    }
-
-    const auth = validateTelegramInitData(initData, botToken, {
-      maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 300),
-    });
-    if (!auth.ok) {
-      console.warn("initData validation failed", {
-        error: auth.error,
-        debug: auth.debug,
-        initDataLen: String(initData ?? "").length,
-        hasHashParam: String(initData ?? "").includes("hash="),
-        hasSignatureParam: String(initData ?? "").includes("signature="),
-      });
-      return res
-        .status(401)
-        .json({ error: auth.error || "initData невалиден" });
-    }
-
-    // Mark initData as used (anti-replay)
-    if (initDataHash) {
-      cacheManager.set("antiReplay", `order:initDataHash:${initDataHash}`, true);
-    }
-
-    const user = auth.user || null;
-    const telegramUserId = user?.id ? String(user.id) : "";
-    const username = user?.username ? String(user.username) : "";
-    const firstname = user?.first_name ? String(user.first_name) : "";
-    const lastname = user?.last_name ? String(user.last_name) : "";
-
-    if (!telegramUserId) {
-      return res
-        .status(400)
-        .json({ error: "Некорректные данные пользователя Telegram" });
-    }
-
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: "Некорректные данные заказа" });
-    }
-
-    const normalizedItems = items
-      .map((it) => {
-        const id = String(it?.id ?? "")
-          .trim()
-          .slice(0, 80);
-        const title = String(it?.title ?? "")
-          .trim()
-          .slice(0, 120);
-        const quantity = Math.min(99, Math.max(1, Number(it?.quantity) || 1));
-        const hasPrice = it?.hasPrice === false ? false : true;
-        const price = hasPrice ? Number(it?.price) : NaN;
-
-        return {
-          id,
-          title,
-          quantity,
-          hasPrice,
-          price: hasPrice ? price : null,
-        };
-      })
-      .filter((it) => it.id && it.title);
-
-    if (normalizedItems.length === 0) {
-      return res.status(400).json({ error: "Некорректные данные заказа" });
-    }
-
-    let hasUnknownPrice = false;
-    const total = normalizedItems.reduce((sum, it) => {
-      const qty = Number(it?.quantity) || 1;
-      const hasPrice = it?.hasPrice === false ? false : true;
-      const price = Number(it?.price);
-      if (!hasPrice || !Number.isFinite(price) || price <= 0) {
-        hasUnknownPrice = true;
-        return sum;
-      }
-      return sum + price * qty;
-    }, 0);
-
-    const escapeHtml = (value) => {
-      return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-    };
-
-    const safeFirst = escapeHtml((firstname || "").trim());
-    const safeLast = escapeHtml((lastname || "").trim());
-    const safeUsername = escapeHtml((username || "").trim());
-    const safeTelegramId = escapeHtml(String(telegramUserId));
-
-    const botUsername = await getBotUsername(botToken);
-
-    const orderText = [
-      "🆕 Новый заказ из Telegram Mini App",
-      "",
-      `👤 Клиент: ${`${safeFirst} ${safeLast}`.trim()}`.trim(),
-      safeUsername ? `@${safeUsername}` : "username: отсутствует",
-      `Telegram ID: <code>${safeTelegramId}</code>`,
-      safeComment ? `Комментарий: ${escapeHtml(safeComment)}` : "",
-      "",
-      "🛒 Товары:",
-    ]
-      .filter(Boolean)
-      .concat(
-        normalizedItems.map((it, idx) => {
-          const qty = Number(it?.quantity) || 1;
-          const hasPrice = it?.hasPrice === false ? false : true;
-          const price = Number(it?.price);
-          const titleText = escapeHtml(
-            String(it?.title || "").trim() || "Без названия"
-          );
-          const id = escapeHtml(String(it?.id || "").trim() || "-");
-
-          const titleWithId = `${titleText} <code>${id}</code>`;
-
-          if (!hasPrice || !Number.isFinite(price) || price <= 0) {
-            return `${idx + 1}. ${titleWithId} | ${qty} шт | Цена по запросу`;
-          }
-
-          const lineTotal = price * qty;
-          return `${
-            idx + 1
-          }. ${titleWithId} | ${qty} шт | ${price} ₽ | ${lineTotal} ₽`;
-        })
-      )
-      .concat([
-        "",
-        total > 0
-          ? `💰 Итого: ${escapeHtml(String(total))} ₽`
-          : "💰 Итого: Цена по запросу",
-        "",
-        "Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.",
-      ])
-      .join("\n");
-
-    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-
-    const messages = splitTelegramMessage(orderText, 3500);
-    for (let i = 0; i < messages.length; i += 1) {
-      const part = messages[i];
-      await axios.post(url, {
-        chat_id: managerChatId,
-        text: part,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      });
-    }
-
-    console.log("Заказ отправлен менеджеру", {
-      telegramUserId,
-      itemsCount: normalizedItems.length,
-    });
-
-    return res.json({
-      ok: true,
-      orderId: Date.now().toString(),
-    });
-  } catch (error) {
-    console.error(
-      "Ошибка отправки заказа менеджеру",
-      error?.response?.data || error.message
-    );
-    return res
-      .status(500)
-      .json({ error: "Не удалось отправить заказ менеджеру" });
-  }
-});
+// Orders endpoint - use shared handler
+app.post(["/orders", "/api/orders"], orderRateLimiter, asyncRoute(handleOrderSubmission));
 
 app.use((err, req, res, next) => {
   try {
