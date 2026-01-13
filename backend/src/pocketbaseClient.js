@@ -241,7 +241,9 @@ function mapPbProductToExternal(record) {
   const imagesRaw = safeArray(
     imagesCandidates.find((v) => Array.isArray(v) && v.length)
   );
-  const images = imagesRaw.map((p) => safeString(p)).filter(Boolean);
+  const images = Array.from(
+    new Set(imagesRaw.map((p) => safeString(p)).filter(Boolean))
+  );
 
   const thumb = safeString(
     record.thumb || record.thumbs || record.thumb_new || record.thumbs_new

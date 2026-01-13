@@ -442,7 +442,7 @@ async function getAllActiveProductsSafe(perPage) {
 }
 
 async function handleCatalogFilters(req, res) {
-  const cacheKey = "catalog-filters:v2";
+  const cacheKey = "catalog-filters:v3";
   const cached = externalProductsCache.get(cacheKey);
   if (cached) {
     console.log("Using cached catalog filters");
@@ -604,26 +604,12 @@ async function handleCatalogFilters(req, res) {
       return { categories, brands, brandsByCategory };
     }
 
-    const [allCategories, allBrands, fromProducts] = await Promise.all([
-      loadNamesFromCollection("categories", ["category"]),
-      loadNamesFromCollection("brands", ["brand"]),
-      loadFiltersFromProducts(),
-    ]);
-
-    const categories = allCategories.length
-      ? allCategories
-      : fromProducts.categories;
-    const brands = allBrands.length ? allBrands : fromProducts.brands;
-
-    const brandsByCategory = Object.fromEntries(
-      categories.map((c) => {
-        const list = fromProducts.brandsByCategory?.[c];
-        const arr = Array.isArray(list) ? list : [];
-        return [c, arr];
-      })
-    );
-
-    const payload = { categories, brands, brandsByCategory };
+    const fromProducts = await loadFiltersFromProducts();
+    const payload = {
+      categories: fromProducts.categories,
+      brands: fromProducts.brands,
+      brandsByCategory: fromProducts.brandsByCategory,
+    };
 
     catalogFiltersErrorCount = 0;
     lastGoodCatalogFilters = payload;
@@ -904,7 +890,10 @@ async function handleExternalProducts(req, res) {
       const safePage = Math.min(page, totalPages);
       const start = (safePage - 1) * perPage;
       const end = start + perPage;
-      const pageIds = allIds.slice(start, end);
+      const pageIds = allIds
+        .slice(start, end)
+        .map((x) => String(x?.id || "").trim())
+        .filter(Boolean);
 
       const pageProducts = await loadProductsByIds(pageIds);
       const pageItems = pageProducts.map((p) => {
