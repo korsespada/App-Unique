@@ -398,21 +398,41 @@ async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
 
   const pb = axios.create({
     baseURL: pbUrl,
-    timeout: 15000,
+    timeout: 30000,
     headers: pbHeaders,
   });
 
-  const resp = await pb.get(`/api/collections/${collection}/records`, {
-    params: {
-      page: 1,
-      perPage: 1,
-      filter: `name = "${safeName.replace(/"/g, '\\"')}"`,
-      fields: "id",
-    },
-  });
+  let resp;
+  try {
+    resp = await pb.get(`/api/collections/${collection}/records`, {
+      params: {
+        page: 1,
+        perPage: 1,
+        filter: `name = "${safeName.replace(/"/g, '\\"')}"`,
+        fields: "id",
+      },
+    });
+  } catch (err) {
+    // transient network hiccup / PB load: retry once
+    resp = await pb.get(`/api/collections/${collection}/records`, {
+      params: {
+        page: 1,
+        perPage: 1,
+        filter: `name = "${safeName.replace(/"/g, '\\"')}"`,
+        fields: "id",
+      },
+    });
+  }
 
   const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
   const id = items[0]?.id ? String(items[0].id).trim() : "";
+
+  // cache misses shortly to avoid repeated PB calls for non-existing names
+  if (!id) {
+    relationNameToIdCache.set(cacheKey, "", 5 * 60);
+    return "";
+  }
+
   relationNameToIdCache.set(cacheKey, id);
   return id;
 }
