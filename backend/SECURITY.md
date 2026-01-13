@@ -19,18 +19,31 @@ const candidates = [
 
 #### Стало:
 ```javascript
-// ✅ Только актуальная версия v2 без signature
-const secretKey = crypto.createHmac('sha256', botTokenStr)
+// ✅ Приоритет v2, fallback на v1 для совместимости
+const secretKeyV2 = crypto.createHmac('sha256', botTokenStr)
   .update('WebAppData').digest();
-const calculatedHash = crypto.createHmac('sha256', secretKey)
+const calculatedHashV2 = crypto.createHmac('sha256', secretKeyV2)
   .update(dataCheckString).digest('hex');
+
+const secretKeyV1 = crypto.createHmac('sha256', 'WebAppData')
+  .update(botTokenStr).digest();
+const calculatedHashV1 = crypto.createHmac('sha256', secretKeyV1)
+  .update(dataCheckString).digest('hex');
+
+// Проверяем v2 первым, v1 как fallback
+if (safeHexEqual(calculatedHashV2, hash)) {
+  matched = 'v2';
+} else if (safeHexEqual(calculatedHashV1, hash)) {
+  matched = 'v1';
+}
 
 // ✅ maxAgeSeconds = 300 (5 минут)
 ```
 
 #### Улучшения:
-- ✅ Только v2 (актуальная версия Telegram WebApp)
-- ✅ Нет fallback на старые версии (защита от downgrade атак)
+- ✅ Приоритет v2 (актуальная версия Telegram WebApp)
+- ✅ Fallback на v1 для совместимости со старыми клиентами
+- ✅ Убраны варианты с signature (не используются Telegram)
 - ✅ Строгая проверка времени жизни (5 минут вместо 24 часов)
 - ✅ Защита от атак с будущим временем (auth_date не может быть > now + 60 сек)
 - ✅ Обязательная проверка auth_date (раньше было опционально)
@@ -116,7 +129,7 @@ cat .gitignore | grep -E "\.env"
 ```javascript
 // backend/src/telegramWebAppAuth.js
 maxAgeSeconds: 300  // 5 минут (по умолчанию)
-version: 'v2-strict'  // Только актуальная версия
+version: 'v2 (приоритет), v1 (fallback)'  // Совместимость
 ```
 
 ### Rate Limiting:
