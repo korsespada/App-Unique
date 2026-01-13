@@ -411,8 +411,16 @@ app.get("/api/cache/stats", (req, res) => {
   res.json(stats);
 });
 
-// Cache invalidation endpoint (admin only - add auth in production)
+// Cache invalidation endpoint - protected with admin key
 app.post("/api/cache/invalidate", (req, res) => {
+  const adminKey = process.env.ADMIN_API_KEY;
+  const providedKey = req.headers["x-admin-key"] || req.body.adminKey;
+  
+  // Require admin key in production
+  if (!adminKey || adminKey !== providedKey) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  
   const { type } = req.body;
   
   switch (type) {
@@ -432,30 +440,33 @@ app.post("/api/cache/invalidate", (req, res) => {
   res.json({ success: true, invalidated: type });
 });
 
-// Debug endpoint for testing Telegram auth (remove in production)
-app.post("/api/debug/auth", (req, res) => {
-  const botToken = process.env.BOT_TOKEN;
-  const { initData } = req.body;
-  
-  if (!botToken) {
-    return res.status(500).json({ error: "BOT_TOKEN not configured" });
-  }
-  
-  const auth = validateTelegramInitData(initData, botToken, {
-    maxAgeSeconds: 300,
+// Debug endpoint - disabled in production
+// To enable for local debugging, set DEBUG_AUTH_ENABLED=true in .env
+if (process.env.DEBUG_AUTH_ENABLED === "true" && process.env.NODE_ENV !== "production") {
+  app.post("/api/debug/auth", (req, res) => {
+    const botToken = process.env.BOT_TOKEN;
+    const { initData } = req.body;
+    
+    if (!botToken) {
+      return res.status(500).json({ error: "BOT_TOKEN not configured" });
+    }
+    
+    const auth = validateTelegramInitData(initData, botToken, {
+      maxAgeSeconds: 300,
+    });
+    
+    res.json({
+      ok: auth.ok,
+      error: auth.error,
+      debug: auth.debug,
+      user: auth.user ? {
+        id: auth.user.id,
+        first_name: auth.user.first_name,
+        username: auth.user.username,
+      } : null,
+    });
   });
-  
-  res.json({
-    ok: auth.ok,
-    error: auth.error,
-    debug: auth.debug,
-    user: auth.user ? {
-      id: auth.user.id,
-      first_name: auth.user.first_name,
-      username: auth.user.username,
-    } : null,
-  });
-});
+}
 
 app.get("/", (req, res) => {
   res.json({

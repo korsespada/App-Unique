@@ -9,7 +9,7 @@ require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const { validateTelegramInitData } = require("../src/telegramWebAppAuth");
+const { validateTelegramInitData, parseInitData } = require("../src/telegramWebAppAuth");
 const {
   listActiveProducts,
   listAllActiveProducts,
@@ -21,7 +21,21 @@ const {
 } = require("../src/pocketbaseClient");
 const cacheManager = require("../src/cacheManager");
 
+const rateLimit = require("express-rate-limit");
+
 const app = express();
+
+// Rate limiting for orders endpoint
+const ORDER_RATE_WINDOW_MS = Number(process.env.ORDER_RATE_WINDOW_MS || 5 * 60 * 1000);
+const ORDER_RATE_MAX = Number(process.env.ORDER_RATE_MAX || 30);
+
+const orderRateLimiter = rateLimit({
+  windowMs: ORDER_RATE_WINDOW_MS,
+  max: ORDER_RATE_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Слишком много запросов. Попробуйте позже." },
+});
 
 const CACHE_DIR = path.join(__dirname, "..", ".cache");
 const PRODUCTS_CACHE_FILE = path.join(CACHE_DIR, "products.json");
@@ -1390,7 +1404,7 @@ app.post(["/api/profile/state", "/profile/state"], async (req, res) => {
   }
 });
 
-app.post(["/orders", "/api/orders"], async (req, res) => {
+app.post(["/orders", "/api/orders"], orderRateLimiter, async (req, res) => {
   try {
     const botToken = process.env.BOT_TOKEN;
     const managerChatId = process.env.MANAGER_CHAT_ID;
@@ -1403,6 +1417,23 @@ app.post(["/orders", "/api/orders"], async (req, res) => {
     const { initData, items, comment } = req.body;
     const safeCommentRaw = typeof comment === "string" ? comment.trim() : "";
     const safeComment = safeCommentRaw.slice(0, 1000);
+
+    // Anti-replay protection
+    let initDataHash = "";
+    try {
+      initDataHash = String(parseInitData(initData).hash || "").trim();
+    } catch {
+      initDataHash = "";
+    }
+
+    if (initDataHash) {
+      const replayKey = `order:initDataHash:${initDataHash}`;
+      if (cacheManager.get("antiReplay", replayKey)) {
+        return res.status(409).json({
+          error: "Повторная отправка заказа. Обновите приложение и попробуйте снова.",
+        });
+      }
+    }
 
     const auth = validateTelegramInitData(initData, botToken, {
       maxAgeSeconds: Number(process.env.TG_INITDATA_MAX_AGE_SECONDS || 300),
@@ -1418,6 +1449,11 @@ app.post(["/orders", "/api/orders"], async (req, res) => {
       return res
         .status(401)
         .json({ error: auth.error || "initData невалиден" });
+    }
+
+    // Mark initData as used (anti-replay)
+    if (initDataHash) {
+      cacheManager.set("antiReplay", `order:initDataHash:${initDataHash}`, true);
     }
 
     const user = auth.user || null;

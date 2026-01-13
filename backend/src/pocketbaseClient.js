@@ -103,17 +103,31 @@ function normalizeCart(value) {
     .filter(Boolean);
 }
 
+/**
+ * Validates that a string is a valid Telegram user ID (numeric only)
+ */
+function isValidTelegramId(id) {
+  if (typeof id !== "string" && typeof id !== "number") return false;
+  const str = String(id).trim();
+  return /^\d{1,20}$/.test(str);
+}
+
 async function getProfileByTelegramId(telegramId) {
   const api = pbApi();
   const tg = safeString(telegramId);
   if (!tg) throw new Error("telegramId is required");
+  
+  // Validate telegramId format to prevent injection
+  if (!isValidTelegramId(tg)) {
+    throw new Error("Invalid telegramId format");
+  }
 
   try {
     const resp = await api.get("/api/collections/profiles/records", {
       params: {
         page: 1,
         perPage: 1,
-        filter: `telegramid = "${tg.replace(/"/g, '\\"')}"`,
+        filter: `telegramid = "${tg}"`,
       },
     });
     const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
