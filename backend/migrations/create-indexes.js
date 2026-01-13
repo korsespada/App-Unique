@@ -2,9 +2,16 @@ const PocketBase = require("pocketbase/cjs");
 const path = require("path");
 const fs = require("fs");
 
-const pbUrl = process.env.PB_URL || "http://144.31.116.66:8090";
-const pbAdminEmail = process.env.PB_ADMIN_EMAIL || "admin@example.com";
-const pbAdminPassword = process.env.PB_ADMIN_PASSWORD || "password";
+const pbUrl = process.env.PB_URL;
+const pbAdminEmail = process.env.PB_ADMIN_EMAIL;
+const pbAdminPassword = process.env.PB_ADMIN_PASSWORD;
+
+if (!pbUrl || !pbAdminEmail || !pbAdminPassword) {
+  console.error("Missing required environment variables:");
+  console.error("  PB_URL, PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD");
+  console.error("\nSet them in .env or export before running this script.");
+  process.exit(1);
+}
 
 async function createIndexes() {
   const pb = new PocketBase(pbUrl);
