@@ -680,11 +680,10 @@ app.get("/api/:version/:shop/external-products", async (req, res) => {
       }
       if (tokens.length) {
         const title = String(
-          p.title || p.name || p.product_id || ""
+          p.title || p.name || ""
         ).toLowerCase();
         const desc = String(p.description || "").toLowerCase();
-        const pid = String(p.product_id || p.id || "").toLowerCase();
-        const hay = `${title} ${desc} ${pid}`;
+        const hay = `${title} ${desc}`;
         for (const tok of tokens) {
           if (!hay.includes(tok)) return false;
         }
@@ -786,11 +785,10 @@ app.get("/api/external-products", async (req, res) => {
       }
       if (tokens.length) {
         const title = String(
-          p.title || p.name || p.product_id || ""
+          p.title || p.name || ""
         ).toLowerCase();
         const desc = String(p.description || "").toLowerCase();
-        const pid = String(p.product_id || p.id || "").toLowerCase();
-        const hay = `${title} ${desc} ${pid}`;
+        const hay = `${title} ${desc}`;
         for (const tok of tokens) {
           if (!hay.includes(tok)) return false;
         }
