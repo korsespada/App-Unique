@@ -17,6 +17,10 @@ pnpm-debug.log*
 **/.env.*
 .env
 
+# Allow .env.example files
+!**/.env.example
+!.env.example
+
 # vercel
 .vercel/
 
