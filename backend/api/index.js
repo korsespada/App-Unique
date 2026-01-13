@@ -388,6 +388,15 @@ function setCatalogCacheHeaders(res) {
   res.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
 }
 
+/**
+ * Validates that a string is a valid PocketBase record ID
+ * PocketBase IDs are 15-character alphanumeric strings
+ */
+function isValidPocketBaseId(id) {
+  if (typeof id !== "string") return false;
+  return /^[a-z0-9]{15}$/.test(id);
+}
+
 async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
   const safeName = String(name || "").trim();
   if (!safeName) return "";
@@ -404,12 +413,14 @@ async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
 
   let resp;
   try {
+    // Load all records and filter in memory to avoid SQL injection
+    // This is safer than building filter strings with user input
     resp = await pb.get(`/api/collections/${collection}/records`, {
       params: {
         page: 1,
-        perPage: 1,
-        filter: `name = "${safeName.replace(/"/g, '\\"')}"`,
-        fields: "id",
+        perPage: 2000,
+        fields: "id,name",
+        sort: "name",
       },
     });
   } catch (err) {
@@ -417,15 +428,17 @@ async function resolveRelationIdByName({ collection, name, pbUrl, pbHeaders }) {
     resp = await pb.get(`/api/collections/${collection}/records`, {
       params: {
         page: 1,
-        perPage: 1,
-        filter: `name = "${safeName.replace(/"/g, '\\"')}"`,
-        fields: "id",
+        perPage: 2000,
+        fields: "id,name",
+        sort: "name",
       },
     });
   }
 
   const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
-  const id = items[0]?.id ? String(items[0].id).trim() : "";
+  // Filter in memory - safe from SQL injection
+  const found = items.find((it) => String(it?.name || "").trim() === safeName);
+  const id = found?.id ? String(found.id).trim() : "";
 
   // cache misses shortly to avoid repeated PB calls for non-existing names
   if (!id) {
@@ -866,9 +879,44 @@ async function handleExternalProducts(req, res) {
   }
 
   let filterParts = ['status = "active"'];
-  if (brandId) filterParts.push(`brand = "${brandId.replace(/"/g, '\\"')}"`);
-  if (categoryId)
-    filterParts.push(`category = "${categoryId.replace(/"/g, '\\"')}"`);
+  
+  // Validate IDs to prevent SQL injection
+  if (brandId) {
+    if (!isValidPocketBaseId(brandId)) {
+      console.warn("Invalid brand ID format:", brandId);
+      const payload = {
+        products: [],
+        page: 1,
+        perPage,
+        totalPages: 1,
+        totalItems: 0,
+        hasNextPage: false,
+      };
+      pageDataCache.set(cacheKey, payload);
+      setCatalogCacheHeaders(res);
+      return res.json(normalizeProductDescriptions(payload));
+    }
+    filterParts.push(`brand = "${brandId}"`);
+  }
+  
+  if (categoryId) {
+    if (!isValidPocketBaseId(categoryId)) {
+      console.warn("Invalid category ID format:", categoryId);
+      const payload = {
+        products: [],
+        page: 1,
+        perPage,
+        totalPages: 1,
+        totalItems: 0,
+        hasNextPage: false,
+      };
+      pageDataCache.set(cacheKey, payload);
+      setCatalogCacheHeaders(res);
+      return res.json(normalizeProductDescriptions(payload));
+    }
+    filterParts.push(`category = "${categoryId}"`);
+  }
+  
   const customFilter = filterParts.join(" && ");
 
   try {

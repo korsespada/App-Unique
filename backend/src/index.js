@@ -457,6 +457,15 @@ async function getCachedActiveProducts() {
   }
 }
 
+/**
+ * Validates that a string is a valid PocketBase record ID
+ * PocketBase IDs are 15-character alphanumeric strings
+ */
+function isValidPocketBaseId(id) {
+  if (typeof id !== "string") return false;
+  return /^[a-z0-9]{15}$/.test(id);
+}
+
 async function resolveRelationIdByNameSafe(collection, name) {
   const safeName = String(name || "").trim();
   if (!safeName) return "";
@@ -494,6 +503,7 @@ async function resolveRelationIdByNameSafe(collection, name) {
   });
 
   const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
+  // Filter in memory - safe from SQL injection
   const found = items.find((it) => String(it?.name || "").trim() === safeName);
   const id = found?.id ? String(found.id).trim() : "";
 
@@ -546,8 +556,31 @@ app.get("/api/:version/:shop/external-products", async (req, res) => {
         return res.json(payload);
       }
 
-      if (brandId) filterParts.push(`brand = "${brandId}"`);
-      if (categoryId) filterParts.push(`category = "${categoryId}"`);
+      // Validate IDs to prevent SQL injection
+      if (brandId) {
+        if (!isValidPocketBaseId(brandId)) {
+          console.warn("Invalid brand ID format:", brandId);
+          const payload = normalizeProductDescriptions(
+            buildPagedExternalProductsResponse([], { page, perPage })
+          );
+          externalProductsCache.set(cacheKey, payload);
+          return res.json(payload);
+        }
+        filterParts.push(`brand = "${brandId}"`);
+      }
+      
+      if (categoryId) {
+        if (!isValidPocketBaseId(categoryId)) {
+          console.warn("Invalid category ID format:", categoryId);
+          const payload = normalizeProductDescriptions(
+            buildPagedExternalProductsResponse([], { page, perPage })
+          );
+          externalProductsCache.set(cacheKey, payload);
+          return res.json(payload);
+        }
+        filterParts.push(`category = "${categoryId}"`);
+      }
+      
       const filter = filterParts.join(" && ");
 
       const products = await listActiveProducts(page, perPage, filter);
@@ -640,8 +673,31 @@ app.get("/api/external-products", async (req, res) => {
       return res.json(payload);
     }
 
-    if (brandId) filterParts.push(`brand = "${brandId}"`);
-    if (categoryId) filterParts.push(`category = "${categoryId}"`);
+    // Validate IDs to prevent SQL injection
+    if (brandId) {
+      if (!isValidPocketBaseId(brandId)) {
+        console.warn("Invalid brand ID format:", brandId);
+        const payload = normalizeProductDescriptions({
+          ...buildPagedExternalProductsResponse([], { page, perPage }),
+        });
+        externalProductsCache.set(cacheKey, payload);
+        return res.json(payload);
+      }
+      filterParts.push(`brand = "${brandId}"`);
+    }
+    
+    if (categoryId) {
+      if (!isValidPocketBaseId(categoryId)) {
+        console.warn("Invalid category ID format:", categoryId);
+        const payload = normalizeProductDescriptions({
+          ...buildPagedExternalProductsResponse([], { page, perPage }),
+        });
+        externalProductsCache.set(cacheKey, payload);
+        return res.json(payload);
+      }
+      filterParts.push(`category = "${categoryId}"`);
+    }
+    
     const filter = filterParts.join(" && ");
 
     const products = await listActiveProducts(page, perPage, filter);
