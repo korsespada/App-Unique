@@ -1,7 +1,7 @@
 import { ArrowLeft, ChevronDown, Heart, Share } from "lucide-react";
 import React from "react";
 
-import tgIcon from "@/assets/images/tg.svg";
+import tgIcon from "@image/tg.svg";
 import { Product } from "../types";
 
 type Props = {
