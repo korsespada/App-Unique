@@ -63,18 +63,28 @@ function validateTelegramInitData(initData, botToken, options = {}) {
     return { ok: false, error: 'hash отсутствует' };
   }
 
-  // Используем только актуальную версию подписи (v2 без signature)
-  // Это предотвращает downgrade атаки
+  // Подготовка данных для проверки
   const dataWithoutSignature = { ...data };
   delete dataWithoutSignature.signature;
-
   const dataCheckString = buildDataCheckString(dataWithoutSignature);
 
-  // Только v2 (актуальная версия Telegram WebApp)
-  const secretKey = crypto.createHmac('sha256', botTokenStr).update('WebAppData').digest();
-  const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+  // Проверяем v2 (приоритет) и v1 (fallback для совместимости)
+  // v2 - актуальная версия Telegram WebApp
+  const secretKeyV2 = crypto.createHmac('sha256', botTokenStr).update('WebAppData').digest();
+  const calculatedHashV2 = crypto.createHmac('sha256', secretKeyV2).update(dataCheckString).digest('hex');
 
-  if (!safeHexEqual(calculatedHash, hash)) {
+  // v1 - старая версия (для совместимости)
+  const secretKeyV1 = crypto.createHmac('sha256', 'WebAppData').update(botTokenStr).digest();
+  const calculatedHashV1 = crypto.createHmac('sha256', secretKeyV1).update(dataCheckString).digest('hex');
+
+  let matched = null;
+  if (safeHexEqual(calculatedHashV2, hash)) {
+    matched = 'v2';
+  } else if (safeHexEqual(calculatedHashV1, hash)) {
+    matched = 'v1';
+  }
+
+  if (!matched) {
     const botIdFromToken = String(botTokenStr).split(':')[0] || '';
     const botTokenSha256Prefix = crypto.createHash('sha256').update(botTokenStr).digest('hex').slice(0, 12);
     
@@ -85,7 +95,8 @@ function validateTelegramInitData(initData, botToken, options = {}) {
         botIdFromToken,
         botTokenSha256Prefix,
         receivedHashPrefix: String(hash || '').slice(0, 12),
-        calculatedHashPrefix: String(calculatedHash || '').slice(0, 12),
+        calculatedHashV2Prefix: String(calculatedHashV2 || '').slice(0, 12),
+        calculatedHashV1Prefix: String(calculatedHashV1 || '').slice(0, 12),
         keysUsed: Object.keys(dataWithoutSignature).sort(),
       },
     };
@@ -93,28 +104,28 @@ function validateTelegramInitData(initData, botToken, options = {}) {
 
   // Проверка времени жизни (строгая)
   const authDate = Number(data.auth_date);
-  if (Number.isFinite(authDate) && authDate > 0) {
-    const now = Math.floor(Date.now() / 1000);
-    const age = now - authDate;
-    
-    if (age > maxAgeSeconds) {
-      return { 
-        ok: false, 
-        error: `initData устарел (${age}с > ${maxAgeSeconds}с)` 
-      };
-    }
-    
-    // Защита от атак с будущим временем
-    if (age < -60) {
-      return { 
-        ok: false, 
-        error: 'initData из будущего (возможная атака)' 
-      };
-    }
-  } else {
+  if (!Number.isFinite(authDate) || authDate <= 0) {
     return { 
       ok: false, 
       error: 'auth_date отсутствует или некорректен' 
+    };
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const age = now - authDate;
+  
+  if (age > maxAgeSeconds) {
+    return { 
+      ok: false, 
+      error: `initData устарел (${age}с > ${maxAgeSeconds}с)` 
+    };
+  }
+  
+  // Защита от атак с будущим временем
+  if (age < -60) {
+    return { 
+      ok: false, 
+      error: 'initData из будущего (возможная атака)' 
     };
   }
 
@@ -135,10 +146,10 @@ function validateTelegramInitData(initData, botToken, options = {}) {
     data,
     user,
     debug: {
-      version: 'v2-strict',
+      version: matched,
       botIdFromToken,
       botTokenSha256Prefix,
-      age: Math.floor(Date.now() / 1000) - authDate,
+      age,
     }
   };
 }
