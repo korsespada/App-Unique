@@ -1,7 +1,7 @@
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import React from "react";
 
-import { CartItem, Product } from "../types";
+import { AppView, CartItem, Product } from "../types";
 
 type Props = {
   cart: CartItem[];
@@ -10,7 +10,7 @@ type Props = {
   setOrderComment: (v: string) => void;
   sendOrderToManager: () => void;
   isSendingOrder: boolean;
-  setCurrentView: (v: string) => void;
+  setCurrentView: (v: AppView) => void;
   restoreHomeScroll: (behavior?: "auto" | "smooth") => void;
   navigateToProduct: (p: Product) => void;
   getThumbUrl: (url: string, thumb?: string) => string;
