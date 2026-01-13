@@ -1073,9 +1073,16 @@ const App: React.FC = () => {
     });
   }, [currentImageIndex, getDetailImageUrl, selectedProduct]);
 
+  // Кеш предзагруженных изображений для текущего товара
+  const prefetchedProductIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (currentView !== "product-detail") return;
     if (!selectedProduct) return;
+
+    // Предзагружаем все изображения только один раз на товар
+    if (prefetchedProductIdRef.current === selectedProduct.id) return;
+    prefetchedProductIdRef.current = selectedProduct.id;
 
     const images = Array.isArray(selectedProduct.images)
       ? selectedProduct.images
@@ -1086,11 +1093,6 @@ const App: React.FC = () => {
     const timer = window.setTimeout(() => {
       if (cancelled) return;
 
-      const currentRaw = String(
-        selectedProduct.images?.[currentImageIndex] || ""
-      );
-      const currentResolved = currentRaw ? getDetailImageUrl(currentRaw) : "";
-
       const resolved = images
         .map((src) => {
           try {
@@ -1099,8 +1101,7 @@ const App: React.FC = () => {
             return "";
           }
         })
-        .filter(Boolean)
-        .filter((src) => src !== currentResolved);
+        .filter(Boolean);
 
       const uniq = Array.from(new Set(resolved));
       const concurrency = 3;
@@ -1108,23 +1109,23 @@ const App: React.FC = () => {
 
       const pump = () => {
         if (cancelled) return;
-        while (idx < uniq.length && idx < 1000) {
-          const batchStart = idx;
-          const batch = uniq.slice(batchStart, batchStart + concurrency);
-          idx += batch.length;
-          batch.forEach((src) => {
-            try {
-              const img = new Image();
-              img.src = src;
-            } catch {
-              // ignore
-            }
-          });
+        if (idx >= uniq.length || idx >= 1000) return;
 
-          // отдаем управление UI
-          window.setTimeout(() => pump(), 0);
-          return;
-        }
+        const batchStart = idx;
+        const batch = uniq.slice(batchStart, batchStart + concurrency);
+        idx += batch.length;
+
+        batch.forEach((src) => {
+          try {
+            const img = new Image();
+            img.src = src;
+          } catch {
+            // ignore
+          }
+        });
+
+        // отдаем управление UI
+        window.setTimeout(() => pump(), 0);
       };
 
       pump();
@@ -1134,7 +1135,7 @@ const App: React.FC = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [currentImageIndex, currentView, getDetailImageUrl, selectedProduct]);
+  }, [currentView, getDetailImageUrl, selectedProduct]);
 
   return (
     <div className="relative mx-auto min-h-screen max-w-md overflow-x-hidden bg-gradient-to-b from-black via-[#070707] to-[#050505] text-white">
