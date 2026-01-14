@@ -769,8 +769,38 @@ app.get("/api/external-products", async (req, res) => {
     
     const filter = filterParts.join(" && ");
 
-    const products = await listActiveProducts(page, perPage, filter);
-    const baseList = toProductArray(products);
+    // When search is present, we need to fetch all products first, then filter
+    // Otherwise pagination would only search within the current page
+    let baseList;
+    let totalItemsFromDb = 0;
+    
+    if (search || productId) {
+      // Fetch all products matching brand/category filter, then search in memory
+      const allProducts = await listActiveProducts(1, 10000, filter);
+      baseList = toProductArray(allProducts);
+      totalItemsFromDb = allProducts?.totalItems || baseList.length;
+    } else {
+      // No search - use normal pagination
+      const products = await listActiveProducts(page, perPage, filter);
+      baseList = toProductArray(products);
+      
+      const shuffled = seed ? shuffleDeterministic(baseList, seed) : baseList;
+      const mixed = seed
+        ? mixByBrandRoundRobin(shuffled, seed)
+        : mixByBrandRoundRobin(shuffled, "");
+      
+      const payload = normalizeProductDescriptions({
+        products: mixed,
+        page,
+        perPage,
+        totalPages: products?.totalPages || 1,
+        totalItems: products?.totalItems || mixed.length,
+        hasNextPage: products?.hasNextPage || false,
+      });
+      cacheManager.set("products", cacheKey, payload);
+      return res.json(payload);
+    }
+    
     const q = search.toLowerCase();
     const tokens = q
       ? q
