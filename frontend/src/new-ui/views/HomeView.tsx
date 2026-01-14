@@ -153,7 +153,7 @@ export default function HomeView({
       </div>
 
       <div className="grid grid-cols-2 gap-4 px-4">
-        {isProductsLoading && sourceProducts.length === 0 ? (
+        {isProductsLoading ? (
           <ProductCardSkeleton count={8} />
         ) : filteredAndSortedProducts.length > 0 ? (
           filteredAndSortedProducts.map((product) => {
