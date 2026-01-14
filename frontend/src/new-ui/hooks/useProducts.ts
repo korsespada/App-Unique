@@ -2,7 +2,6 @@ import {
   ExternalProductsPagedResponse,
   useGetExternalProducts
 } from "@framework/api/product/external-get";
-import { useQueryClient } from "@tanstack/react-query";
 import {
  useCallback, useEffect, useMemo, useRef, useState 
 } from "react";
@@ -20,7 +19,6 @@ export function useProducts({
   activeBrand,
   activeCategory
 }: UseProductsOptions) {
-  const queryClient = useQueryClient();
   const productsRef = useRef<Product[]>([]);
   const [loadMoreEl, setLoadMoreEl] = useState<HTMLDivElement | null>(null);
 
@@ -41,10 +39,8 @@ export function useProducts({
     category: activeCategory === "Все" ? undefined : activeCategory
   });
 
-  // Invalidate queries on filter change
-  useEffect(() => {
-    queryClient.invalidateQueries(["external-products"]);
-  }, [searchQuery, activeBrand, activeCategory, queryClient]);
+  // React Query automatically refetches when query key changes (search, brand, category)
+  // No need for manual invalidation
 
   // Transform API data to Product[]
   const apiProducts = useMemo<Product[]>(() => {
