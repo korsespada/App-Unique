@@ -98,7 +98,10 @@ export function useProducts({
     productsRef.current = apiProducts;
   }, [apiProducts]);
 
-  const isProductsLoading = isExternalLoading;
+  // Show loading when:
+  // 1. Initial load (isLoading)
+  // 2. Fetching but NOT pagination (isFetching && !isFetchingNextPage)
+  const isProductsLoading = isExternalLoading || (isExternalFetching && !isFetchingNextPage);
 
   return {
     products: apiProducts,
