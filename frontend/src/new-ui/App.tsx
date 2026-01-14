@@ -321,6 +321,7 @@ const App: React.FC = () => {
             getThumbUrl={getThumbUrl}
             toggleFavorite={toggleFavorite}
             loadMoreRef={loadMoreRef}
+            isFetchingNextPage={isFetchingNextPage}
           />
         )}
         {currentView === "product-detail" && (

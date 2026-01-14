@@ -25,6 +25,7 @@ type Props = {
   getThumbUrl: (url: string, thumb?: string) => string;
   toggleFavorite: (productId: string, product?: Product) => void;
   loadMoreRef: (node: HTMLDivElement | null) => void;
+  isFetchingNextPage: boolean;
 };
 
 export default function HomeView({
@@ -47,7 +48,8 @@ export default function HomeView({
   navigateToProduct,
   getThumbUrl,
   toggleFavorite,
-  loadMoreRef
+  loadMoreRef,
+  isFetchingNextPage
 }: Props) {
   return (
     <div className="animate-in fade-in pb-32 pt-2 duration-700">
@@ -151,7 +153,7 @@ export default function HomeView({
       </div>
 
       <div className="grid grid-cols-2 gap-4 px-4">
-        {isProductsLoading ? (
+        {isProductsLoading && sourceProducts.length === 0 ? (
           <ProductCardSkeleton count={8} />
         ) : filteredAndSortedProducts.length > 0 ? (
           filteredAndSortedProducts.map((product) => {
@@ -249,6 +251,12 @@ export default function HomeView({
           </div>
         )}
       </div>
+
+      {isFetchingNextPage && (
+        <div className="flex justify-center py-8">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white/80" />
+        </div>
+      )}
 
       <div className="px-4">
         <div ref={loadMoreRef} className="h-12" />

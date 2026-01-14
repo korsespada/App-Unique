@@ -98,7 +98,7 @@ export function useProducts({
     productsRef.current = apiProducts;
   }, [apiProducts]);
 
-  const isProductsLoading = isExternalLoading || isExternalFetching;
+  const isProductsLoading = isExternalLoading;
 
   return {
     products: apiProducts,
