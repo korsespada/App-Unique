@@ -48,7 +48,7 @@ export function useProducts({
       || []) as ExternalProductsPagedResponse[];
     const raw = pages.flatMap((p) => Array.isArray(p?.products) ? p.products : []);
 
-    return raw
+    const products = raw
       .map((p) => {
         const id = String((p as any).id || p.product_id || "");
         const name = String(p.title || p.name || p.product_id || "").trim();
@@ -77,6 +77,14 @@ export function useProducts({
         };
       })
       .filter((p) => Boolean(p.id) && Boolean(p.name));
+
+    // Deduplicate by ID to prevent duplicates when keepPreviousData mixes old/new data
+    const seen = new Set<string>();
+    return products.filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
   }, [externalData]);
 
   const totalItems = useMemo(() => {
