@@ -1,6 +1,7 @@
 import { ChevronDown, Heart, Search, X } from "lucide-react";
 import React from "react";
 
+import { ProductCardSkeleton } from "../components/ProductCardSkeleton";
 import { Product } from "../types";
 
 type Props = {
@@ -150,16 +151,8 @@ export default function HomeView({
       </div>
 
       <div className="grid grid-cols-2 gap-4 px-4">
-        {isProductsLoading && sourceProducts.length === 0 ? (
-          Array.from({ length: 8 }).map((_, idx) => (
-            <div key={idx} className="animate-pulse">
-              <div className="mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-white/5" />
-              <div className="px-2">
-                <div className="mb-2 h-3 w-16 rounded bg-white/10" />
-                <div className="h-4 w-28 rounded bg-white/10" />
-              </div>
-            </div>
-          ))
+        {isProductsLoading ? (
+          <ProductCardSkeleton count={8} />
         ) : filteredAndSortedProducts.length > 0 ? (
           filteredAndSortedProducts.map((product) => {
             const isFavorited = favorites.includes(String(product.id));
