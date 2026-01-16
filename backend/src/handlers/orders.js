@@ -4,9 +4,6 @@
 const axios = require("axios");
 const cacheManager = require("../cacheManager");
 const {
-  getBotUsername,
-  buildProductStartParam,
-  buildMiniAppLink,
   parseInitData,
   validateTelegramInitData,
 } = require("../utils/telegram");
@@ -118,8 +115,6 @@ async function handleOrderSubmission(req, res) {
   const safeUsername = escapeHtml((username || "").trim());
   const safeTelegramId = escapeHtml(String(telegramUserId));
 
-  const botUsername = await getBotUsername(botToken);
-
   const orderText = [
     "🆕 Новый заказ из Telegram Mini App",
     "",
@@ -139,16 +134,12 @@ async function handleOrderSubmission(req, res) {
         const titleText = escapeHtml(String(it?.title || "").trim() || "Без названия");
         const id = escapeHtml(String(it?.id || "").trim() || "-");
 
-        const startParam = buildProductStartParam(String(it?.id || "").trim());
-        const link = buildMiniAppLink(botUsername, startParam);
-        const linkLine = link ? `\n${escapeHtml(link)}` : "";
-
         if (!hasPrice || !Number.isFinite(price) || price <= 0) {
-          return `${idx + 1}. ${titleText}${linkLine} (id: <code>${id}</code>) — ${qty} шт — Цена по запросу`;
+          return `${idx + 1}. ${titleText} (id: <code>${id}</code>) — ${qty} шт — Цена по запросу`;
         }
 
         const lineTotal = price * qty;
-        return `${idx + 1}. ${titleText}${linkLine} (id: <code>${id}</code>) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
+        return `${idx + 1}. ${titleText} (id: <code>${id}</code>) — ${qty} шт × ${price} ₽ = ${lineTotal} ₽`;
       })
     )
     .concat([
