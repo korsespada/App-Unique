@@ -24,16 +24,27 @@ async function handleOrderSubmission(req, res) {
   const safeCommentRaw = typeof comment === "string" ? comment.trim() : "";
   const safeComment = safeCommentRaw.slice(0, 1000);
 
-  // Anti-replay protection
-  let initDataHash = "";
+  // Anti-replay protection - based on user + cart content hash
+  // This prevents double-click submissions but allows multiple different orders
+  let telegramUserIdForReplay = "";
   try {
-    initDataHash = String(parseInitData(initData).hash || "").trim();
+    const parsed = parseInitData(initData);
+    telegramUserIdForReplay = String(parsed.user?.id || "").trim();
   } catch {
-    initDataHash = "";
+    telegramUserIdForReplay = "";
   }
 
-  if (initDataHash) {
-    const replayKey = `order:initDataHash:${initDataHash}`;
+  // Create a unique order fingerprint from cart items
+  const orderFingerprint = items
+    .map((it) => `${it.id}:${it.quantity}`)
+    .sort()
+    .join("|");
+  
+  const replayKey = telegramUserIdForReplay && orderFingerprint
+    ? `order:${telegramUserIdForReplay}:${orderFingerprint}`
+    : "";
+
+  if (replayKey) {
     if (cacheManager.get("antiReplay", replayKey)) {
       return res.status(409).json({
         error: "Повторная отправка заказа. Обновите приложение и попробуйте снова.",
@@ -59,9 +70,9 @@ async function handleOrderSubmission(req, res) {
     return res.status(401).json({ error: auth.error || "initData невалиден" });
   }
 
-  // Mark initData as used (anti-replay)
-  if (initDataHash) {
-    cacheManager.set("antiReplay", `order:initDataHash:${initDataHash}`, true);
+  // Mark order as submitted (anti-replay)
+  if (replayKey) {
+    cacheManager.set("antiReplay", replayKey, true);
   }
 
   const user = auth.user || null;
