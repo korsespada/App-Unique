@@ -267,6 +267,8 @@ async function handleCatalogFilters(req, res) {
         headers: pbHeaders,
       });
 
+      // OPTIMIZATION: Load only brand and category IDs without expand
+      // This reduces load on PocketBase significantly
       const firstResp = await pbProducts.get(
         "/api/collections/products/records",
         {
@@ -275,8 +277,8 @@ async function handleCatalogFilters(req, res) {
             perPage: 2000,
             filter: 'status = "active"',
             sort: "-updated",
-            fields: "id,brand,category,expand.brand,expand.category",
-            expand: "brand,category",
+            fields: "id,brand,category", // No expand fields
+            // NO expand parameter - this is the key optimization
           },
         }
       );
@@ -295,8 +297,7 @@ async function handleCatalogFilters(req, res) {
                 perPage: 2000,
                 filter: 'status = "active"',
                 sort: "-updated",
-                fields: "id,brand,category,expand.brand,expand.category",
-                expand: "brand,category",
+                fields: "id,brand,category",
               },
             }
           );
@@ -305,13 +306,71 @@ async function handleCatalogFilters(req, res) {
         }
       }
 
+      // Collect unique brand and category IDs
+      const brandIds = new Set();
+      const categoryIds = new Set();
+      
+      for (const p of items) {
+        const brandId = String(p?.brand || "").trim();
+        const categoryId = String(p?.category || "").trim();
+        if (brandId) brandIds.add(brandId);
+        if (categoryId) categoryIds.add(categoryId);
+      }
+
+      // Load brand and category names in bulk (2 requests instead of N+1)
+      const [brandsData, categoriesData] = await Promise.all([
+        brandIds.size > 0
+          ? pb.get("/api/collections/brands/records", {
+              params: {
+                page: 1,
+                perPage: 500,
+                filter: Array.from(brandIds)
+                  .map((id) => `id="${id}"`)
+                  .join(" || "),
+                fields: "id,name",
+              },
+            })
+          : { data: { items: [] } },
+        categoryIds.size > 0
+          ? pb.get("/api/collections/categories/records", {
+              params: {
+                page: 1,
+                perPage: 500,
+                filter: Array.from(categoryIds)
+                  .map((id) => `id="${id}"`)
+                  .join(" || "),
+                fields: "id,name",
+              },
+            })
+          : { data: { items: [] } },
+      ]);
+
+      // Create lookup maps
+      const brandMap = new Map(
+        (brandsData?.data?.items || []).map((b) => [
+          String(b.id),
+          String(b.name || "").trim(),
+        ])
+      );
+      const categoryMap = new Map(
+        (categoriesData?.data?.items || []).map((c) => [
+          String(c.id),
+          String(c.name || "").trim(),
+        ])
+      );
+
+      // Build filter data
       const categoriesSet = new Set();
       const brandsSet = new Set();
       const brandsByCategorySet = new Map();
 
       for (const p of items) {
-        const categoryName = String(p?.expand?.category?.name || "").trim();
-        const brandName = String(p?.expand?.brand?.name || "").trim();
+        const categoryId = String(p?.category || "").trim();
+        const brandId = String(p?.brand || "").trim();
+        
+        const categoryName = categoryMap.get(categoryId);
+        const brandName = brandMap.get(brandId);
+
         if (categoryName) {
           categoriesSet.add(categoryName);
           if (!brandsByCategorySet.has(categoryName)) {
@@ -349,7 +408,8 @@ async function handleCatalogFilters(req, res) {
 
     catalogFiltersErrorCount = 0;
     lastGoodCatalogFilters = payload;
-    cacheManager.set("products", cacheKey, payload, 12 * 60 * 60);
+    // OPTIMIZATION: Increase cache time from 12h to 24h since filters rarely change
+    cacheManager.set("products", cacheKey, payload, 24 * 60 * 60);
     setCatalogCacheHeaders(res);
     return res.json(payload);
   } catch (err) {

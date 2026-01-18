@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const WARMUP_URL = process.env.WARMUP_URL || "https://your-app.vercel.app";
+const WARMUP_URL = process.env.WARMUP_URL || "https://app-unique.vercel.app";
 
 async function warmup() {
   console.log("Warming up serverless functions...");
