@@ -29,17 +29,30 @@ export function useProductGallery({
   setIsDetailImageCrossfading
 }: UseProductGalleryOptions) {
   const prefetchedProductIdRef = useRef<string | null>(null);
+  const prefetchedUrlsRef = useRef<Set<string>>(new Set());
+
+  // Reset prefetch cache when product changes
+  useEffect(() => {
+    if (selectedProduct?.id && selectedProduct.id !== prefetchedProductIdRef.current) {
+      prefetchedProductIdRef.current = selectedProduct.id;
+      prefetchedUrlsRef.current.clear();
+      if (detailLayerASrc) prefetchedUrlsRef.current.add(detailLayerASrc);
+      if (detailLayerBSrc) prefetchedUrlsRef.current.add(detailLayerBSrc);
+    }
+  }, [selectedProduct?.id, detailLayerASrc, detailLayerBSrc]);
 
   // Handle image crossfade on index change
   useEffect(() => {
     const nextSrc = selectedProduct?.images?.[currentImageIndex] || "";
     if (!selectedProduct || !nextSrc) return;
     const nextResolved = getDetailImageUrl(nextSrc);
-    const currentResolved =      activeDetailLayer === "A" ? detailLayerASrc : detailLayerBSrc;
+    const currentResolved = activeDetailLayer === "A" ? detailLayerASrc : detailLayerBSrc;
+
     if (nextResolved === currentResolved) return;
 
     let cancelled = false;
     setIsDetailImageCrossfading(false);
+
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
@@ -67,6 +80,7 @@ export function useProductGallery({
       setIsDetailImageCrossfading(false);
     };
     img.src = nextResolved;
+    prefetchedUrlsRef.current.add(nextResolved);
 
     return () => {
       cancelled = true;
@@ -86,26 +100,47 @@ export function useProductGallery({
   // Prefetch adjacent images
   useEffect(() => {
     if (!selectedProduct) return;
-    const images = Array.isArray(selectedProduct.images)
-      ? selectedProduct.images
-      : [];
+    const images = Array.isArray(selectedProduct.images) ? selectedProduct.images : [];
     if (images.length < 2) return;
 
-    const nextIndex =      currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
-    const prevIndex =      currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
-    const toPrefetch = [images[nextIndex], images[prevIndex]].filter(Boolean);
+    const nextIndex = currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
+    const prevIndex = currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
 
-    toPrefetch.forEach((src) => {
-      try {
-        const img = new Image();
-        img.src = getDetailImageUrl(String(src));
-      } catch {
-        // ignore
-      }
-    });
-  }, [currentImageIndex, selectedProduct]);
+    // Resolve and deduplicate URLs to prefetch
+    const urlsToPrefetch = Array.from(new Set([
+      getDetailImageUrl(String(images[nextIndex])),
+      getDetailImageUrl(String(images[prevIndex]))
+    ])).filter(url =>
+      url &&
+      url !== detailLayerASrc &&
+      url !== detailLayerBSrc &&
+      !prefetchedUrlsRef.current.has(url)
+    );
 
-  // Prefetch all images for current product
+    if (urlsToPrefetch.length === 0) return;
+
+    let cancelled = false;
+    // Add small delay to avoid spamming while swiping fast
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+
+      urlsToPrefetch.forEach(url => {
+        if (prefetchedUrlsRef.current.has(url)) return;
+        try {
+          const img = new Image();
+          img.src = url;
+          prefetchedUrlsRef.current.add(url);
+        } catch { /* ignore */ }
+      });
+    }, 100);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [currentImageIndex, selectedProduct, detailLayerASrc, detailLayerBSrc]);
+
+  // Prefetch all images for current product (low priority)
   useEffect(() => {
     if (currentView !== "product-detail") return;
     if (!selectedProduct) return;
@@ -113,9 +148,7 @@ export function useProductGallery({
     if (prefetchedProductIdRef.current === selectedProduct.id) return;
     prefetchedProductIdRef.current = selectedProduct.id;
 
-    const images = Array.isArray(selectedProduct.images)
-      ? selectedProduct.images
-      : [];
+    const images = Array.isArray(selectedProduct.images) ? selectedProduct.images : [];
     if (images.length < 2) return;
 
     let cancelled = false;
@@ -123,45 +156,49 @@ export function useProductGallery({
       if (cancelled) return;
 
       const resolved = images
-        .map((src) => {
+        .map(src => {
           try {
             return getDetailImageUrl(String(src));
           } catch {
             return "";
           }
         })
-        .filter(Boolean);
+        .filter(url =>
+          url &&
+          url !== detailLayerASrc &&
+          url !== detailLayerBSrc &&
+          !prefetchedUrlsRef.current.has(url)
+        );
 
       const uniq = Array.from(new Set(resolved));
-      const concurrency = 3;
+      const concurrency = 2; // Reduced concurrency
       let idx = 0;
 
       const pump = () => {
         if (cancelled) return;
-        if (idx >= uniq.length || idx >= 1000) return;
+        if (idx >= uniq.length) return;
 
-        const batchStart = idx;
-        const batch = uniq.slice(batchStart, batchStart + concurrency);
+        const batch = uniq.slice(idx, idx + concurrency);
         idx += batch.length;
 
-        batch.forEach((src) => {
+        batch.forEach(url => {
+          if (prefetchedUrlsRef.current.has(url)) return;
           try {
             const img = new Image();
-            img.src = src;
-          } catch {
-            // ignore
-          }
+            img.src = url;
+            prefetchedUrlsRef.current.add(url);
+          } catch { /* ignore */ }
         });
 
-        window.setTimeout(() => pump(), 0);
+        window.setTimeout(() => pump(), 200); // More delay between batches
       };
 
       pump();
-    }, 550);
+    }, 1000); // Delayed full prefetch
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [currentView, selectedProduct]);
+  }, [currentView, selectedProduct, detailLayerASrc, detailLayerBSrc]);
 }

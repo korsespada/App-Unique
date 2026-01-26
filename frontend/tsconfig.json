@@ -2,7 +2,11 @@
   "compilerOptions": {
     "target": "ESNext",
     "useDefineForClassFields": true,
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "esModuleInterop": false,
@@ -17,21 +21,27 @@
     "jsx": "react-jsx",
     // define your module paths here:
     "paths": {
-      "@components/*": ["./src/components/*"],
-      "@image/*": ["./src/assets/images/*"],
-      "@style/*": ["./src/assets/styles/*"],
-      "@pages/*": ["./src/pages/*"],
-      "@router/*": ["./src/router/"],
-      "@hooks/*": ["./src/hooks/*"],
-      "@helpers/*": ["./src/helpers/*"],
-      "@containers/*": ["./src/containers/*"],
-      "@framework/*": ["./src/framework/*"],
-      "@lib/*": ["./src/lib/*"],
-      "@ui-ga/*": ["./src/ui-ga/*"],
-      "@layout/*": ["./src/layout/*"]
+      "@framework/*": [
+        "./src/framework/*"
+      ],
+      "@style/*": [
+        "./src/assets/styles/*"
+      ],
+      "@image/*": [
+        "./src/assets/images/*"
+      ],
+      "@lib/*": [
+        "./src/lib/*"
+      ]
     },
     "baseUrl": "."
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
 }

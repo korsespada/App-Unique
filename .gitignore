@@ -30,3 +30,6 @@ Thumbs.db
 
 # Vite/TS temp
 **/*.timestamp-*.mjs
+
+# Project documentation
+google.md

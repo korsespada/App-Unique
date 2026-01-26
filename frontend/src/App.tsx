@@ -143,12 +143,12 @@ const App: React.FC = () => {
 
   const { isSendingOrder, orderComment, setOrderComment, sendOrderToManager } =
     useOrders({
-    cart,
-    cartTotal,
-    cartHasUnknownPrice,
-    clearCart,
-    setCurrentView
-  });
+      cart,
+      cartTotal,
+      cartHasUnknownPrice,
+      clearCart,
+      setCurrentView
+    });
 
   const scrolled = useScrolled();
 
@@ -242,14 +242,14 @@ const App: React.FC = () => {
               .map((x: any) => String(x?.url || "").trim())
               .filter(Boolean)
             : [];
-        if (!fullImages.length) return;
+        const fullImagesUniq = Array.from(new Set(fullImages));
 
         setSelectedProduct((prev) => {
           if (!prev) return prev;
           if (String(prev.id || "").trim() !== id) return prev;
           return {
             ...prev,
-            images: fullImages,
+            images: fullImagesUniq,
             description: String(
               (data as any)?.description || prev.description || ""
             ),
@@ -260,7 +260,7 @@ const App: React.FC = () => {
         });
 
         setCurrentImageIndex(0);
-        const first = String(fullImages[0] || "");
+        const first = String(fullImagesUniq[0] || "");
         const firstResolved = first ? getDetailImageUrl(first) : "";
         setDetailLayerASrc(firstResolved);
         setDetailLayerBSrc("");

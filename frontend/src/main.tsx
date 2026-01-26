@@ -6,8 +6,8 @@ import { SpeedInsights } from "@vercel/speed-insights/react";
 import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
-import App from "./new-ui/App";
-import { trackPageView } from "./new-ui/utils/analytics";
+import App from "./App";
+import { trackPageView } from "./utils/analytics";
 
 function TelegramAnalytics() {
   useEffect(() => {
