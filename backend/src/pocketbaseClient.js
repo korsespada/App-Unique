@@ -1,4 +1,12 @@
 const axios = require("axios");
+const https = require("https");
+
+// Shared agent для переиспользования TCP-соединений
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 10,
+  timeout: 60000,
+});
 
 function getPbConfig() {
   const url = String(process.env.PB_URL || "")
@@ -26,6 +34,7 @@ function pbApi() {
     baseURL: url,
     headers,
     timeout: 60000,
+    httpsAgent,
   });
 }
 
@@ -116,7 +125,7 @@ async function getProfileByTelegramId(telegramId) {
   const api = pbApi();
   const tg = safeString(telegramId);
   if (!tg) throw new Error("telegramId is required");
-  
+
   // Validate telegramId format to prevent injection
   if (!isValidTelegramId(tg)) {
     throw new Error("Invalid telegramId format");
@@ -228,10 +237,10 @@ function mapPbProductToExternal(record) {
   );
   const name = safeString(
     record.name ||
-      record.title ||
-      record.titletext ||
-      record.titleText ||
-      productId
+    record.title ||
+    record.titletext ||
+    record.titleText ||
+    productId
   );
   const description = safeString(record.description || "");
   const status = safeString(record.status || "");
@@ -319,10 +328,10 @@ async function listActiveProducts(
         : respData &&
           typeof respData === "object" &&
           (respData.message || respData.error)
-        ? String(respData.message || respData.error)
-        : err?.message
-        ? String(err.message)
-        : "PocketBase request failed";
+          ? String(respData.message || respData.error)
+          : err?.message
+            ? String(err.message)
+            : "PocketBase request failed";
 
     console.error("PocketBase request failed", {
       baseURL: api?.defaults?.baseURL,
@@ -485,10 +494,10 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
       typeof responseData === "string" && responseData.trim()
         ? responseData
         : responseData && typeof responseData === "object"
-        ? JSON.stringify(responseData)
-        : err?.message
-        ? String(err.message)
-        : "PocketBase request failed";
+          ? JSON.stringify(responseData)
+          : err?.message
+            ? String(err.message)
+            : "PocketBase request failed";
 
     console.error("PocketBase loadProductIdsOnly failed", {
       status,
@@ -540,8 +549,8 @@ async function loadProductsByIds(ids) {
       typeof err?.response?.data === "string"
         ? err.response.data
         : err?.response?.data?.message ||
-          err?.message ||
-          "PocketBase request failed";
+        err?.message ||
+        "PocketBase request failed";
 
     console.error("PocketBase loadProductsByIds failed", {
       status,

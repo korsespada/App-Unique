@@ -32,4 +32,6 @@ Thumbs.db
 **/*.timestamp-*.mjs
 
 # Project documentation
-google.md
+docs/
+README.md
+

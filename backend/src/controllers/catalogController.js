@@ -64,10 +64,10 @@ async function handleCatalogFilters(req, res) {
             const items = Array.isArray(firstData?.items) ? firstData.items : [];
 
             if (totalPages > 1) {
+                const pagePromises = [];
                 for (let page = 2; page <= totalPages; page += 1) {
-                    const resp = await pbProducts.get(
-                        "/api/collections/products/records",
-                        {
+                    pagePromises.push(
+                        pbProducts.get("/api/collections/products/records", {
                             params: {
                                 page,
                                 perPage: 2000,
@@ -75,8 +75,11 @@ async function handleCatalogFilters(req, res) {
                                 sort: "-updated",
                                 fields: "id,brand,category",
                             },
-                        }
+                        })
                     );
+                }
+                const responses = await Promise.all(pagePromises);
+                for (const resp of responses) {
                     const data = resp?.data;
                     if (data && Array.isArray(data.items)) items.push(...data.items);
                 }

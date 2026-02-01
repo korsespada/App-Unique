@@ -11,6 +11,7 @@ const cors = require("cors");
 const apiRoutes = require("./routes/api");
 const profileRoutes = require("./routes/profile");
 const orderRoutes = require("./routes/order");
+const { apiLimiter, heavyLimiter } = require("./middleware/rateLimiter");
 
 const { getProductById } = require("./controllers/productController");
 const { asyncRoute, extractAxiosStatus, extractAxiosMessage } = require("./utils/apiHelpers");
@@ -50,6 +51,10 @@ app.use(express.json());
 
 // Routes Mounting with versioning support
 const apiPrefixes = ["/api", "/api/:version/:shop", "/:version/:shop"];
+
+// Rate limiting for heavy endpoints
+app.use("/api/catalog-filters", heavyLimiter);
+app.use("/api/external-products", apiLimiter);
 
 // Catalog & Products
 app.use([...apiPrefixes, ""], apiRoutes);
