@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Warmup API endpoints
         run: |
-          curl -s -o /dev/null -w "%{http_code}" "https://your-app.vercel.app/api/external-products?page=1&perPage=1"
-          curl -s -o /dev/null -w "%{http_code}" "https://your-app.vercel.app/api/catalog-filters"
-          curl -s -o /dev/null -w "%{http_code}" "https://your-app.vercel.app/health"
+          curl -s -o /dev/null -w "%{http_code}" "https://app-unique.vercel.app/api/external-products?page=1&perPage=1"
+          curl -s -o /dev/null -w "%{http_code}" "https://app-unique.vercel.app/api/catalog-filters"
+          curl -s -o /dev/null -w "%{http_code}" "https://app-unique.vercel.app/health"
           echo "Warmup completed"

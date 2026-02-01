@@ -31,7 +31,7 @@ Thumbs.db
 # Vite/TS temp
 **/*.timestamp-*.mjs
 
-# Project documentation
-docs/
-README.md
-
+# Project-specific
+.venv/
+.kiro/
+.cache/

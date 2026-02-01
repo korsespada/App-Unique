@@ -134,7 +134,11 @@ version: 'v2 (приоритет), v1 (fallback)'  // Совместимость
 
 ### Rate Limiting:
 ```javascript
-// backend/src/index.js
+// backend/src/middleware/rateLimiter.js
+apiLimiter: 60 запросов / минута   // /api/external-products
+heavyLimiter: 10 запросов / минута // /api/catalog-filters
+
+// backend/src/routes/order.js
 ORDER_RATE_WINDOW_MS: 5 * 60 * 1000  // 5 минут
 ORDER_RATE_MAX: 30  // 30 заказов за 5 минут
 ```
@@ -156,9 +160,11 @@ ORDER_RATE_MAX: 30  // 30 заказов за 5 минут
 - [x] ✅ maxAgeSeconds = 300 (5 минут)
 - [x] ✅ Валидация PocketBase ID (защита от SQL injection)
 - [x] ✅ Rate limiting на /orders
+- [x] ✅ Rate limiting на /api/catalog-filters (heavyLimiter)
+- [x] ✅ Rate limiting на /api/external-products (apiLimiter)
+- [x] ✅ Connection pooling (keepAlive)
 - [ ] ⚠️ Ротировать все токены (BOT_TOKEN, PB_TOKEN)
 - [ ] ⚠️ Настроить CORS_ALLOW_ORIGINS
-- [ ] ⚠️ Добавить rate limiting на все эндпоинты
 
 ### Рекомендуется:
 - [ ] 📝 Добавить авторизацию на /api/cache/invalidate
