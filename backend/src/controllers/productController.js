@@ -81,7 +81,12 @@ async function handleExternalProducts(req, res) {
     const brand = String(req.query.brand || "").trim();
     const category = String(req.query.category || "").trim();
 
-    const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}:${seed}`;
+    // Получаем Telegram ID для стабильного перемешивания по пользователю
+    const { telegramAuthFromRequest } = require("../utils/telegram");
+    const auth = telegramAuthFromRequest(req, { maxAgeSeconds: 86400 * 7 }); // Большой TTL для сида
+    const sessionSeed = seed || auth.telegramId || "default";
+
+    const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}:${sessionSeed}`;
     const cached = cacheManager.get("pages", cacheKey);
     if (cached) {
         setCatalogCacheHeaders(res);
@@ -90,11 +95,6 @@ async function handleExternalProducts(req, res) {
 
     const isHomeUnfiltered = !search && !brand && !category;
     if (isHomeUnfiltered) {
-        // Пытаемся получить Telegram ID для стабильного перемешивания по пользователю
-        const { telegramAuthFromRequest } = require("../utils/telegram");
-        const auth = telegramAuthFromRequest(req, { maxAgeSeconds: 86400 * 7 }); // Большой TTL для сида
-        const sessionSeed = seed || auth.telegramId || "default";
-
         const orderCacheKey = `order:home:${sessionSeed}`;
         let orderedIds = cacheManager.get("shuffle", orderCacheKey);
 
