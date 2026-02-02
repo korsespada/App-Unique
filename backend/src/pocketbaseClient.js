@@ -513,7 +513,13 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
   console.log(
     `loadProductIdsOnly loaded ${allIds.length} items in ${totalPages} pages`
   );
-  return allIds;
+
+  // КРИТИЧЕСКИ ВАЖНО: Сортируем по ID для детерминированного перемешивания (shuffle)
+  return allIds.sort((a, b) => {
+    const idA = String(a?.id || "");
+    const idB = String(b?.id || "");
+    return idA.localeCompare(idB);
+  });
 }
 
 async function loadProductsByIds(ids) {

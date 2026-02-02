@@ -47,6 +47,16 @@ async function fetchExternalProductsPage(
         }
       }
     );
+
+    // Кэшируем ПЕРВУЮ страницу БЕЗ ФИЛЬТРОВ для мгновенного старта
+    if (page === 1 && !search && !productId && !brand && !category) {
+      try {
+        localStorage.setItem("home_products_first_page", JSON.stringify(data));
+      } catch (e) {
+        // ignore
+      }
+    }
+
     return data;
   } catch (e: unknown) {
     const err = e as {
@@ -112,7 +122,25 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
       refetchOnMount: false,
       staleTime: 5 * 60 * 1000,
       cacheTime: 10 * 60 * 1000,
-      keepPreviousData: true
+      keepPreviousData: true,
+      // Использование закэшированных данных для мгновенного отображения хода
+      initialData: () => {
+        if (!search && !brand && !category) {
+          try {
+            const cached = localStorage.getItem("home_products_first_page");
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              return {
+                pages: [parsed],
+                pageParams: [1]
+              };
+            }
+          } catch {
+            return undefined;
+          }
+        }
+        return undefined;
+      }
     }
   );
 }

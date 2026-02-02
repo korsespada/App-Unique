@@ -19,6 +19,21 @@ export function useCatalogFilters() {
   useEffect(() => {
     let cancelled = false;
 
+    // Сначала пробуем загрузить из локального кэша
+    try {
+      const cached = localStorage.getItem("catalog_filters_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed === "object") {
+          if (Array.isArray(parsed.categories)) setCatalogCategories(parsed.categories);
+          if (Array.isArray(parsed.brands)) setCatalogBrands(parsed.brands);
+          if (parsed.brandsByCategory) setCatalogBrandsByCategory(parsed.brandsByCategory);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load filters from cache", e);
+    }
+
     (async () => {
       try {
         const { data } = await Api.get<CatalogFiltersResponse>(
@@ -35,23 +50,31 @@ export function useCatalogFilters() {
         const brandsByCategoryRaw = data?.brandsByCategory;
         const brandsByCategory =
           brandsByCategoryRaw && typeof brandsByCategoryRaw === "object"
-          ? brandsByCategoryRaw
-          : {};
+            ? brandsByCategoryRaw
+            : {};
 
         const normalizedBrandsByCategory: Record<string, string[]> =
           Object.fromEntries(
-          Object.entries(brandsByCategory).map(([k, v]) => {
-            const key = String(k).trim();
-            const value = Array.isArray(v)
-              ? v.map((x) => String(x).trim()).filter(Boolean)
-              : [];
-            return [key, value] as const;
-          })
-        );
+            Object.entries(brandsByCategory).map(([k, v]) => {
+              const key = String(k).trim();
+              const value = Array.isArray(v)
+                ? v.map((x) => String(x).trim()).filter(Boolean)
+                : [];
+              return [key, value] as const;
+            })
+          );
 
         setCatalogCategories(categories);
         setCatalogBrands(brands);
         setCatalogBrandsByCategory(normalizedBrandsByCategory);
+
+        // Сохраняем в кэш для следующего раза
+        localStorage.setItem("catalog_filters_cache", JSON.stringify({
+          categories,
+          brands,
+          brandsByCategory: normalizedBrandsByCategory,
+          timestamp: Date.now()
+        }));
       } catch {
         // ignore
       }

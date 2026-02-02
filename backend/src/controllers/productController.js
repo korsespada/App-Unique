@@ -90,17 +90,24 @@ async function handleExternalProducts(req, res) {
 
     const isHomeUnfiltered = !search && !brand && !category;
     if (isHomeUnfiltered) {
-        const orderCacheKey = `order:home:${seed || "default"}`;
+        // Пытаемся получить Telegram ID для стабильного перемешивания по пользователю
+        const { telegramAuthFromRequest } = require("../utils/telegram");
+        const auth = telegramAuthFromRequest(req, { maxAgeSeconds: 86400 * 7 }); // Большой TTL для сида
+        const sessionSeed = seed || auth.telegramId || "default";
+
+        const orderCacheKey = `order:home:${sessionSeed}`;
         let orderedIds = cacheManager.get("shuffle", orderCacheKey);
 
         if (!orderedIds) {
-            const idRecords = await loadProductIdsOnly(2000, 'status = "active"');
-            const shuffled = seed
-                ? shuffleDeterministic(idRecords, `home:${seed}`)
-                : shuffleDeterministic(idRecords, "home:default");
-            const mixed = mixByCategoryRoundRobin(shuffled, seed || "default");
+            let idRecords = await loadProductIdsOnly(2000, 'status = "active"');
+
+            // Гарантируем стабильный входной порядок
+            idRecords.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+
+            const shuffled = shuffleDeterministic(idRecords, `home:${sessionSeed}`);
+            const mixed = mixByCategoryRoundRobin(shuffled, sessionSeed);
             orderedIds = mixed.map((p) => p.id);
-            cacheManager.set("shuffle", orderCacheKey, orderedIds);
+            cacheManager.set("shuffle", orderCacheKey, orderedIds, 3600); // 1 час кэша в памяти
         }
 
         const totalItems = orderedIds.length;
@@ -254,6 +261,7 @@ async function handleExternalProducts(req, res) {
             }
 
             if (seed) {
+                allIds.sort((a, b) => String(a.id).localeCompare(String(b.id)));
                 allIds = shuffleDeterministic(allIds, seed);
             }
 
@@ -268,7 +276,7 @@ async function handleExternalProducts(req, res) {
                 .filter(Boolean);
 
             const pageProducts = await loadProductsByIds(pageIds);
-            const pageItems = pageProducts.map((p) => {
+            let pageItems = pageProducts.map((p) => {
                 const thumb =
                     typeof p?.thumb === "string" ? String(p.thumb).trim() : "";
                 const firstImage =
@@ -281,6 +289,12 @@ async function handleExternalProducts(req, res) {
                     thumb: preview,
                 };
             });
+
+            // Если есть категория или бренд, дополнительно перемешиваем результат для разнообразия,
+            // но используем стабильный сид
+            if (category || brand) {
+                pageItems = shuffleDeterministic(pageItems, `${sessionSeed}:${category}:${brand}`);
+            }
 
             const payload = {
                 products: pageItems,
