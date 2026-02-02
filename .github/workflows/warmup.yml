@@ -2,16 +2,18 @@ name: Warmup Vercel Functions
 
 on:
   schedule:
-    - cron: "*/5 * * * *" # Каждые 5 минут
+    - cron: "*/25 * * * *" # Каждые 25 минут (достаточно для warmup, экономит GitHub minutes)
   workflow_dispatch:
 
 jobs:
   warmup:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - name: Warmup API endpoints
         run: |
-          curl -s -o /dev/null -w "%{http_code}" "https://app-unique.vercel.app/api/external-products?page=1&perPage=1"
-          curl -s -o /dev/null -w "%{http_code}" "https://app-unique.vercel.app/api/catalog-filters"
-          curl -s -o /dev/null -w "%{http_code}" "https://app-unique.vercel.app/health"
+          echo "Starting warmup..."
+          curl -sf --max-time 15 "https://app-unique.vercel.app/api/external-products?page=1&perPage=1" || echo "external-products: failed"
+          curl -sf --max-time 15 "https://app-unique.vercel.app/api/catalog-filters" || echo "catalog-filters: failed"
+          curl -sf --max-time 10 "https://app-unique.vercel.app/health" || echo "health: failed"
           echo "Warmup completed"
