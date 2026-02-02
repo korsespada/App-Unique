@@ -81,10 +81,8 @@ async function handleExternalProducts(req, res) {
     const brand = String(req.query.brand || "").trim();
     const category = String(req.query.category || "").trim();
 
-    // Получаем Telegram ID для стабильного перемешивания по пользователю
-    const { telegramAuthFromRequest } = require("../utils/telegram");
-    const auth = telegramAuthFromRequest(req, { maxAgeSeconds: 86400 * 7 }); // Большой TTL для сида
-    const sessionSeed = seed || auth.telegramId || "default";
+    // Используем seed из параметров или дефолт
+    const sessionSeed = seed || "default";
 
     const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}:${sessionSeed}`;
     const cached = cacheManager.get("pages", cacheKey);
