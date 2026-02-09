@@ -110,25 +110,20 @@ async function handleCatalogFilters(req, res) {
                         },
                     })
                     : { data: { items: [] } },
-                categoryIds.size > 0
-                    ? pb.get("/api/collections/categories/records", {
-                        params: {
-                            page: 1,
-                            perPage: 500,
-                            filter: Array.from(categoryIds)
-                                .map((id) => `id="${id}"`)
-                                .join(" || "),
-                            fields: "id,name",
-                        },
-                    })
-                    : { data: { items: [] } },
-                // Load ALL subcategories with expanded category
+                // Load ALL categories (for subcategory mapping)
+                pb.get("/api/collections/categories/records", {
+                    params: {
+                        page: 1,
+                        perPage: 500,
+                        fields: "id,name",
+                    },
+                }),
+                // Load ALL subcategories (without expand for speed)
                 pb.get("/api/collections/subcategories/records", {
                     params: {
                         page: 1,
                         perPage: 500,
-                        expand: "category",
-                        fields: "id,name,category,expand.category.name",
+                        fields: "id,name,category",
                     },
                 }),
             ]);
@@ -158,8 +153,9 @@ async function handleCatalogFilters(req, res) {
 
                 subcategoriesSet.add(subcategoryName);
 
-                // Get category name from expanded relation
-                const categoryName = String(sub?.expand?.category?.name || "").trim();
+                // Get category name from categoryMap using category ID
+                const categoryId = String(sub?.category || "").trim();
+                const categoryName = categoryMap.get(categoryId) || "";
                 if (categoryName) {
                     if (!subcategoriesByCategorySet.has(categoryName)) {
                         subcategoriesByCategorySet.set(categoryName, new Set());
