@@ -26,15 +26,14 @@ async function handleCatalogFilters(req, res) {
             const pbProducts = pbApi();
             pbProducts.defaults.timeout = 30000;
 
-            // Load products (including subcategory)
+            // Load products (including subcategory) - NO SORTING for speed
             const firstResp = await pbProducts.get(
                 "/api/collections/products/records",
                 {
                     params: {
                         page: 1,
-                        perPage: 2000,
+                        perPage: 500,
                         filter: 'status = "active"',
-                        sort: "-updated",
                         fields: "id,brand,category,subcategory",
                     },
                 }
@@ -46,14 +45,15 @@ async function handleCatalogFilters(req, res) {
 
             if (totalPages > 1) {
                 const pagePromises = [];
-                for (let page = 2; page <= totalPages; page += 1) {
+                // Limit concurrent pages to avoid slamming the DB
+                const maxPages = Math.min(totalPages, 10);
+                for (let page = 2; page <= maxPages; page += 1) {
                     pagePromises.push(
                         pbProducts.get("/api/collections/products/records", {
                             params: {
                                 page,
-                                perPage: 2000,
+                                perPage: 500,
                                 filter: 'status = "active"',
-                                sort: "-updated",
                                 fields: "id,brand,category,subcategory",
                             },
                         })

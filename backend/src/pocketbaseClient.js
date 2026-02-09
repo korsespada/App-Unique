@@ -442,9 +442,8 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
 
     const params = {
       page: 1,
-      perPage: safePerPage,
+      perPage: 500,
       filter,
-      sort: "-updated",
       fields: fieldsParts.join(","),
     };
 
