@@ -1,4 +1,4 @@
-import { Clock, HelpCircle, Package, User } from "lucide-react";
+import { HelpCircle, Package, User } from "lucide-react";
 import React from "react";
 
 import { AppView } from "../types";
@@ -31,17 +31,7 @@ export default function ProfileView({ setCurrentView }: Props) {
             </div>
 
             <div className="space-y-3 px-4">
-                <button
-                    onClick={() => setCurrentView("orders")}
-                    className="group flex w-full items-center gap-4 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all hover:bg-white/10 active:scale-[0.98]">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 transition-colors group-hover:bg-blue-500/20">
-                        <Clock size={20} />
-                    </div>
-                    <div className="flex-1 text-left">
-                        <h3 className="font-semibold">История заказов</h3>
-                        <p className="text-xs text-white/40">Статус и детали ваших покупок</p>
-                    </div>
-                </button>
+
 
                 <button
                     onClick={() => window.open("https://t.me/htsadmin", "_blank")}
