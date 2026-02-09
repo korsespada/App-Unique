@@ -159,6 +159,7 @@ async function handleExternalProducts(req, res) {
 
     let brandId = "";
     let categoryId = "";
+    let subcategoryId = "";
     if (brand) {
         brandId = await resolveRelationIdByName({
             collection: "brands",
@@ -175,8 +176,16 @@ async function handleExternalProducts(req, res) {
             pbHeaders,
         });
     }
+    if (subcategory) {
+        subcategoryId = await resolveRelationIdByName({
+            collection: "subcategories",
+            name: subcategory,
+            pbUrl,
+            pbHeaders,
+        });
+    }
 
-    if ((brand && !brandId) || (category && !categoryId)) {
+    if ((brand && !brandId) || (category && !categoryId) || (subcategory && !subcategoryId)) {
         const payload = {
             products: [],
             page: 1,
@@ -228,7 +237,24 @@ async function handleExternalProducts(req, res) {
         filterParts.push(`category = "${categoryId}"`);
     }
 
-    // Note: subcategory filtering is done by matching name in product title, not by relation
+    if (subcategoryId) {
+        if (!isValidPocketBaseId(subcategoryId)) {
+            console.warn("Invalid subcategory ID format:", subcategoryId);
+            const payload = {
+                products: [],
+                page: 1,
+                perPage,
+                totalPages: 1,
+                totalItems: 0,
+                hasNextPage: false,
+            };
+            cacheManager.set("pages", cacheKey, payload);
+            setCatalogCacheHeaders(res);
+            return res.json(normalizeProductDescriptions(payload));
+        }
+        filterParts.push(`subcategory = "${subcategoryId}"`);
+    }
+
     const customFilter = filterParts.join(" && ");
 
     try {
@@ -239,14 +265,7 @@ async function handleExternalProducts(req, res) {
             const idRecords = await loadProductIdsOnly(2000, customFilter);
             allIds = idRecords;
 
-            // Filter by subcategory name in product title
-            if (subcategory) {
-                const subLower = subcategory.toLowerCase();
-                allIds = allIds.filter((p) => {
-                    const title = String(p?.title || p?.name || "").toLowerCase();
-                    return title.includes(subLower);
-                });
-            }
+            // Subcategory filtering is now done via PocketBase filter (relation field)
 
             if (search) {
                 const q = search.toLowerCase();
