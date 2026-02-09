@@ -73,11 +73,22 @@ async function handleCatalogFilters(req, res) {
             for (const p of items) {
                 const brandId = String(p?.brand || "").trim();
                 const categoryId = String(p?.category || "").trim();
-                const subId = String(p?.subcategory || "").trim();
+                const subRaw = p?.subcategory;
+
+                // Handle both single string and array (multiple relation)
+                const subIds = Array.isArray(subRaw) ? subRaw : [String(subRaw || "").trim()];
 
                 if (brandId) brandIds.add(brandId);
                 if (categoryId) categoryIds.add(categoryId);
-                if (subId) activeSubcategoryIds.add(subId);
+
+                // Only mark subcategory as active if the product is fully classified (has brand & category)
+                if (brandId && categoryId) {
+                    for (const subId of subIds) {
+                        if (subId && subId.length > 5) { // Basic ID validation
+                            activeSubcategoryIds.add(subId);
+                        }
+                    }
+                }
             }
 
             // Load brands, categories, and ALL subcategories (with their category relation)
