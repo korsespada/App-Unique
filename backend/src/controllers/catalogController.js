@@ -123,7 +123,6 @@ async function handleCatalogFilters(req, res) {
                     params: {
                         page: 1,
                         perPage: 500,
-                        fields: "id,name,category",
                     },
                 }),
             ]);
@@ -146,7 +145,12 @@ async function handleCatalogFilters(req, res) {
             const subcategoriesSet = new Set();
             const subcategoriesByCategorySet = new Map();
             const subcategoryItems = subcategoriesData?.data?.items || [];
-            console.log(`Loaded ${subcategoryItems.length} subcategories from PB`);
+            console.log("Subcategories Data Keys:", Object.keys(subcategoriesData?.data || {}));
+            console.log("Subcategories Total Items:", subcategoriesData?.data?.totalItems);
+            console.log("Subcategories Items Count:", subcategoryItems.length);
+            if (subcategoryItems.length > 0) {
+                console.log("Sample Subcategory:", JSON.stringify(subcategoryItems[0]));
+            }
 
             for (const sub of subcategoryItems) {
                 const subcategoryName = String(sub?.name || "").trim();
