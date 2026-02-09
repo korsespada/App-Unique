@@ -18,6 +18,9 @@ const { asyncRoute, extractAxiosStatus, extractAxiosMessage } = require("./utils
 
 const app = express();
 
+// Trust proxy is required for express-rate-limit on Vercel/CDN
+app.set("trust proxy", 1);
+
 // Cache Dir setup - use /tmp for serverless (Vercel)
 const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
 const CACHE_DIR = isServerless
