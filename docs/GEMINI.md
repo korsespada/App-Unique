@@ -18,7 +18,7 @@
 - **Кэширование**: Используй `cacheManager.js`. Настраивай `Cache-Control` заголовки для оптимизации Vercel (ISR).
 
 ### 3. База данных (PocketBase)
-- **UID**: Основной ключ пользователя — Telegram ID.
+- **UID**: Основной ключ пользователя — Telegram ID. В PocketBase поле должно называться `telegramid` (без подчеркивания) для всех коллекций (profiles, orders).
 - **Синхронизация**: При изменении схем в PocketBase обновляй `frontend/src/types.ts`.
 - **Каталог**: Используй seed-рандомизацию и round-robin для перемешивания брендов (реализовано в `catalogController.js` - фильтры, `productController.js` - товары).
 

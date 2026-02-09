@@ -63,7 +63,8 @@
   - `GET /health`: Детальный отчёт о здоровье сервера включая статистику кэша.
   - `GET /api/catalog-filters`: Агрегированные уникальные бренды и категории с рекурсивной загрузкой.
   - `GET /api/external-products`: Продвинутый каталог с поддержкой `seed`-рандомизации.
-  - `POST /api/orders`: Защищённая отправка заказа с anti-replay защитой и Telegram уведомлением менеджерам.
+  - `POST /api/orders`: Защищённая отправка заказа с anti-replay защитой и Telegram уведомлением менеджерам. (Использует поле `telegramid` для связки с профилем).
+  - `GET /api/orders`: Получение истории заказов авторизованного пользователя.
 - **Управление кэшем**: Централизованный `cacheManager` с несколькими namespace и детальной инвалидацией.
 
 ## 5. Безопасность и Производительность
@@ -75,6 +76,9 @@
   - `/api/orders` — 30 req/5min
 - **Connection Pooling**: `keepAlive: true` для переиспользования TCP-соединений.
 - **ISR / Headers**: Vercel-оптимизированные `Cache-Control` заголовки для быстрых ответов.
+- **DB Indexing (PocketBase)**: 
+  - `products`: `idx_status_subcategory` на `(status, subcategory)`
+  - `subcategories`: `idx_subcategories_category` на `(category)`
 
 ## 6. Переменные окружения (.env)
 

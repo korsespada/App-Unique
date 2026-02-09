@@ -26,7 +26,7 @@ async function handleCatalogFilters(req, res) {
             const pbProducts = pbApi();
             pbProducts.defaults.timeout = 30000;
 
-            // Load products (without subcategory - it's loaded separately)
+            // Load products (including subcategory)
             const firstResp = await pbProducts.get(
                 "/api/collections/products/records",
                 {
@@ -35,7 +35,7 @@ async function handleCatalogFilters(req, res) {
                         perPage: 2000,
                         filter: 'status = "active"',
                         sort: "-updated",
-                        fields: "id,brand,category",
+                        fields: "id,brand,category,subcategory",
                     },
                 }
             );
@@ -54,7 +54,7 @@ async function handleCatalogFilters(req, res) {
                                 perPage: 2000,
                                 filter: 'status = "active"',
                                 sort: "-updated",
-                                fields: "id,brand,category",
+                                fields: "id,brand,category,subcategory",
                             },
                         })
                     );
@@ -69,12 +69,16 @@ async function handleCatalogFilters(req, res) {
             // Collect unique IDs
             const brandIds = new Set();
             const categoryIds = new Set();
+            const activeSubcategoryIds = new Set();
 
             for (const p of items) {
                 const brandId = String(p?.brand || "").trim();
                 const categoryId = String(p?.category || "").trim();
+                const subId = String(p?.subcategory || "").trim();
+
                 if (brandId) brandIds.add(brandId);
                 if (categoryId) categoryIds.add(categoryId);
+                if (subId) activeSubcategoryIds.add(subId);
             }
 
             // Load brands, categories, and ALL subcategories (with their category relation)
@@ -99,7 +103,7 @@ async function handleCatalogFilters(req, res) {
                         fields: "id,name",
                     },
                 }),
-                // Load ALL subcategories (without expand for speed)
+                // Load subcategories
                 pb.get("/api/collections/subcategories/records", {
                     params: {
                         page: 1,
@@ -126,15 +130,19 @@ async function handleCatalogFilters(req, res) {
             const subcategoriesSet = new Set();
             const subcategoriesByCategorySet = new Map();
             const subcategoryItems = subcategoriesData?.data?.items || [];
-            console.log("PB URL:", process.env.PB_URL ? (process.env.PB_URL.substring(0, 10) + "...") : "NOT SET");
-            console.log("Subcategories Raw Data Items Length:", subcategoriesData?.data?.items?.length);
-            console.log("Subcategories Total Items from PB:", subcategoriesData?.data?.totalItems);
+
+            console.log("Active Subcategory IDs from products:", activeSubcategoryIds.size);
 
             if (subcategoryItems.length === 0) {
-                console.warn("WARNING: No subcategories found in PocketBase! Check API Rules for 'subcategories' collection.");
+                console.warn("WARNING: No subcategories found in PocketBase!");
             }
 
             for (const sub of subcategoryItems) {
+                // КРИТИЧЕСКИЙ ФИЛЬТР: Пропускаем подкатегории, которых нет в активных товарах
+                if (!activeSubcategoryIds.has(String(sub.id))) {
+                    continue;
+                }
+
                 const subcategoryName = String(sub?.name || "").trim();
                 if (!subcategoryName) continue;
 
