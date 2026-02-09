@@ -569,6 +569,7 @@ async function loadProductsByIds(ids) {
 }
 
 module.exports = {
+  pbApi,
   listActiveProducts,
   getProfileByTelegramId,
   ensureProfileByTelegramId,
