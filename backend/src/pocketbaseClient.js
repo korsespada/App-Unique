@@ -585,7 +585,7 @@ module.exports = {
 async function createOrder(payload) {
   const api = pbApi();
   const data = payload && typeof payload === "object" ? payload : {};
-  if (!data.telegram_id) throw new Error("telegram_id is required");
+  if (!data.telegramid) throw new Error("telegramid is required");
 
   const resp = await api.post("/api/collections/orders/records", data);
   return resp?.data || null;
@@ -602,7 +602,7 @@ async function getOrdersByTelegramId(telegramId) {
         page: 1,
         perPage: 50,
         sort: "-created",
-        filter: `telegram_id = "${tg}"`,
+        filter: `telegramid = "${tg}"`,
       },
     });
     return Array.isArray(resp?.data?.items) ? resp.data.items : [];

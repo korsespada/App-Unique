@@ -143,7 +143,7 @@ async function handleOrderSubmission(req, res) {
   let orderRecord = null;
   try {
     orderRecord = await createOrder({
-      telegram_id: telegramUserId,
+      telegramid: telegramUserId,
       items: normalizedItems,
       total_price: total,
       status: "new",

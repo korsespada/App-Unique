@@ -4,11 +4,10 @@ const { VITE_API_URL, VITE_API_VERSION, VITE_SHOP_NAME } = import.meta
   .env as Record<string, string | undefined>;
 
 const defaultLegacyApiUrl = "https://app-unique.vercel.app";
-const legacyApiRoot = `${
-  VITE_API_URL && String(VITE_API_URL).trim()
-    ? String(VITE_API_URL).trim()
-    : defaultLegacyApiUrl
-}/api`;
+const legacyApiRoot = `${VITE_API_URL && String(VITE_API_URL).trim()
+  ? String(VITE_API_URL).trim()
+  : defaultLegacyApiUrl
+  }/api`;
 let legacyApiBasePath = legacyApiRoot;
 if (VITE_API_VERSION && VITE_SHOP_NAME) {
   legacyApiBasePath = `${legacyApiRoot}/${VITE_API_VERSION}/${VITE_SHOP_NAME}`;
