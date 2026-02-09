@@ -1,6 +1,7 @@
 const axios = require("axios");
 const cacheManager = require("../cacheManager");
 const { extractAxiosStatus } = require("../utils/apiHelpers");
+const { pbApi } = require("../pocketbaseClient");
 
 let lastGoodCatalogFilters = null;
 let catalogFiltersErrorCount = 0;
@@ -18,32 +19,12 @@ async function handleCatalogFilters(req, res) {
         return res.json(cached);
     }
 
-    const pbUrl = String(process.env.PB_URL || "").trim();
-    if (!pbUrl) {
-        throw new Error("PB_URL is not configured");
-    }
-
-    const pbToken = String(process.env.PB_TOKEN || "").trim();
-    const pbHeaders = { Accept: "application/json" };
-    if (pbToken) {
-        pbHeaders.Authorization = pbToken.includes(" ")
-            ? pbToken
-            : `Bearer ${pbToken}`;
-    }
-
-    const pb = axios.create({
-        baseURL: pbUrl,
-        timeout: 15000,
-        headers: pbHeaders,
-    });
+    const pb = pbApi();
 
     try {
         async function loadFiltersFromProducts() {
-            const pbProducts = axios.create({
-                baseURL: pbUrl,
-                timeout: 30000,
-                headers: pbHeaders,
-            });
+            const pbProducts = pbApi();
+            pbProducts.defaults.timeout = 30000;
 
             // Load products (without subcategory - it's loaded separately)
             const firstResp = await pbProducts.get(
@@ -145,11 +126,12 @@ async function handleCatalogFilters(req, res) {
             const subcategoriesSet = new Set();
             const subcategoriesByCategorySet = new Map();
             const subcategoryItems = subcategoriesData?.data?.items || [];
-            console.log("Subcategories Data Keys:", Object.keys(subcategoriesData?.data || {}));
-            console.log("Subcategories Total Items:", subcategoriesData?.data?.totalItems);
-            console.log("Subcategories Items Count:", subcategoryItems.length);
-            if (subcategoryItems.length > 0) {
-                console.log("Sample Subcategory:", JSON.stringify(subcategoryItems[0]));
+            console.log("PB URL:", process.env.PB_URL ? (process.env.PB_URL.substring(0, 10) + "...") : "NOT SET");
+            console.log("Subcategories Raw Data Items Length:", subcategoriesData?.data?.items?.length);
+            console.log("Subcategories Total Items from PB:", subcategoriesData?.data?.totalItems);
+
+            if (subcategoryItems.length === 0) {
+                console.warn("WARNING: No subcategories found in PocketBase! Check API Rules for 'subcategories' collection.");
             }
 
             for (const sub of subcategoryItems) {
