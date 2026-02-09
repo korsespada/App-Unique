@@ -45,9 +45,8 @@ async function handleCatalogFilters(req, res) {
 
             if (totalPages > 1) {
                 const pagePromises = [];
-                // Limit concurrent pages to avoid slamming the DB
-                const maxPages = Math.min(totalPages, 10);
-                for (let page = 2; page <= maxPages; page += 1) {
+                // Fetch ALL pages to ensure we get all active subcategories
+                for (let page = 2; page <= totalPages; page += 1) {
                     pagePromises.push(
                         pbProducts.get("/api/collections/products/records", {
                             params: {
@@ -139,9 +138,12 @@ async function handleCatalogFilters(req, res) {
 
             for (const sub of subcategoryItems) {
                 // КРИТИЧЕСКИЙ ФИЛЬТР: Пропускаем подкатегории, которых нет в активных товарах
-                if (!activeSubcategoryIds.has(String(sub.id))) {
+                const subId = String(sub.id);
+                if (!activeSubcategoryIds.has(subId)) {
+                    // console.log(`Skipping empty subcategory: ${sub.name} (${subId})`);
                     continue;
                 }
+                // console.log(`Including active subcategory: ${sub.name} (${subId})`);
 
                 const subcategoryName = String(sub?.name || "").trim();
                 if (!subcategoryName) continue;
