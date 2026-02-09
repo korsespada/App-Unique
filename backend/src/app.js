@@ -18,13 +18,20 @@ const { asyncRoute, extractAxiosStatus, extractAxiosMessage } = require("./utils
 
 const app = express();
 
-// Cache Dir setup
-const CACHE_DIR = path.join(__dirname, "..", ".cache");
+// Cache Dir setup - use /tmp for serverless (Vercel)
+const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+const CACHE_DIR = isServerless
+    ? path.join("/tmp", ".cache")
+    : path.join(__dirname, "..", ".cache");
+
 async function ensureCacheDir() {
     try {
         await fs.mkdir(CACHE_DIR, { recursive: true });
     } catch (err) {
-        console.warn("Failed to create cache directory:", err.message);
+        // In serverless, /tmp might already exist or be ephemeral - ignore errors
+        if (!isServerless) {
+            console.warn("Failed to create cache directory:", err.message);
+        }
     }
 }
 ensureCacheDir();
