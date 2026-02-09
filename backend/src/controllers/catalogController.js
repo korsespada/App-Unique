@@ -10,7 +10,7 @@ function setCatalogCacheHeaders(res) {
 }
 
 async function handleCatalogFilters(req, res) {
-    const cacheKey = "catalog-filters:v4";
+    const cacheKey = "catalog-filters:v5";
     const cached = cacheManager.get("products", cacheKey);
     if (cached) {
         console.log("Using cached catalog filters");
@@ -146,6 +146,7 @@ async function handleCatalogFilters(req, res) {
             const subcategoriesSet = new Set();
             const subcategoriesByCategorySet = new Map();
             const subcategoryItems = subcategoriesData?.data?.items || [];
+            console.log(`Loaded ${subcategoryItems.length} subcategories from PB`);
 
             for (const sub of subcategoryItems) {
                 const subcategoryName = String(sub?.name || "").trim();
