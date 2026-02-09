@@ -3,7 +3,7 @@ import {
   useGetExternalProducts
 } from "@framework/api/product/external-get";
 import {
- useCallback, useEffect, useMemo, useRef, useState 
+  useCallback, useEffect, useMemo, useRef, useState
 } from "react";
 
 import { CartItem, Product } from "../types";
@@ -12,12 +12,14 @@ interface UseProductsOptions {
   searchQuery: string;
   activeBrand: string;
   activeCategory: string;
+  activeSubcategory: string;
 }
 
 export function useProducts({
   searchQuery,
   activeBrand,
-  activeCategory
+  activeCategory,
+  activeSubcategory
 }: UseProductsOptions) {
   const productsRef = useRef<Product[]>([]);
   const [loadMoreEl, setLoadMoreEl] = useState<HTMLDivElement | null>(null);
@@ -36,7 +38,8 @@ export function useProducts({
   } = useGetExternalProducts({
     search: searchQuery,
     brand: activeBrand === "Все" ? undefined : activeBrand,
-    category: activeCategory === "Все" ? undefined : activeCategory
+    category: activeCategory === "Все" ? undefined : activeCategory,
+    subcategory: activeSubcategory === "Все" ? undefined : activeSubcategory
   });
 
   // React Query automatically refetches when query key changes (search, brand, category)
@@ -54,7 +57,7 @@ export function useProducts({
         const name = String(p.title || p.name || p.product_id || "").trim();
         const brand = String(p.brand || p.season_title || "").trim();
         const category = String(p.category || "Все");
-        const images =          Array.isArray(p.images) && p.images.length ? p.images : [];
+        const images = Array.isArray(p.images) && p.images.length ? p.images : [];
 
         const rawPrice = Number((p as any).price);
         const hasPrice = Number.isFinite(rawPrice) && rawPrice > 0;

@@ -4,10 +4,34 @@
 const axios = require("axios");
 const cacheManager = require("../cacheManager");
 const {
+  createOrder,
+  getOrdersByTelegramId,
+} = require("../pocketbaseClient");
+const {
+  telegramAuthFromRequest,
   parseInitData,
   validateTelegramInitData,
 } = require("../utils/telegram");
 const { escapeHtml, splitTelegramMessage } = require("../utils/helpers");
+
+async function handleGetOrders(req, res) {
+  const auth = telegramAuthFromRequest(req);
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+
+  const orders = await getOrdersByTelegramId(auth.telegramId);
+
+  // Format for frontend
+  const formatted = orders.map(o => ({
+    id: o.id,
+    created: o.created,
+    status: o.status || "new",
+    total_price: o.total_price || 0,
+    items: o.items || [],
+    order_number: o.order_number || o.id.slice(0, 8).toUpperCase(),
+  }));
+
+  return res.json({ ok: true, orders: formatted });
+}
 
 async function handleOrderSubmission(req, res) {
   const botToken = process.env.BOT_TOKEN;
@@ -36,7 +60,7 @@ async function handleOrderSubmission(req, res) {
     .map((it) => `${it.id}:${it.quantity}`)
     .sort()
     .join("|");
-  
+
   const replayKey = telegramUserIdForReplay && orderFingerprint
     ? `order:${telegramUserIdForReplay}:${orderFingerprint}`
     : "";
@@ -115,8 +139,31 @@ async function handleOrderSubmission(req, res) {
   const safeUsername = escapeHtml((username || "").trim());
   const safeTelegramId = escapeHtml(String(telegramUserId));
 
+  // --- SAVE TO POCKETBASE ---
+  let orderRecord = null;
+  try {
+    orderRecord = await createOrder({
+      telegram_id: telegramUserId,
+      items: normalizedItems,
+      total_price: total,
+      status: "new",
+      comment: safeComment,
+      user_data: {
+        username: safeUsername,
+        first_name: safeFirst,
+        last_name: safeLast,
+      },
+      order_number: Date.now().toString().slice(-8), // Simple random ref
+    });
+  } catch (err) {
+    console.error("Failed to save order to PocketBase", err);
+    // We continue anyway to send Telegram notification, but warn manager?
+  }
+
   const orderText = [
     "🆕 Новый заказ из Telegram Mini App",
+    "",
+    `#${orderRecord?.order_number || "ORDER"}`,
     "",
     `👤 Клиент: ${`${safeFirst} ${safeLast}`.trim()}`.trim(),
     safeUsername ? `@${safeUsername}` : "username: отсутствует",
@@ -166,9 +213,10 @@ async function handleOrderSubmission(req, res) {
   console.log("Заказ отправлен менеджеру", {
     telegramUserId,
     itemsCount: normalizedItems.length,
+    orderId: orderRecord?.id
   });
 
-  return res.json({ ok: true, orderId: Date.now().toString() });
+  return res.json({ ok: true, orderId: orderRecord?.id || Date.now().toString() });
 }
 
-module.exports = { handleOrderSubmission };
+module.exports = { handleOrderSubmission, handleGetOrders };

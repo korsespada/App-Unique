@@ -22,7 +22,9 @@ import { getDetailImageUrl, getThumbUrl } from "./utils/images";
 import CartView from "./views/CartView";
 import FavoritesView from "./views/FavoritesView";
 import HomeView from "./views/HomeView";
+import OrdersHistoryView from "./views/OrdersHistoryView";
 import ProductDetailView from "./views/ProductDetailView";
+import ProfileView from "./views/ProfileView";
 
 const App: React.FC = () => {
   const {
@@ -30,10 +32,13 @@ const App: React.FC = () => {
     setActiveBrand,
     activeCategory,
     setActiveCategory,
+    activeSubcategory,
+    setActiveSubcategory,
     searchQuery,
     setSearchQuery,
     derivedCategories,
     derivedBrands,
+    derivedSubcategories,
     resetFilters,
     setSourceProducts
   } = useCatalogFilters();
@@ -51,7 +56,8 @@ const App: React.FC = () => {
   } = useProducts({
     searchQuery,
     activeBrand,
-    activeCategory
+    activeCategory,
+    activeSubcategory
   });
 
   useEffect(() => {
@@ -288,15 +294,17 @@ const App: React.FC = () => {
   return (
     <div className="relative mx-auto min-h-screen max-w-md overflow-x-hidden bg-gradient-to-b from-black via-[#070707] to-[#050505] text-white">
       {/* Dynamic Navbar */}
-      {currentView !== "product-detail" && (
-        <TopNav
-          currentView={currentView}
-          scrolled={scrolled}
-          setCurrentView={setCurrentView}
-          restoreHomeScroll={restoreHomeScroll}
-          shouldRestoreHomeScrollRef={shouldRestoreHomeScrollRef}
-        />
-      )}
+      {currentView !== "product-detail" &&
+        currentView !== "profile" &&
+        currentView !== "orders" && (
+          <TopNav
+            currentView={currentView}
+            scrolled={scrolled}
+            setCurrentView={setCurrentView}
+            restoreHomeScroll={restoreHomeScroll}
+            shouldRestoreHomeScrollRef={shouldRestoreHomeScrollRef}
+          />
+        )}
 
       <main>
         {currentView === "home" && (
@@ -309,6 +317,9 @@ const App: React.FC = () => {
             derivedBrands={derivedBrands}
             activeBrand={activeBrand}
             setActiveBrand={setActiveBrand}
+            derivedSubcategories={derivedSubcategories}
+            activeSubcategory={activeSubcategory}
+            setActiveSubcategory={setActiveSubcategory}
             resetFilters={resetFilters}
             totalItems={totalItems}
             isProductsLoading={isProductsLoading}
@@ -370,6 +381,12 @@ const App: React.FC = () => {
             toggleFavorite={toggleFavorite}
             addToCart={addToCart}
           />
+        )}
+        {currentView === "profile" && (
+          <ProfileView setCurrentView={setCurrentView} />
+        )}
+        {currentView === "orders" && (
+          <OrdersHistoryView setCurrentView={setCurrentView} />
         )}
       </main>
 

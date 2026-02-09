@@ -577,4 +577,37 @@ module.exports = {
   getActiveProductById,
   loadProductIdsOnly,
   loadProductsByIds,
+  createOrder,
+  getOrdersByTelegramId,
 };
+
+async function createOrder(payload) {
+  const api = pbApi();
+  const data = payload && typeof payload === "object" ? payload : {};
+  if (!data.telegram_id) throw new Error("telegram_id is required");
+
+  const resp = await api.post("/api/collections/orders/records", data);
+  return resp?.data || null;
+}
+
+async function getOrdersByTelegramId(telegramId) {
+  const api = pbApi();
+  const tg = safeString(telegramId);
+  if (!tg) return [];
+
+  try {
+    const resp = await api.get("/api/collections/orders/records", {
+      params: {
+        page: 1,
+        perPage: 50,
+        sort: "-created",
+        filter: `telegram_id = "${tg}"`,
+      },
+    });
+    return Array.isArray(resp?.data?.items) ? resp.data.items : [];
+  } catch (err) {
+    if (isAxiosNotFound(err)) return [];
+    console.error("Failed to fetch orders for", telegramId, err.message);
+    return [];
+  }
+}

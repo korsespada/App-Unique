@@ -20,7 +20,7 @@
 ### 3. База данных (PocketBase)
 - **UID**: Основной ключ пользователя — Telegram ID.
 - **Синхронизация**: При изменении схем в PocketBase обновляй `frontend/src/types.ts`.
-- **Каталог**: Используй seed-рандомизацию и round-robin для перемешивания брендов (реализовано в `catalogController.js`).
+- **Каталог**: Используй seed-рандомизацию и round-robin для перемешивания брендов (реализовано в `catalogController.js` - фильтры, `productController.js` - товары).
 
 ## Контрольный список (Self-annealing Loop)
 1. **API тормозит?** Проверь настройки TTL в `cacheManager.js` и заголовки в контроллере.

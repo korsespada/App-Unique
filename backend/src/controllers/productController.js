@@ -80,18 +80,19 @@ async function handleExternalProducts(req, res) {
         .trim();
     const brand = String(req.query.brand || "").trim();
     const category = String(req.query.category || "").trim();
+    const subcategory = String(req.query.subcategory || "").trim();
 
     // Используем seed из параметров или дефолт
     const sessionSeed = seed || "default";
 
-    const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}:${sessionSeed}`;
+    const cacheKey = `external-products:${page}:${perPage}:${search}:${brand}:${category}:${subcategory}:${sessionSeed}`;
     const cached = cacheManager.get("pages", cacheKey);
     if (cached) {
         setCatalogCacheHeaders(res);
         return res.json(normalizeProductDescriptions(cached));
     }
 
-    const isHomeUnfiltered = !search && !brand && !category;
+    const isHomeUnfiltered = !search && !brand && !category && !subcategory;
     if (isHomeUnfiltered) {
         const orderCacheKey = `order:home:${sessionSeed}`;
         let orderedIds = cacheManager.get("shuffle", orderCacheKey);
@@ -227,15 +228,25 @@ async function handleExternalProducts(req, res) {
         filterParts.push(`category = "${categoryId}"`);
     }
 
+    // Note: subcategory filtering is done by matching name in product title, not by relation
     const customFilter = filterParts.join(" && ");
 
     try {
         let totalItems = 0;
         let allIds = [];
 
-        if (search || brand || category) {
+        if (search || brand || category || subcategory) {
             const idRecords = await loadProductIdsOnly(2000, customFilter);
             allIds = idRecords;
+
+            // Filter by subcategory name in product title
+            if (subcategory) {
+                const subLower = subcategory.toLowerCase();
+                allIds = allIds.filter((p) => {
+                    const title = String(p?.title || p?.name || "").toLowerCase();
+                    return title.includes(subLower);
+                });
+            }
 
             if (search) {
                 const q = search.toLowerCase();
@@ -244,7 +255,7 @@ async function handleExternalProducts(req, res) {
                     .map((t) => t.trim())
                     .filter(Boolean);
                 if (tokens.length) {
-                    allIds = idRecords.filter((p) => {
+                    allIds = allIds.filter((p) => {
                         const title = String(
                             p?.title || p?.name || ""
                         ).toLowerCase();

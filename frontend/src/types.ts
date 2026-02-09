@@ -90,6 +90,23 @@ export interface CartItem extends Product {
   quantity: number;
 }
 
-export type AppView = "home" | "product-detail" | "cart" | "favorites";
+export interface OrderItem {
+  id: string;
+  title: string;
+  quantity: number;
+  price: number | null;
+  hasPrice: boolean;
+}
+
+export interface Order {
+  id: string;
+  order_number: string;
+  created: string;
+  status: string;
+  total_price: number;
+  items: OrderItem[];
+}
+
+export type AppView = "home" | "product-detail" | "cart" | "favorites" | "profile" | "orders";
 
 export type SortOption = "newest" | "price-asc" | "price-desc" | "brand-az";

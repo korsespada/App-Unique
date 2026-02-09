@@ -15,6 +15,7 @@ export type ExternalProductsQuery = {
   search?: string;
   brand?: string;
   category?: string;
+  subcategory?: string;
   seed?: string;
 };
 
@@ -31,6 +32,7 @@ async function fetchExternalProductsPage(
     const search = looksLikeId ? undefined : rawSearch;
     const brand = String(query?.brand || "").trim();
     const category = String(query?.category || "").trim();
+    const subcategory = String(query?.subcategory || "").trim();
     const seed = String(query?.seed || "").trim();
 
     const { data } = await Api.get<ExternalProductsPagedResponse>(
@@ -43,13 +45,14 @@ async function fetchExternalProductsPage(
           ...(search ? { search } : {}),
           ...(productId ? { productId } : {}),
           ...(brand ? { brand } : {}),
-          ...(category ? { category } : {})
+          ...(category ? { category } : {}),
+          ...(subcategory ? { subcategory } : {})
         }
       }
     );
 
     // Кэшируем ПЕРВУЮ страницу БЕЗ ФИЛЬТРОВ для мгновенного старта
-    if (page === 1 && !search && !productId && !brand && !category) {
+    if (page === 1 && !search && !productId && !brand && !category && !subcategory) {
       try {
         localStorage.setItem("home_products_first_page", JSON.stringify(data));
       } catch (e) {
@@ -87,6 +90,7 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
   const search = rawSearch;
   const brand = String(query?.brand || "").trim();
   const category = String(query?.category || "").trim();
+  const subcategory = String(query?.subcategory || "").trim();
   const seed = String(query?.seed || "").trim();
 
   function getNextPageParam(lastPage: ExternalProductsPagedResponse) {
@@ -98,6 +102,7 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
       search,
       brand,
       category,
+      subcategory,
       seed
     });
   }
@@ -109,6 +114,7 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
         search,
         brand,
         category,
+        subcategory,
         seed
       }
     ],
@@ -125,7 +131,7 @@ export function useGetExternalProducts(query?: ExternalProductsQuery) {
       keepPreviousData: true,
       // Использование закэшированных данных для мгновенного отображения хода
       initialData: () => {
-        if (!search && !brand && !category) {
+        if (!search && !brand && !category && !subcategory) {
           try {
             const cached = localStorage.getItem("home_products_first_page");
             if (cached) {

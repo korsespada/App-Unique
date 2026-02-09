@@ -13,6 +13,9 @@ type Props = {
   derivedBrands: string[];
   activeBrand: string;
   setActiveBrand: (v: string) => void;
+  derivedSubcategories: string[];
+  activeSubcategory: string;
+  setActiveSubcategory: (v: string) => void;
   resetFilters: () => void;
   totalItems: number;
   isProductsLoading: boolean;
@@ -37,6 +40,9 @@ export default function HomeView({
   derivedBrands,
   activeBrand,
   setActiveBrand,
+  derivedSubcategories,
+  activeSubcategory,
+  setActiveSubcategory,
   resetFilters,
   totalItems,
   isProductsLoading,
@@ -51,6 +57,8 @@ export default function HomeView({
   loadMoreRef,
   isFetchingNextPage
 }: Props) {
+  const showSubcategory = derivedSubcategories.length > 1;
+
   return (
     <div className="animate-in fade-in pb-32 pt-2 duration-700">
       <div className="mb-4 px-4">
@@ -95,11 +103,10 @@ export default function HomeView({
                   key={category}
                   type="button"
                   onClick={() => setActiveCategory(category)}
-                  className={`premium-shadow shrink-0 rounded-full border px-5 py-2.5 text-[12px] font-semibold tracking-normal transition-all duration-200 ease-out active:scale-[0.98] ${
-                    active
+                  className={`premium-shadow shrink-0 rounded-full border px-5 py-2.5 text-[12px] font-semibold tracking-normal transition-all duration-200 ease-out active:scale-[0.98] ${active
                       ? "border-white/15 bg-white text-black"
                       : "border-white/10 bg-white/5 text-white/75 hover:bg-white/10"
-                  }`}>
+                    }`}>
                   {category === "Все" ? "Все" : category}
                 </button>
               );
@@ -107,48 +114,79 @@ export default function HomeView({
           </div>
         </div>
 
-        <div className="group relative">
-          <select
-            value={activeBrand}
-            onChange={(e) => setActiveBrand(e.target.value)}
-            className="premium-shadow w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out focus:border-white/20 focus:ring-2 focus:ring-white/10">
-            <option value="Все" className="bg-[#0b0b0b] text-white">
-              Все бренды
-            </option>
-            {derivedBrands
-              .filter((b) => b !== "Все")
-              .map((brand) => (
-                <option
-                  key={brand}
-                  value={brand}
-                  className="bg-[#0b0b0b] text-white">
-                  {brand}
+        {/* Brand and Subcategory selects in one row */}
+        <div className={`flex gap-3 ${showSubcategory ? "" : ""}`}>
+          <div className="group relative flex-1">
+            <select
+              value={activeBrand}
+              onChange={(e) => setActiveBrand(e.target.value)}
+              className="premium-shadow w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out focus:border-white/20 focus:ring-2 focus:ring-white/10">
+              <option value="Все" className="bg-[#0b0b0b] text-white">
+                Все бренды
+              </option>
+              {derivedBrands
+                .filter((b) => b !== "Все")
+                .map((brand) => (
+                  <option
+                    key={brand}
+                    value={brand}
+                    className="bg-[#0b0b0b] text-white">
+                    {brand}
+                  </option>
+                ))}
+            </select>
+            <ChevronDown
+              size={14}
+              className="text-white/35 pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 transition-colors group-hover:text-white/60"
+            />
+          </div>
+
+          {showSubcategory && (
+            <div className="group relative flex-1">
+              <select
+                value={activeSubcategory}
+                onChange={(e) => setActiveSubcategory(e.target.value)}
+                className="premium-shadow w-full cursor-pointer appearance-none rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-5 pr-10 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 outline-none transition-all duration-200 ease-out focus:border-white/20 focus:ring-2 focus:ring-white/10">
+                <option value="Все" className="bg-[#0b0b0b] text-white">
+                  Подкатегория
                 </option>
-              ))}
-          </select>
-          <ChevronDown
-            size={14}
-            className="text-white/35 pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 transition-colors group-hover:text-white/60"
-          />
+                {derivedSubcategories
+                  .filter((s) => s !== "Все")
+                  .map((sub) => (
+                    <option
+                      key={sub}
+                      value={sub}
+                      className="bg-[#0b0b0b] text-white">
+                      {sub}
+                    </option>
+                  ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="text-white/35 pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 transition-colors group-hover:text-white/60"
+              />
+            </div>
+          )}
         </div>
 
         {(activeBrand !== "Все" ||
           activeCategory !== "Все" ||
+          activeSubcategory !== "Все" ||
           searchQuery.trim()) && (
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="w-full text-left text-[12px] font-semibold tracking-normal text-red-400 [font-kerning:normal]">
-            Сбросить фильтры
-          </button>
-        )}
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="w-full text-left text-[12px] font-semibold tracking-normal text-red-400 [font-kerning:normal]">
+              Сбросить фильтры
+            </button>
+          )}
       </div>
 
       <div className="mb-4 px-4">
         <p className="text-white/55 text-[12px] font-medium tracking-normal [font-kerning:normal]">
-          Товаров: 
-{' '}
-{totalItems}
+          Товаров:
+          {' '}
+          {totalItems}
         </p>
       </div>
 
@@ -207,9 +245,8 @@ export default function HomeView({
                         ? "Убрать из избранного"
                         : "Добавить в избранное"
                     }
-                    className={`premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96] ${
-                      isBumping ? "scale-[1.06]" : "scale-100"
-                    }`}>
+                    className={`premium-shadow absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl transition-all duration-200 ease-out active:scale-[0.96] ${isBumping ? "scale-[1.06]" : "scale-100"
+                      }`}>
                     <Heart
                       size={18}
                       className={

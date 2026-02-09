@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const rateLimit = require("express-rate-limit");
 const { asyncRoute } = require("../utils/apiHelpers");
-const { handleOrderSubmission } = require("../handlers/orders");
+const { handleOrderSubmission, handleGetOrders } = require("../handlers/orders");
 
 // Rate limiting for orders endpoint
 const ORDER_RATE_WINDOW_MS = Number(process.env.ORDER_RATE_WINDOW_MS || 5 * 60 * 1000);
@@ -17,6 +17,8 @@ const orderRateLimiter = rateLimit({
 });
 
 // Order routes
+// Order routes
 router.post("/", orderRateLimiter, asyncRoute(handleOrderSubmission));
+router.get("/", asyncRoute(handleGetOrders));
 
 module.exports = router;
