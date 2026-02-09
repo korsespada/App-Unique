@@ -251,15 +251,8 @@ async function handleCatalogFilters(req, res) {
 
         let fallback = lastGoodCatalogFilters;
         if (!fallback) {
-            // Emergency fallback logic omitted for brevity in refactor, or can be kept if desired.
-            // Keeping simple fallback for now.
-            fallback = {
-                categories: [],
-                brands: [],
-                subcategories: [],
-                brandsByCategory: {},
-                subcategoriesByCategory: {},
-            };
+            // If we have no cache and no data, return error so frontend keeps its own cache
+            return res.status(503).json({ error: "Catalog unavailable", retryAfter: 60 });
         }
 
         cacheManager.set("products", cacheKey, fallback, 60);

@@ -56,6 +56,12 @@ export function useCatalogFilters() {
         const brands = Array.isArray(data?.brands)
           ? data.brands.map((x) => String(x).trim()).filter(Boolean)
           : [];
+
+        if (categories.length > 0) setCatalogCategories(categories);
+        else if (catalogCategories.length === 0) setCatalogCategories([]);
+
+        if (brands.length > 0) setCatalogBrands(brands);
+        else if (catalogBrands.length === 0) setCatalogBrands([]);
         const subcategories = Array.isArray(data?.subcategories)
           ? data.subcategories.map((x) => String(x).trim()).filter(Boolean)
           : [];
