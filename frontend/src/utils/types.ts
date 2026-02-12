@@ -7,6 +7,7 @@ export type CatalogFiltersResponse = {
   brandsByCategory?: Record<string, string[]>;
   subcategoriesByCategory?: Record<string, string[]>;
   brandsBySubcategory?: Record<string, string[]>;
+  subcategoriesByBrand?: Record<string, string[]>;
 };
 
 export type FavoritesById = Record<string, Product>;

@@ -23,6 +23,9 @@ export function useCatalogFilters() {
   const [catalogBrandsBySubcategory, setCatalogBrandsBySubcategory] = useState<
     Record<string, string[]>
   >({});
+  const [catalogSubcategoriesByBrand, setCatalogSubcategoriesByBrand] = useState<
+    Record<string, string[]>
+  >({});
 
   // Fetch catalog filters
   useEffect(() => {
@@ -40,6 +43,7 @@ export function useCatalogFilters() {
           if (parsed.brandsByCategory) setCatalogBrandsByCategory(parsed.brandsByCategory);
           if (parsed.subcategoriesByCategory) setCatalogSubcategoriesByCategory(parsed.subcategoriesByCategory);
           if (parsed.brandsBySubcategory) setCatalogBrandsBySubcategory(parsed.brandsBySubcategory);
+          if (parsed.subcategoriesByBrand) setCatalogSubcategoriesByBrand(parsed.subcategoriesByBrand);
         }
       }
     } catch (e) {
@@ -87,6 +91,8 @@ export function useCatalogFilters() {
             ? brandsBySubcategoryRaw
             : {};
 
+        const subcategoriesByBrand = data?.subcategoriesByBrand;
+
         const normalizedBrandsByCategory: Record<string, string[]> =
           Object.fromEntries(
             Object.entries(brandsByCategory).map(([k, v]) => {
@@ -120,6 +126,17 @@ export function useCatalogFilters() {
             })
           );
 
+        const normalizedSubcategoriesByBrand: Record<string, string[]> =
+          Object.fromEntries(
+            Object.entries(subcategoriesByBrand || {}).map(([k, v]) => {
+              const key = String(k).trim();
+              const value = Array.isArray(v)
+                ? v.map((x) => String(x).trim()).filter(Boolean)
+                : [];
+              return [key, value] as const;
+            })
+          );
+
         console.log("Normalized subcategories:", normalizedSubcategoriesByCategory);
 
         setCatalogCategories(categories);
@@ -128,6 +145,7 @@ export function useCatalogFilters() {
         setCatalogBrandsByCategory(normalizedBrandsByCategory);
         setCatalogSubcategoriesByCategory(normalizedSubcategoriesByCategory);
         setCatalogBrandsBySubcategory(normalizedBrandsBySubcategory);
+        setCatalogSubcategoriesByBrand(normalizedSubcategoriesByBrand);
 
         // Сохраняем в кэш для следующего раза
         localStorage.setItem("catalog_filters_v2", JSON.stringify({
@@ -137,6 +155,7 @@ export function useCatalogFilters() {
           brandsByCategory: normalizedBrandsByCategory,
           subcategoriesByCategory: normalizedSubcategoriesByCategory,
           brandsBySubcategory: normalizedBrandsBySubcategory,
+          subcategoriesByBrand: normalizedSubcategoriesByBrand,
           timestamp: Date.now()
         }));
       } catch (err) {
@@ -205,18 +224,26 @@ export function useCatalogFilters() {
     return ["Все", ...uniq];
   }, [activeCategory, activeSubcategory, catalogBrands, catalogBrandsByCategory, catalogBrandsBySubcategory, sourceProducts]);
 
-  // Subcategories derived from selected category (hide for "Часы")
+  // Subcategories derived from selected category and brand
   const derivedSubcategories = useMemo<string[]>(() => {
     // Скрываем для категории "Часы"
     if (activeCategory === "Часы") return [];
 
-    console.log("Stats:", {
-      activeCategory,
-      keys: Object.keys(catalogSubcategoriesByCategory),
-      hasKey: !!catalogSubcategoriesByCategory[activeCategory],
-      val: catalogSubcategoriesByCategory[activeCategory]
-    });
+    // 1. Если выбран бренд, фильтруем подкатегории по бренду
+    if (activeBrand !== "Все") {
+      const subcatsForBrand = catalogSubcategoriesByBrand[activeBrand];
+      if (Array.isArray(subcatsForBrand) && subcatsForBrand.length) {
+        // Если выбрана категория, пересекаем список бренда с категориями
+        if (activeCategory !== "Все") {
+          const subcatsForCategory = catalogSubcategoriesByCategory[activeCategory] || [];
+          const intersection = subcatsForBrand.filter(s => subcatsForCategory.includes(s));
+          return intersection.length ? ["Все", ...intersection] : [];
+        }
+        return ["Все", ...subcatsForBrand];
+      }
+    }
 
+    // 2. Если выбрана категория (но не бренд), фильтруем по категории
     if (activeCategory !== "Все") {
       const subcatsForCategory = catalogSubcategoriesByCategory[activeCategory];
       if (Array.isArray(subcatsForCategory) && subcatsForCategory.length) {
@@ -225,10 +252,10 @@ export function useCatalogFilters() {
       return [];
     }
 
-    // Для "Все" показываем все подкатегории
+    // 3. Для "Все" показываем все подкатегории
     if (catalogSubcategories.length) return ["Все", ...catalogSubcategories];
     return [];
-  }, [activeCategory, catalogSubcategories, catalogSubcategoriesByCategory]);
+  }, [activeCategory, activeBrand, catalogSubcategories, catalogSubcategoriesByCategory, catalogSubcategoriesByBrand]);
 
   // Reset brand if not in derived brands
   useEffect(() => {

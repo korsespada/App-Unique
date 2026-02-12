@@ -177,6 +177,7 @@ async function handleCatalogFilters(req, res) {
             const brandsSet = new Set();
             const brandsByCategorySet = new Map();
             const brandsBySubcategorySet = new Map();
+            const subcategoriesByBrandSet = new Map();
 
             for (const p of items) {
                 const categoryId = String(p?.category || "").trim();
@@ -198,6 +199,11 @@ async function handleCatalogFilters(req, res) {
                         brandsByCategorySet.get(categoryName).add(brandName);
                     }
 
+                    // Subcategories by Brand logic
+                    if (!subcategoriesByBrandSet.has(brandName)) {
+                        subcategoriesByBrandSet.set(brandName, new Set());
+                    }
+
                     // Brands by Subcategory logic
                     for (const subId of subIds) {
                         if (subId && subId.length > 5) {
@@ -210,6 +216,9 @@ async function handleCatalogFilters(req, res) {
                                     brandsBySubcategorySet.set(subName, new Set());
                                 }
                                 brandsBySubcategorySet.get(subName).add(brandName);
+
+                                // Add to subcategoriesByBrandSet
+                                subcategoriesByBrandSet.get(brandName).add(subName);
                             }
                         }
                     }
@@ -239,6 +248,14 @@ async function handleCatalogFilters(req, res) {
                 })
             );
 
+            const subcategoriesByBrand = Object.fromEntries(
+                Array.from(subcategoriesByBrandSet.entries()).map(([bName, subSet]) => {
+                    const arr = Array.from(subSet);
+                    arr.sort((a, b) => a.localeCompare(b));
+                    return [bName, arr];
+                })
+            );
+
             const subcategoriesByCategory = Object.fromEntries(
                 categories.map((c) => {
                     const set = subcategoriesByCategorySet.get(c);
@@ -248,7 +265,7 @@ async function handleCatalogFilters(req, res) {
                 })
             );
 
-            return { categories, brands, subcategories, brandsByCategory, subcategoriesByCategory, brandsBySubcategory };
+            return { categories, brands, subcategories, brandsByCategory, subcategoriesByCategory, brandsBySubcategory, subcategoriesByBrand };
         }
 
         const fromProducts = await loadFiltersFromProducts();
@@ -259,6 +276,7 @@ async function handleCatalogFilters(req, res) {
             brandsByCategory: fromProducts.brandsByCategory,
             subcategoriesByCategory: fromProducts.subcategoriesByCategory,
             brandsBySubcategory: fromProducts.brandsBySubcategory,
+            subcategoriesByBrand: fromProducts.subcategoriesByBrand,
         };
 
         catalogFiltersErrorCount = 0;
