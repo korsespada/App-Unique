@@ -176,24 +176,44 @@ async function handleCatalogFilters(req, res) {
             const categoriesSet = new Set();
             const brandsSet = new Set();
             const brandsByCategorySet = new Map();
+            const brandsBySubcategorySet = new Map();
 
             for (const p of items) {
                 const categoryId = String(p?.category || "").trim();
                 const brandId = String(p?.brand || "").trim();
+                const subRaw = p?.subcategory;
+                const subIds = Array.isArray(subRaw) ? subRaw : [String(subRaw || "").trim()];
 
                 const categoryName = categoryMap.get(categoryId);
                 const brandName = brandMap.get(brandId);
 
-                if (categoryName) {
-                    categoriesSet.add(categoryName);
-                    if (!brandsByCategorySet.has(categoryName)) {
-                        brandsByCategorySet.set(categoryName, new Set());
-                    }
-                    if (brandName) {
+                if (brandName) {
+                    brandsSet.add(brandName);
+
+                    if (categoryName) {
+                        categoriesSet.add(categoryName);
+                        if (!brandsByCategorySet.has(categoryName)) {
+                            brandsByCategorySet.set(categoryName, new Set());
+                        }
                         brandsByCategorySet.get(categoryName).add(brandName);
                     }
+
+                    // Brands by Subcategory logic
+                    for (const subId of subIds) {
+                        if (subId && subId.length > 5) {
+                            // Find subcategory name from subcategoryItems (we have the array)
+                            const subItem = subcategoryItems.find(s => s.id === subId);
+                            const subName = String(subItem?.name || "").trim();
+
+                            if (subName) {
+                                if (!brandsBySubcategorySet.has(subName)) {
+                                    brandsBySubcategorySet.set(subName, new Set());
+                                }
+                                brandsBySubcategorySet.get(subName).add(brandName);
+                            }
+                        }
+                    }
                 }
-                if (brandName) brandsSet.add(brandName);
             }
 
             const categories = Array.from(categoriesSet).sort((a, b) =>
@@ -211,6 +231,14 @@ async function handleCatalogFilters(req, res) {
                 })
             );
 
+            const brandsBySubcategory = Object.fromEntries(
+                Array.from(brandsBySubcategorySet.entries()).map(([subName, brandSet]) => {
+                    const arr = Array.from(brandSet);
+                    arr.sort((a, b) => a.localeCompare(b));
+                    return [subName, arr];
+                })
+            );
+
             const subcategoriesByCategory = Object.fromEntries(
                 categories.map((c) => {
                     const set = subcategoriesByCategorySet.get(c);
@@ -220,7 +248,7 @@ async function handleCatalogFilters(req, res) {
                 })
             );
 
-            return { categories, brands, subcategories, brandsByCategory, subcategoriesByCategory };
+            return { categories, brands, subcategories, brandsByCategory, subcategoriesByCategory, brandsBySubcategory };
         }
 
         const fromProducts = await loadFiltersFromProducts();
@@ -230,6 +258,7 @@ async function handleCatalogFilters(req, res) {
             subcategories: fromProducts.subcategories,
             brandsByCategory: fromProducts.brandsByCategory,
             subcategoriesByCategory: fromProducts.subcategoriesByCategory,
+            brandsBySubcategory: fromProducts.brandsBySubcategory,
         };
 
         catalogFiltersErrorCount = 0;

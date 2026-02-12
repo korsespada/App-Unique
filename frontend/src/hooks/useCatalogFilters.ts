@@ -20,6 +20,10 @@ export function useCatalogFilters() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceProducts, setSourceProducts] = useState<Product[]>([]);
 
+  const [catalogBrandsBySubcategory, setCatalogBrandsBySubcategory] = useState<
+    Record<string, string[]>
+  >({});
+
   // Fetch catalog filters
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +39,7 @@ export function useCatalogFilters() {
           if (Array.isArray(parsed.subcategories)) setCatalogSubcategories(parsed.subcategories);
           if (parsed.brandsByCategory) setCatalogBrandsByCategory(parsed.brandsByCategory);
           if (parsed.subcategoriesByCategory) setCatalogSubcategoriesByCategory(parsed.subcategoriesByCategory);
+          if (parsed.brandsBySubcategory) setCatalogBrandsBySubcategory(parsed.brandsBySubcategory);
         }
       }
     } catch (e) {
@@ -76,6 +81,12 @@ export function useCatalogFilters() {
             ? subcategoriesByCategoryRaw
             : {};
 
+        const brandsBySubcategoryRaw = data?.brandsBySubcategory;
+        const brandsBySubcategory =
+          brandsBySubcategoryRaw && typeof brandsBySubcategoryRaw === "object"
+            ? brandsBySubcategoryRaw
+            : {};
+
         const normalizedBrandsByCategory: Record<string, string[]> =
           Object.fromEntries(
             Object.entries(brandsByCategory).map(([k, v]) => {
@@ -98,6 +109,17 @@ export function useCatalogFilters() {
             })
           );
 
+        const normalizedBrandsBySubcategory: Record<string, string[]> =
+          Object.fromEntries(
+            Object.entries(brandsBySubcategory).map(([k, v]) => {
+              const key = String(k).trim();
+              const value = Array.isArray(v)
+                ? v.map((x) => String(x).trim()).filter(Boolean)
+                : [];
+              return [key, value] as const;
+            })
+          );
+
         console.log("Normalized subcategories:", normalizedSubcategoriesByCategory);
 
         setCatalogCategories(categories);
@@ -105,6 +127,7 @@ export function useCatalogFilters() {
         setCatalogSubcategories(subcategories);
         setCatalogBrandsByCategory(normalizedBrandsByCategory);
         setCatalogSubcategoriesByCategory(normalizedSubcategoriesByCategory);
+        setCatalogBrandsBySubcategory(normalizedBrandsBySubcategory);
 
         // Сохраняем в кэш для следующего раза
         localStorage.setItem("catalog_filters_v2", JSON.stringify({
@@ -113,6 +136,7 @@ export function useCatalogFilters() {
           subcategories,
           brandsByCategory: normalizedBrandsByCategory,
           subcategoriesByCategory: normalizedSubcategoriesByCategory,
+          brandsBySubcategory: normalizedBrandsBySubcategory,
           timestamp: Date.now()
         }));
       } catch (err) {
@@ -140,12 +164,23 @@ export function useCatalogFilters() {
   }, [catalogCategories, sourceProducts]);
 
   const derivedBrands = useMemo<string[]>(() => {
+    // 1. Если выбрана подкатегория, то фильтруем бренды по подкатегории (приоритет)
+    if (activeSubcategory !== "Все") {
+      const brandsForSubcategory = catalogBrandsBySubcategory[activeSubcategory];
+      if (Array.isArray(brandsForSubcategory) && brandsForSubcategory.length) {
+        return ["Все", ...brandsForSubcategory];
+      }
+      // Если по какой-то причине нет маппинга, пробуем fallback на категорию или sourceProducts
+    }
+
+    // 2. Если выбрана категория, фильтруем по ней
     if (activeCategory !== "Все") {
       const brandsForCategory = catalogBrandsByCategory[activeCategory];
       if (Array.isArray(brandsForCategory) && brandsForCategory.length) {
         return ["Все", ...brandsForCategory];
       }
 
+      // Fallback на sourceProducts если нет данных в каталоге
       const fromProducts = Array.from(
         new Set(
           sourceProducts
@@ -158,6 +193,7 @@ export function useCatalogFilters() {
       return ["Все", ...fromProducts];
     }
 
+    // 3. Иначе показываем все бренды
     if (catalogBrands.length) return ["Все", ...catalogBrands];
 
     const uniq = Array.from(
@@ -167,7 +203,7 @@ export function useCatalogFilters() {
     ).sort((a, b) => a.localeCompare(b));
 
     return ["Все", ...uniq];
-  }, [activeCategory, catalogBrands, catalogBrandsByCategory, sourceProducts]);
+  }, [activeCategory, activeSubcategory, catalogBrands, catalogBrandsByCategory, catalogBrandsBySubcategory, sourceProducts]);
 
   // Subcategories derived from selected category (hide for "Часы")
   const derivedSubcategories = useMemo<string[]>(() => {
