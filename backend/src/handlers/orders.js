@@ -163,12 +163,8 @@ async function handleOrderSubmission(req, res) {
   const orderText = [
     "🆕 Новый заказ из Telegram Mini App",
     "",
-    `#${orderRecord?.order_number || "ORDER"}`,
-    "",
-    `👤 Клиент: ${`${safeFirst} ${safeLast}`.trim()}`.trim(),
-    safeUsername ? `@${safeUsername}` : "username: отсутствует",
+    `👤 Клиент: ${`${safeFirst} ${safeLast}`.trim()} ${safeUsername ? `@${safeUsername}` : ""}`.trim(),
     `Telegram ID: <code>${safeTelegramId}</code>`,
-    safeComment ? `Комментарий: ${escapeHtml(safeComment)}` : "",
     "",
     "🛒 Товары:",
   ]
@@ -192,9 +188,9 @@ async function handleOrderSubmission(req, res) {
     .concat([
       "",
       total > 0 ? `💰 Итого: ${escapeHtml(String(total))} ₽` : "💰 Итого: Цена по запросу",
-      "",
-      "Доп. данные (адрес, телефон) пока не заполняются в мини-приложении.",
+      safeComment ? `Комментарий: ${escapeHtml(safeComment)}` : null,
     ])
+    .filter(line => line !== null)
     .join("\n");
 
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
