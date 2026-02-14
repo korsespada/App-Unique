@@ -147,9 +147,8 @@ export default function ProductDetailView({
           key={`layer-a:${detailLayerASrc || "empty"}`}
           src={detailLayerASrc}
           alt={selectedProduct.name}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
-            showA ? "opacity-100" : "opacity-0"
-          } ${isDetailImageCrossfading ? "" : ""}`}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${showA ? "opacity-100" : "opacity-0"
+            } ${isDetailImageCrossfading ? "" : ""}`}
           decoding="async"
         />
 
@@ -157,9 +156,8 @@ export default function ProductDetailView({
           key={`layer-b:${detailLayerBSrc || "empty"}`}
           src={detailLayerBSrc}
           alt={selectedProduct.name}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
-            showB ? "opacity-100" : "opacity-0"
-          } ${isDetailImageCrossfading ? "" : ""}`}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${showB ? "opacity-100" : "opacity-0"
+            } ${isDetailImageCrossfading ? "" : ""}`}
           decoding="async"
         />
 
@@ -194,16 +192,11 @@ export default function ProductDetailView({
         )}
 
         {selectedProduct.images.length > 1 && (
-          <div className="pointer-events-none absolute bottom-12 left-0 right-0 flex items-center justify-center px-6">
-            <div className="flex gap-2.5">
-              {selectedProduct.images.map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 rounded-full transition-all duration-500 ${
-                    i === currentImageIndex ? "w-8 bg-white" : "w-2 bg-white/25"
-                  }`}
-                />
-              ))}
+          <div className="pointer-events-none absolute bottom-12 left-0 right-0 flex items-center justify-center">
+            <div className="premium-shadow flex items-center justify-center rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 backdrop-blur-md">
+              <span className="text-[11px] font-medium text-white/90">
+                {currentImageIndex + 1} / {selectedProduct.images.length}
+              </span>
             </div>
           </div>
         )}
@@ -282,11 +275,10 @@ export default function ProductDetailView({
                 }
                 addToCart(selectedProduct);
               }}
-              className={`flex-1 rounded-2xl py-4 text-[14px] font-extrabold uppercase tracking-normal shadow-xl transition-all duration-200 ease-out [font-kerning:normal] active:scale-[0.98] ${
-                isInCart
+              className={`flex-1 rounded-2xl py-4 text-[14px] font-extrabold uppercase tracking-normal shadow-xl transition-all duration-200 ease-out [font-kerning:normal] active:scale-[0.98] ${isInCart
                   ? "border border-white/10 bg-white/5 text-white hover:bg-white/10"
                   : "bg-white text-black hover:bg-white/90"
-              }`}>
+                }`}>
               {isInCart ? "Убрать из корзины" : "Добавить в корзину"}
             </button>
 
@@ -298,9 +290,8 @@ export default function ProductDetailView({
               aria-label={
                 isFavorited ? "Убрать из избранного" : "Добавить в избранное"
               }
-              className={`flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition-all duration-200 ease-out active:scale-[0.96] ${
-                isBumping ? "scale-[1.06]" : "scale-100"
-              }`}>
+              className={`flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition-all duration-200 ease-out active:scale-[0.96] ${isBumping ? "scale-[1.06]" : "scale-100"
+                }`}>
               <Heart
                 size={22}
                 className={
