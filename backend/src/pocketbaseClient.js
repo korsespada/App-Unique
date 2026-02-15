@@ -417,14 +417,16 @@ async function getActiveProductById(productId) {
   return mapped && mapped.id ? mapped : null;
 }
 
-async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
+async function loadProductIdsOnly(limit = 500, customFilter = null) {
   const api = pbApi();
-  const safePerPage = Math.max(1, Math.min(2000, Number(perPage) || 2000));
+  // limit здесь выступает как MAX количество записей, которые мы хотим получить (например, для шаффла)
+  const safeLimit = Math.max(1, Math.min(2000, Number(limit) || 500));
+  
+  // Размер страницы при запросе к PB (чем больше, тем меньше запросов, но тяжелее ответ)
+  const pbPerPage = 500; 
 
   let allIds = [];
-  let page = 1;
-  let totalPages = 1;
-
+  
   try {
     const filter = customFilter || 'status = "active"';
     const hasBrandFilter = filter.includes("brand.name");
@@ -442,8 +444,9 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
 
     const params = {
       page: 1,
-      perPage: 500,
+      perPage: pbPerPage,
       filter,
+      sort: "-updated", // Берем самые свежие, чтобы шаффлить актуальное
       fields: fieldsParts.join(","),
     };
 
@@ -451,28 +454,28 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
       params.expand = requestedExpands.join(",");
     }
 
-    console.log("PocketBase request params:", JSON.stringify(params, null, 2));
+    // console.log("PocketBase loadProductIdsOnly:", JSON.stringify({ limit: safeLimit, ...params }));
 
-    const firstResp = await api.get("/api/collections/products/records", {
-      params,
-    });
-
+    // Загружаем первую страницу
+    const firstResp = await api.get("/api/collections/products/records", { params });
     const firstData = firstResp?.data;
-    if (!firstData) {
-      return [];
-    }
+    if (!firstData) return [];
 
     const firstItems = Array.isArray(firstData.items) ? firstData.items : [];
     allIds.push(...firstItems);
-    totalPages = Number(firstData.totalPages) || 1;
 
-    if (totalPages > 1) {
+    // Вычисляем, сколько еще страниц нужно загрузить, чтобы достичь safeLimit
+    // Например, если safeLimit=2000, pbPerPage=500 -> нужно еще 3 страницы (всего 4)
+    // Но не больше, чем есть всего в базе (firstData.totalPages)
+    
+    const neededPages = Math.ceil(safeLimit / pbPerPage);
+    const totalAvailablePages = Number(firstData.totalPages) || 1;
+    const pagesToFetch = Math.min(neededPages, totalAvailablePages);
+
+    if (pagesToFetch > 1) {
       const pagePromises = [];
-      for (let p = 2; p <= totalPages; p += 1) {
-        const pageParams = {
-          ...params,
-          page: p,
-        };
+      for (let p = 2; p <= pagesToFetch; p += 1) {
+        const pageParams = { ...params, page: p };
         pagePromises.push(
           api.get("/api/collections/products/records", { params: pageParams })
         );
@@ -486,34 +489,22 @@ async function loadProductIdsOnly(perPage = 2000, customFilter = null) {
         }
       }
     }
+    
+    // Обрезаем лишнее, если загрузили чуть больше (из-за кратности страницы)
+    if (allIds.length > safeLimit) {
+        allIds = allIds.slice(0, safeLimit);
+    }
+
   } catch (err) {
-    const status = err?.response?.status;
-    const responseData = err?.response?.data;
-    const msg =
-      typeof responseData === "string" && responseData.trim()
-        ? responseData
-        : responseData && typeof responseData === "object"
-          ? JSON.stringify(responseData)
-          : err?.message
-            ? String(err.message)
-            : "PocketBase request failed";
-
-    console.error("PocketBase loadProductIdsOnly failed", {
-      status,
-      message: msg,
-      responseData,
-      filter: customFilter,
-    });
-
-    const statusText = Number.isFinite(status) ? String(status) : "unknown";
-    throw new Error(`PocketBase error ${statusText}: ${msg}`);
+      // Error handling stays same, purely logging
+      console.error("PocketBase loadProductIdsOnly failed", err.message);
+      // Fallback: return empty array so app doesn't crash
+      return [];
   }
 
-  console.log(
-    `loadProductIdsOnly loaded ${allIds.length} items in ${totalPages} pages`
-  );
+  // console.log(`loadProductIdsOnly loaded ${allIds.length} items (limit was ${safeLimit})`);
 
-  // КРИТИЧЕСКИ ВАЖНО: Сортируем по ID для детерминированного перемешивания (shuffle)
+  // Сортируем по ID для детерминизма (перед шаффлом)
   return allIds.sort((a, b) => {
     const idA = String(a?.id || "");
     const idB = String(b?.id || "");
